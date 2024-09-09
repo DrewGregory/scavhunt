@@ -1,0 +1,30 @@
+body {
+  padding: 0;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.card {
+  transition: padding 0.3s ease-out;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.card.open {
+  padding: 16px;
+}
+
+.chevron {
+  transition: transform 0.3s ease-out;
+}
+
+.chevron.rotate {
+  transform: rotate(180deg);
+}
+
+.teamMarker {
+  font-size: 36px;
+}

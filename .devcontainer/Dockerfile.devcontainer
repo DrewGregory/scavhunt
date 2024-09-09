@@ -1,0 +1,5 @@
+FROM mcr.microsoft.com/vscode/devcontainers/typescript-node
+
+ENV MONGO_URL mongodb://localhost:27017/database
+
+RUN yarn
