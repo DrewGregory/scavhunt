@@ -9,7 +9,7 @@ Features include:
 - A feed where teams can see all submissions and whether the submission is approved, pending review, or rejected.
 - A team points leaderboard with a CTF-style line graph visualization.
 
-Created by Jack Cable, Aivant Goyal, and Drew Gregory.
+Created by @cablej, @aivantg, and @drewgregory.
 
 **Note**: Some of the visual elements are somewhat San Francisco-specific.
 
