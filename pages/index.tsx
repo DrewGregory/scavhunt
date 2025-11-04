@@ -44,6 +44,8 @@ export const getServerSideProps = async (
 
 
   const startTime = getStartTime();
+  const scavengerHuntName = process.env.SCAVENGER_HUNT_NAME || "Scavenger Hunt";
+  const showHowToPlay = process.env.SHOW_HOW_TO_PLAY === 'true';
 
   if (teamRaw == null) {
     return {
@@ -51,6 +53,8 @@ export const getServerSideProps = async (
         team: null,
         submissions: [],
         startTimeISO: formatISO(startTime),
+        scavengerHuntName,
+        showHowToPlay,
       }
     };
   }
@@ -101,11 +105,13 @@ export const getServerSideProps = async (
       team,
       submissions,
       startTimeISO: formatISO(startTime),
+      scavengerHuntName,
+      showHowToPlay,
     }
   };
 };
 
-const HowToPlay = dynamic(() => import("../components/HowToPlay"), {
+const HowToPlay = dynamic(() => import("../components/HowToPlayV2"), {
   ssr: false
 });
 
@@ -113,6 +119,8 @@ export default function Page({
   team,
   submissions,
   startTimeISO,
+  scavengerHuntName,
+  showHowToPlay,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -264,6 +272,6 @@ export default function Page({
       )}
     </NavContainer>
   ) : (
-    <HowToPlay startTime={parseISO(startTimeISO)}/>
+    <HowToPlay startTime={parseISO(startTimeISO)} scavengerHuntName={scavengerHuntName} showHowToPlay={showHowToPlay}/>
   );
 }
