@@ -149,10 +149,10 @@ Follow [these instructions](https://dokku.com/docs/configuration/ssl/) to set up
 
 ```
 $ ssh myhostname.com
-$ dokku domains:remove node-js-app node-js-app.myhostname.com
+$ dokku domains:remove node-js-app node-js-app.myhostname.com  # may need to use dokku domains:report to see all existing hostnames attached to your domain
 $ sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git
 $ dokku letsencrypt:set --global email <your email>
-$ dokku letsencrypt:enable
+$ dokku letsencrypt:enable node-js-app
 ```
 
 Certs will be present at ls /home/dokku/node-js-app/letsencrypt/certs/. Be sure to save them for safekeeping off the droplet via `scp`!
