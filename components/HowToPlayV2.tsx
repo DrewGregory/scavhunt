@@ -13,7 +13,7 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
 
     return (
         <Box
-            position="relative"
+            position="fixed"
             minHeight="100vh"
             width="100%"
             overflow="auto"
