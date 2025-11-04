@@ -26,13 +26,16 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                 width="100%"
                 height="100%"
                 zIndex={0}
+                overflow="hidden"
             >
                 <Image
                     src="/sf_bg.jpeg"
                     alt="San Francisco background"
                     fill
-                    style={{ objectFit: 'cover' }}
+                    sizes="100vw"
+                    style={{ objectFit: 'cover', objectPosition: 'center' }}
                     priority
+                    quality={100}
                 />
             </Box>
 
@@ -45,7 +48,7 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                 display="flex"
                 alignItems={{ base: "flex-start", md: "flex-end" }}
                 justifyContent="center"
-                pt={{ base: "5vh", sm: "5vh", md: "0" }}
+                pt={{ base: "3vh", sm: "5vh", md: "0" }}
                 pb={{ base: "0", md: "15vh", lg: "15vh" }}
             >
                 <VStack
