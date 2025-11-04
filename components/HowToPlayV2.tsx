@@ -67,7 +67,7 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                         py={{ base: 6, sm: 7, md: 8 }}
                         boxShadow="xl"
                     >
-                        <VStack spacing={6}>
+                        <VStack spacing={3}>
                             <Heading
                                 as="h1"
                                 fontSize={{ base: "2xl", sm: "3xl", md: "4xl", lg: "5xl" }}
