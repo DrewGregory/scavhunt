@@ -48,8 +48,8 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                 display="flex"
                 alignItems={{ base: "flex-start", md: "flex-end" }}
                 justifyContent="center"
-                pt={{ base: "3vh", sm: "5vh", md: "0" }}
-                pb={{ base: "0", md: "15vh", lg: "15vh" }}
+                pt={{ base: "3vh", sm: "3vh", md: "0" }}
+                pb={{ base: "0", md: "10vh", lg: "10vh" }}
             >
                 <VStack
                     spacing={8}
