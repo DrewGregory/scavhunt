@@ -6,10 +6,10 @@ import Image from "next/image"
 
 export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Date; scavengerHuntName: string; showHowToPlay: boolean }) => {
     const [isClient, setIsClient] = useState(false);
-    const [imgSrc, setImgSrc] = useState('/sf_bg-min.jpeg');
 
     useEffect(() => {
         setIsClient(true);
+        
     }, []);
 
     return (
@@ -30,7 +30,7 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                 overflow="hidden"
             >
                 <Image
-                    src={imgSrc}
+                    src="/sf_bg.jpeg"
                     alt="San Francisco background"
                     fill
                     sizes="100vw"
@@ -38,13 +38,7 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                         objectFit: 'cover', 
                         objectPosition: 'center',
                     }}
-                    priority
-                    onLoadingComplete={() => {
-                        // Switch to high-quality image after initial render
-                        if (imgSrc === '/sf_bg-min.jpeg') {
-                            setImgSrc('/sf_bg.jpeg');
-                        }
-                    }}
+                    placeholder="blur"
                 />
             </Box>
 
