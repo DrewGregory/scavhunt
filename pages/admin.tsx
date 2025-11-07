@@ -1,0 +1,388 @@
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { useTeam } from '../components/useTeam';
+
+interface Member {
+  firstName: string;
+  familyName: string;
+  _id?: string;
+}
+
+interface Team {
+  _id: string;
+  name: string;
+  emoji: string;
+  teamCode: string;
+  members: Member[];
+}
+
+export default function AdminPage() {
+  const currentTeam = useTeam();
+  const router = useRouter();
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Form states
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamEmoji, setNewTeamEmoji] = useState('');
+  const [newTeamCode, setNewTeamCode] = useState('');
+
+  const [selectedTeamForPlayer, setSelectedTeamForPlayer] = useState('');
+  const [newPlayerFirstName, setNewPlayerFirstName] = useState('');
+  const [newPlayerFamilyName, setNewPlayerFamilyName] = useState('');
+
+  const [moveFromTeam, setMoveFromTeam] = useState('');
+  const [moveToTeam, setMoveToTeam] = useState('');
+  const [movePlayerIndex, setMovePlayerIndex] = useState('');
+
+  const loadTeams = async () => {
+    try {
+      const res = await fetch('/api/admin/teams');
+      if (res.status === 403) {
+        router.push('/');
+        return;
+      }
+      const data = await res.json();
+      setTeams(data.teams);
+      setLoading(false);
+    } catch (err) {
+      setError('Failed to load teams');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentTeam) {
+      loadTeams();
+    }
+  }, [currentTeam]);
+
+  const handleCreateTeam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/admin/create-team', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newTeamName,
+          emoji: newTeamEmoji,
+          teamCode: newTeamCode,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to create team');
+        return;
+      }
+
+      setNewTeamName('');
+      setNewTeamEmoji('');
+      setNewTeamCode('');
+      await loadTeams();
+      alert('Team created successfully!');
+    } catch (err) {
+      alert('Failed to create team');
+    }
+  };
+
+  const handleAddPlayer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/admin/add-player', {
+        method: 'POST',
+        body: JSON.stringify({
+          teamId: selectedTeamForPlayer,
+          firstName: newPlayerFirstName,
+          familyName: newPlayerFamilyName,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to add player');
+        return;
+      }
+
+      setNewPlayerFirstName('');
+      setNewPlayerFamilyName('');
+      await loadTeams();
+      alert('Player added successfully!');
+    } catch (err) {
+      alert('Failed to add player');
+    }
+  };
+
+  const handleMovePlayer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/admin/move-player', {
+        method: 'POST',
+        body: JSON.stringify({
+          fromTeamId: moveFromTeam,
+          toTeamId: moveToTeam,
+          playerIndex: parseInt(movePlayerIndex),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to move player');
+        return;
+      }
+
+      setMovePlayerIndex('');
+      await loadTeams();
+      alert('Player moved successfully!');
+    } catch (err) {
+      alert('Failed to move player');
+    }
+  };
+
+  if (!currentTeam || loading) {
+    return <div style={styles.container}>Loading...</div>;
+  }
+
+  if (error) {
+    return <div style={styles.container}>{error}</div>;
+  }
+
+  const getTeamPlayers = (teamId: string) => {
+    const team = teams.find(t => t._id === teamId);
+    return team?.members || [];
+  };
+
+  return (
+    <div style={styles.container}>
+      <h1 style={styles.title}>Admin Panel</h1>
+
+      {/* Teams List */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>All Teams</h2>
+        <div style={styles.teamsList}>
+          {teams.map((team) => (
+            <div key={team._id} style={styles.teamCard}>
+              <h3 style={styles.teamName}>
+                {team.emoji} {team.name}
+              </h3>
+              <p style={styles.teamInfo}>ID: {team._id}</p>
+              <p style={styles.teamInfo}>Members: {team.members.length}</p>
+              <div style={styles.membersList}>
+                {team.members.map((member, idx) => (
+                  <div key={idx} style={styles.member}>
+                    {idx}. {member.firstName} {member.familyName}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Create Team */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Create New Team</h2>
+        <form onSubmit={handleCreateTeam} style={styles.form}>
+          <input
+            type="text"
+            placeholder="Team Name"
+            value={newTeamName}
+            onChange={(e) => setNewTeamName(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <input
+            type="text"
+            placeholder="Emoji (e.g., 🚀)"
+            value={newTeamEmoji}
+            onChange={(e) => setNewTeamEmoji(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <input
+            type="text"
+            placeholder="Team Code"
+            value={newTeamCode}
+            onChange={(e) => setNewTeamCode(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <button type="submit" style={styles.button}>Create Team</button>
+        </form>
+      </section>
+
+      {/* Add Player */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Add Player to Team</h2>
+        <form onSubmit={handleAddPlayer} style={styles.form}>
+          <select
+            value={selectedTeamForPlayer}
+            onChange={(e) => setSelectedTeamForPlayer(e.target.value)}
+            required
+            style={styles.select}
+          >
+            <option value="">Select Team</option>
+            {teams.map((team) => (
+              <option key={team._id} value={team._id}>
+                {team.emoji} {team.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder="First Name"
+            value={newPlayerFirstName}
+            onChange={(e) => setNewPlayerFirstName(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <input
+            type="text"
+            placeholder="Family Name"
+            value={newPlayerFamilyName}
+            onChange={(e) => setNewPlayerFamilyName(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <button type="submit" style={styles.button}>Add Player</button>
+        </form>
+      </section>
+
+      {/* Move Player */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Move Player Between Teams</h2>
+        <form onSubmit={handleMovePlayer} style={styles.form}>
+          <select
+            value={moveFromTeam}
+            onChange={(e) => setMoveFromTeam(e.target.value)}
+            required
+            style={styles.select}
+          >
+            <option value="">From Team</option>
+            {teams.map((team) => (
+              <option key={team._id} value={team._id}>
+                {team.emoji} {team.name}
+              </option>
+            ))}
+          </select>
+          
+          {moveFromTeam && (
+            <select
+              value={movePlayerIndex}
+              onChange={(e) => setMovePlayerIndex(e.target.value)}
+              required
+              style={styles.select}
+            >
+              <option value="">Select Player</option>
+              {getTeamPlayers(moveFromTeam).map((member, idx) => (
+                <option key={idx} value={idx}>
+                  {member.firstName} {member.familyName}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <select
+            value={moveToTeam}
+            onChange={(e) => setMoveToTeam(e.target.value)}
+            required
+            style={styles.select}
+          >
+            <option value="">To Team</option>
+            {teams.map((team) => (
+              <option key={team._id} value={team._id}>
+                {team.emoji} {team.name}
+              </option>
+            ))}
+          </select>
+          
+          <button type="submit" style={styles.button}>Move Player</button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '20px',
+    fontFamily: 'Arial, sans-serif',
+  },
+  title: {
+    fontSize: '32px',
+    marginBottom: '30px',
+    color: '#333',
+  },
+  section: {
+    marginBottom: '40px',
+    padding: '20px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '8px',
+  },
+  sectionTitle: {
+    fontSize: '24px',
+    marginBottom: '20px',
+    color: '#555',
+  },
+  teamsList: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+    gap: '15px',
+  },
+  teamCard: {
+    backgroundColor: 'white',
+    padding: '15px',
+    borderRadius: '8px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  },
+  teamName: {
+    fontSize: '18px',
+    marginBottom: '10px',
+    color: '#333',
+  },
+  teamInfo: {
+    fontSize: '12px',
+    color: '#666',
+    marginBottom: '5px',
+  },
+  membersList: {
+    marginTop: '10px',
+    fontSize: '14px',
+  },
+  member: {
+    padding: '5px 0',
+    borderTop: '1px solid #eee',
+  },
+  form: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '10px',
+    maxWidth: '400px',
+  },
+  input: {
+    padding: '10px',
+    fontSize: '14px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+  },
+  select: {
+    padding: '10px',
+    fontSize: '14px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    backgroundColor: 'white',
+  },
+  button: {
+    padding: '12px',
+    fontSize: '16px',
+    backgroundColor: '#0070f3',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontWeight: 'bold' as const,
+  },
+};
+

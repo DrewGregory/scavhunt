@@ -61,6 +61,7 @@ export const getServerSideProps = async (
         startTimeISO: formatISO(startTime),
         scavengerHuntName,
         showHowToPlay,
+        isAdmin: false,
       }
     };
   }
@@ -105,6 +106,7 @@ export const getServerSideProps = async (
     .parse(submissionsRaw);
 
   const team = serializedTeamSchema.parse(teamRaw);
+  const isAdmin = teamRaw._id.toString() === ADMIN_TEAM_ID;
 
   return {
     props: {
@@ -113,6 +115,7 @@ export const getServerSideProps = async (
       startTimeISO: formatISO(startTime),
       scavengerHuntName,
       showHowToPlay,
+      isAdmin,
     }
   };
 };
@@ -127,6 +130,7 @@ export default function Page({
   startTimeISO,
   scavengerHuntName,
   showHowToPlay,
+  isAdmin,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -193,7 +197,7 @@ export default function Page({
                     }
                   />
                 </Flex>
-                {(team._id === ADMIN_TEAM_ID || team._id === s.teamId) && (
+                {(isAdmin || team._id === s.teamId) && (
                   <Menu>
                     <MenuButton
                       as={IconButton}
@@ -204,7 +208,7 @@ export default function Page({
                       onClick={(e) => e.stopPropagation()}
                     />
                     <MenuList>
-                      {team._id === ADMIN_TEAM_ID && !s.accepted && !s.rejected && (
+                      {isAdmin && !s.accepted && !s.rejected && (
                         <>
                           <MenuItem
                             onClick={async () => {
