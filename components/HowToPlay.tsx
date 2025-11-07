@@ -1,140 +1,288 @@
-import { Box, Divider, Heading, Text, VStack } from "@chakra-ui/react"
-import Image from "next/image"
+import { Box, Container, Divider, Heading, Text, VStack } from "@chakra-ui/react"
 import { useEffect, useState } from "react"
-import '@fontsource/press-start-2p'
 import Countdown from "react-countdown"
+import Image from "next/image"
 
 
-const images = {
-    daytime: {
-        src: "/sf_day.gif",
-        alt: "foggy golden gate pixel art. src: https://www.reddit.com/r/PixelArt/comments/vw2yxc/san_francisco_summer/",
-        backgroundColor: "#5d9dff",
-        width: 1024,
-        height: 1024,
-        justifyContent: 'flex-start'
-    },
-    evening: {
-        src: "/sf_evening.png",
-        alt: "dusk sf city pixel art. src: https://www.reddit.com/r/PixelArt/comments/9g8pai/san_francisco_skyline/",
-        backgroundColor: "#c79fb8",
-        width: 1500,
-        height: 400,
-        justifyContent: "flex-start"
-    },
-    cloud: {
-        src: "/cloud.png",
-        alt: "cloud pixel art. src: https://dinopixel.com/cloud-pixel-art-20817",
-        width: 226,
-        height: 90,
-    },
-}
+export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Date; scavengerHuntName: string; showHowToPlay: boolean }) => {
+    const [isClient, setIsClient] = useState(false);
+    const [highQualityLoaded, setHighQualityLoaded] = useState(false);
 
-
-export default ({ startTime} : {startTime: Date; }) => {
-    const [imageKey, setImageKey] = useState<'evening' | 'daytime'>('evening');
     useEffect(() => {
-        const updateImage = () => {
-            const hour = new Date().getHours();
-            const isMobile = window.matchMedia("(max-width: 768px)").matches;
-            if (isMobile && hour < 19 && hour > 6) {
-                setImageKey('daytime');
-            } else {
-                setImageKey('evening');
-            }
+        setIsClient(true);
+        
+        // Preload high-quality image
+        const img = new window.Image();
+        img.src = '/sf_bg.jpeg';
+        img.onload = () => {
+            setHighQualityLoaded(true);
         };
-
-        updateImage();
-
-        window.addEventListener("resize", updateImage);
-        return () => window.removeEventListener("resize", updateImage);
     }, []);
-    const image = images[imageKey];
 
     return (
-        <Box backgroundColor={image.backgroundColor} height="100%" display="flex" flexDirection="column">
+        <Box
+            position="fixed"
+            minHeight="100vh"
+            width="100%"
+            overflow="auto"
+        >
+            {/* Background Image */}
             <Box
                 position="fixed"
-                bottom={0}
+                top={0}
                 left={0}
                 width="100%"
-                zIndex={2}
+                height="100%"
+                zIndex={0}
+                overflow="hidden"
             >
-                <Image layout="responsive" {...image} />
+                {/* Low-quality placeholder image */}
+                <Image
+                    src="/sf_bg-min.jpeg"
+                    alt="San Francisco background"
+                    fill
+                    sizes="100vw"
+                    style={{ 
+                        objectFit: 'cover', 
+                        objectPosition: 'center',
+                        opacity: highQualityLoaded ? 0 : 1,
+                        transition: 'opacity 0.5s ease-in-out'
+                    }}
+                    priority
+                    quality={10}
+                />
+                {/* High-quality image */}
+                <Image
+                    src="/sf_bg.jpeg"
+                    alt="San Francisco background"
+                    fill
+                    sizes="100vw"
+                    style={{ 
+                        objectFit: 'cover', 
+                        objectPosition: 'center',
+                        opacity: highQualityLoaded ? 1 : 0,
+                        transition: 'opacity 0.5s ease-in-out'
+                    }}
+                    quality={100}
+                />
             </Box>
 
-
             {/* Main content */}
-            <VStack
-                flex={1}
-                direction="column"
-                alignItems="center"
-                color="black"
-                px={6}
-                paddingTop="60px"
-                paddingBottom={{ base: "150px", md: "50vh" }}
-                height="100%"  // Make sure the VStack takes up all available space
-                spacing={4}
-                textAlign="center"
+            <Container
+                maxW="container.lg"
+                position="relative"
+                zIndex={2}
+                minHeight="100vh"
+                display="flex"
+                alignItems={{ base: "flex-start", md: "flex-end" }}
+                justifyContent="center"
+                pt={{ base: "3vh", sm: "3vh", md: "0" }}
+                pb={{ base: "0", md: "10vh", lg: "10vh" }}
             >
-                <Heading fontFamily="'Press Start 2P'" size="md" >Scavenger hunt</Heading>
-                <Divider borderColor="gray" />
-                <Countdown date={startTime} renderer={CountdownRenderer} />
-                <Divider borderColor="gray" />
-                <Heading fontFamily="'Press Start 2P'" size="md" my={2} >how to play</Heading>
-                <Heading fontFamily="'Press Start 2P'" size="sm" >Challenges</Heading>
-                <Text fontSize="10" fontFamily="'Press Start 2P'">
-                    - we've spread 75+ challenges across the city<br /><br />
-                    - it's a choose your own adventure! You decide where you go and in what order<br /><br />
-                    - each challenge is worth points and can be done by a limited number of teams.<br /><br />
-                    - use the map to see which challenges are nearby! Challenges in the "water" don't have a set location. <br /><br />
+                <VStack
+                    spacing={8}
+                    alignItems="center"
+                    color="white"
+                    textAlign="center"
+                    width="100%"
+                >
+                    {/* Title and Countdown with glassmorphism */}
+                    <Box
+                        bg="whiteAlpha.200"
+                        backdropFilter="blur(8px)"
+                        borderRadius="2xl"
+                        px={{ base: 6, sm: 8, md: 12 }}
+                        py={{ base: 6, sm: 7, md: 8 }}
+                        boxShadow="xl"
+                    >
+                        <VStack spacing={3}>
+                            <Heading
+                                as="h1"
+                                fontSize={{ base: "2xl", sm: "3xl", md: "4xl", lg: "5xl" }}
+                                fontWeight="700"
+                                letterSpacing="tight"
+                            >
+                                {scavengerHuntName}
+                            </Heading>
+
+                            <Divider borderColor="whiteAlpha.500" width="60%" />
+
+                            {isClient && (
+                                <Countdown date={startTime} renderer={CountdownRenderer} />
+                            )}
+                        </VStack>
+                    </Box>
+
+                    {/* How to Play section - controlled by prop */}
+                    {showHowToPlay && (
+                        <>
+                            <Heading
+                                as="h2"
+                                size="xl"
+                                fontWeight="600"
+                                mt={4}
+                            >
+                                How to Play
+                            </Heading>
+
+                            {/* Challenges Section */}
+                            <Box width="100%">
+                                <Heading as="h3" size="lg" mb={4} fontWeight="600">
+                                    Challenges
+                                </Heading>
+                                <Text fontSize="md" lineHeight="tall" textAlign="left">
+                                    • We've spread 75+ challenges across the city
+                                    <br /><br />
+                                    • It's a choose your own adventure! You decide where you go and in what order
+                                    <br /><br />
+                                    • Each challenge is worth points and can be done by a limited number of teams
+                                    <br /><br />
+                                    • Use the map to see which challenges are nearby! Challenges in the "water" don't have a set location
+                                </Text>
+                            </Box>
+
+                            {/* Submissions Section */}
+                            <Box width="100%">
+                                <Heading as="h3" size="lg" mb={4} fontWeight="600">
+                                    Submissions
+                                </Heading>
+                                <Text fontSize="md" lineHeight="tall" textAlign="left">
+                                    • You'll upload a video for every challenge submission. Please submit VERTICAL videos if possible!!
+                                    <br /><br />
+                                    • If your video is longer than a minute or you have trouble uploading, send it to one of us separately instead!
+                                    <br /><br />
+                                    • You can see everyone's submissions on the homepage!
+                                </Text>
+                            </Box>
+
+                            {/* Other Notes Section */}
+                            <Box width="100%">
+                                <Heading as="h3" size="lg" mb={4} fontWeight="600">
+                                    Other Notes
+                                </Heading>
+                                <Text fontSize="md" lineHeight="tall" textAlign="left">
+                                    • Your team must stick together
+                                    <br /><br />
+                                    • You can only travel via public transit, bikes, scooters, or on foot!
+                                    <br />
+                                    (We recommend getting a MUNI day pass)
+                                    <br /><br />
+                                    • You can see every team's latest location on the map! The site will ask for location permissions
+                                </Text>
+                            </Box>
+
+                            {/* Prize Categories Section */}
+                            <Box width="100%">
+                                <Heading as="h3" size="lg" mb={4} fontWeight="600">
+                                    Prize Categories
+                                </Heading>
+                                <Text fontSize="md" lineHeight="tall" textAlign="left">
+                                    • Most points (1st and 2nd place)
+                                    <br /><br />
+                                    • Most committed to the bit for a challenge
+                                    <br /><br />
+                                    • Funniest challenge submission
+                                    <br /><br />
+                                    • Best team vibes
+                                    <br /><br />
+                                    • Potentially more!
+                                    <br /><br />
+                                    Contribute ideas or 💸 to the prize pool to help :))
+                                </Text>
+                            </Box>
+
+                            {/* Closing */}
+                            <Box mt={6}>
+                                <Heading as="h4" size="md" mb={3} fontWeight="600">
+                                    That's All!
+                                </Heading>
+                                <Text fontSize="lg" lineHeight="tall">
+                                    Remember: have fun, wear sunscreen, and take vertical videos!!!
+                                    <br /><br />
+                                    We'll see you at closing ceremonies at 6pm in Alamo Square 🧺
+                                </Text>
+                            </Box>
+
+                            {/* Footer */}
+                            <Text fontSize="xs" color="whiteAlpha.700" mt={4} mb={8}>
+                                This website is not SOC2 compliant.
+                                <br />
+                                For inquiries, please reach out to any housemate
+                            </Text>
+                        </>
+                    )}
+                </VStack>
+            </Container>
+        </Box>
+    )
+}
+
+const CountdownRenderer = ({
+    days,
+    hours,
+    minutes,
+    seconds,
+    completed
+}: {
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    completed: boolean;
+}) => {
+    return completed ? (
+        <VStack spacing={4}>
+            <Heading
+                as="h2"
+                size="2xl"
+                fontWeight="700"
+                color="white"
+                textShadow="0 0 20px rgba(255,255,255,0.5)"
+            >
+                Let the Games Begin!
+            </Heading>
+            <Text fontSize="xl" fontWeight="500" color="white">
+                Reach out to Drew or Aivant for your login link
+            </Text>
+        </VStack>
+    ) : (
+        <Box display="flex" gap={{ base: 3, sm: 4, md: 6 }} flexWrap="wrap" justifyContent="center">
+            <VStack spacing={1}>
+                <Text fontSize={{ base: "3xl", sm: "4xl", md: "5xl" }} fontWeight="800" lineHeight="1" color="white">
+                    {days}
                 </Text>
-                <Heading fontFamily="'Press Start 2P'" size="sm" >submissions</Heading>
-                <Text fontSize="10" fontFamily="'Press Start 2P'">
-                    - you'll upload a video for every challenge submission. Please submit VERTICAL videos if possible!!<br /><br />
-                    - if your video is longer than a minute or you have trouble uploading, send it to one of us separately instead!<br /><br />
-                    - you can see everyone's submissions on the homepage!<br /><br />
+                <Text fontSize={{ base: "xs", sm: "sm", md: "md" }} fontWeight="600" color="white" textTransform="uppercase" letterSpacing="wide">
+                    {days === 1 ? "Day" : "Days"}
                 </Text>
-                <Heading fontFamily="'Press Start 2P'" size="sm">other notes</Heading>
-                <Text fontSize="10" fontFamily="'Press Start 2P'">
-                    - your team must stick together<br /><br />
-                    - you can only travel via public transit, bikes, scooters, or on foot!<br />(We recommend getting a MUNI day pass)<br /><br />
-                    - you can see every teams' latest location on the map! the site will ask for location permissions <br /><br />
+            </VStack>
+
+            <VStack spacing={1}>
+                <Text fontSize={{ base: "3xl", sm: "4xl", md: "5xl" }} fontWeight="800" lineHeight="1" color="white">
+                    {hours}
                 </Text>
-                <Heading fontFamily="'Press Start 2P'" size="sm">prize categories</Heading>
-                <Text fontSize="10" fontFamily="'Press Start 2P'">
-                    - most points (1st and 2nd place)<br /><br />
-                    - most committed to the bit for a challenge<br /><br />
-                    - funniest challenge submission<br /><br />
-                    - best team vibes<br /><br />
-                    - potentially more!<br /><br />Contribute ideas or 💸 to the prize pool to help :))<br /><br /><br />
+                <Text fontSize={{ base: "xs", sm: "sm", md: "md" }} fontWeight="600" color="white" textTransform="uppercase" letterSpacing="wide">
+                    {hours === 1 ? "Hour" : "Hours"}
                 </Text>
-                <Heading fontFamily="'Press Start 2P'" size="xs" >that's all!</Heading>
-                <Text fontFamily="'Press Start 2P'" fontSize="12">
-                    remember: have fun, wear sunscreen, and take vertical videos!!!<br /><br />
-                    we'll see you at closing ceremonies at 6pm in Alamo Square 🧺
+            </VStack>
+
+            <VStack spacing={1}>
+                <Text fontSize={{ base: "3xl", sm: "4xl", md: "5xl" }} fontWeight="800" lineHeight="1" color="white">
+                    {minutes}
                 </Text>
-                <Text fontFamily="'Press Start 2P'" fontSize="7">
-                    <br /> this website is not soc2 compliant.<br /><br />for inquiries, please reach out to any housemate<br />
+                <Text fontSize={{ base: "xs", sm: "sm", md: "md" }} fontWeight="600" color="white" textTransform="uppercase" letterSpacing="wide">
+                    {minutes === 1 ? "Minute" : "Minutes"}
+                </Text>
+            </VStack>
+
+            <VStack spacing={1}>
+                <Text fontSize={{ base: "3xl", sm: "4xl", md: "5xl" }} fontWeight="800" lineHeight="1" color="white">
+                    {seconds}
+                </Text>
+                <Text fontSize={{ base: "xs", sm: "sm", md: "md" }} fontWeight="600" color="white" textTransform="uppercase" letterSpacing="wide">
+                    {seconds === 1 ? "Second" : "Seconds"}
                 </Text>
             </VStack>
         </Box>
-    )
+    );
+};
 
-}
-
-const CountdownRenderer = ({ days, hours, minutes, seconds, completed }: { days: number, hours: number, minutes: number, seconds: number, completed: boolean }) => {
-    return completed ?
-        (<VStack>
-            <Heading fontFamily="'Press Start 2P'" mb={4} size="md">let the games begin!</Heading>
-            <Heading fontFamily="'Press Start 2P'" size="xs">reach out to drew or aivant for your login link</Heading>
-        </VStack >)
-        : (
-            <VStack>
-                <Heading fontFamily="'Press Start 2P'" size="sm">{days} {days === 1 ? 'day' : 'days'}</Heading>
-                <Heading fontFamily="'Press Start 2P'" size="sm">{hours} {hours === 1 ? 'hour' : 'hours'}</Heading>
-                <Heading fontFamily="'Press Start 2P'" size="sm">{minutes} {minutes === 1 ? 'minute' : 'minutes'}</Heading>
-                <Heading fontFamily="'Press Start 2P'" size="sm">{seconds} {seconds === 1 ? 'second' : 'seconds'}</Heading>
-            </VStack>
-        )
-}

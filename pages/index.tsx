@@ -120,7 +120,7 @@ export const getServerSideProps = async (
   };
 };
 
-const HowToPlay = dynamic(() => import("../components/HowToPlayV2"), {
+const HowToPlay = dynamic(() => import("../components/HowToPlay"), {
   ssr: false
 });
 

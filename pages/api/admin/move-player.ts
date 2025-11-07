@@ -52,7 +52,7 @@ export default async function handler(
     // Remove player from source team
     await TeamModel.findByIdAndUpdate(
       fromTeamId,
-      { $pull: { members: { _id: player._id } } }
+      { $pull: { members: { firstName: player.firstName, familyName: player.familyName } } }
     );
 
     return res.status(200).json({ success: true });

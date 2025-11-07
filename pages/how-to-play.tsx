@@ -3,7 +3,6 @@ import NavContainer from "../components/NavContainer";
 import { InferGetServerSidePropsType } from "next";
 import { getStartTime } from "../lib/time";
 import { formatISO, parseISO } from "date-fns";
-import HowToPlayV2 from "../components/HowToPlayV2";
 
 export const getServerSideProps = async () => {
   const startTime = getStartTime();
@@ -29,5 +28,5 @@ export default function Page({
   scavengerHuntName,
   showHowToPlay,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
-  return <NavContainer title="how to play" fullScreen bgColor="#c79fb8" hgt="70dvh"><HowToPlayV2 startTime={parseISO(startTimeISO)} scavengerHuntName={scavengerHuntName} showHowToPlay={showHowToPlay}/></NavContainer>
+  return <NavContainer title="how to play" fullScreen bgColor="#c79fb8" hgt="70dvh"><HowToPlay startTime={parseISO(startTimeISO)} scavengerHuntName={scavengerHuntName} showHowToPlay={showHowToPlay}/></NavContainer>
 }
