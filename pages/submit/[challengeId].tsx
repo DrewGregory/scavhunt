@@ -7,7 +7,12 @@ import { dbConnect } from "../../lib/dbConnect";
 import { ChallengeModel } from "../../models/Challenge";
 import { TEAM_COOKIE_NAME } from "../../lib/team";
 import NavContainer from "../../components/NavContainer";
-import MediaUploadForm from "../../components/MediaUploadForm";
+import dynamic from "next/dynamic";
+
+// https://nextjs.org/docs/pages/building-your-application/optimizing/lazy-loading#with-no-ssr
+const MediaUploadForm = dynamic(() => import("../../components/MediaUploadForm"), {
+  ssr: false,
+});
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   await dbConnect();

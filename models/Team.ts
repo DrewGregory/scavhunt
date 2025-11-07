@@ -8,6 +8,7 @@ export interface Team {
   name: string;
   emoji: string;
   members: Array<{
+    _id: string;
     firstName: string;
     familyName: string;
   }>
