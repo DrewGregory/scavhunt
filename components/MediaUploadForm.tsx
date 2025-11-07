@@ -11,6 +11,15 @@ import {
 import axios from "axios";
 import { useRef, useState } from "react";
 import { submissionResponseBodySchema } from "../lib/types";
+import Uppy from '@uppy/core';
+import Dashboard from '@uppy/react/dashboard';
+import Webcam from '@uppy/webcam';
+import AwsS3 from '@uppy/aws-s3';
+
+import '@uppy/core/css/style.min.css';
+import '@uppy/dashboard/css/style.min.css';
+
+
 
 interface MediaUploadFormProps {
   apiEndpoint: string;
@@ -46,6 +55,24 @@ export default function MediaUploadForm({
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [uppy] = useState(() => new Uppy().use(Webcam).use(AwsS3, {
+    endpoint: apiEndpoint,
+    limit: 1,
+    getUploadParameters: async (file, options) => {
+      const { challengeId } = formData;
+      const url = await axios.post("/api/presigned-url", {
+        challengeId, 
+        fileType: file.type,
+        contentType: file.type
+      });
+      const method: "PUT" = "PUT";
+      return {
+        method,
+        url: url.data.url,
+      }
+    },
+  }));
 
   const handleSubmit = async () => {
     if (!file && !skipUpload) {
@@ -127,8 +154,9 @@ export default function MediaUploadForm({
   };
 
   return (
-    <VStack spacing={4} width="100%">
-      <FormControl as="fieldset" width="100%">
+      <VStack spacing={4} width="100%">
+      <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} />
+      {/* <FormControl as="fieldset" width="100%">
         <FormLabel as="legend">Upload video</FormLabel>
         <Input
           type="file"
@@ -142,9 +170,9 @@ export default function MediaUploadForm({
           }}
           ref={fileInputRef}
         />
-      </FormControl>
+      </FormControl> */}
 
-      {showSkipUpload && (
+      {/* {showSkipUpload && (
         <FormControl as="fieldset" width="100%">
           <Checkbox
             isChecked={skipUpload}
@@ -180,7 +208,7 @@ export default function MediaUploadForm({
         <Alert status={result.success ? "success" : "error"}>
           {result.message}
         </Alert>
-      )}
+      )} */}
 
       <Button onClick={handleSubmit} isLoading={isSubmitting} width="100%">
         {buttonText}
