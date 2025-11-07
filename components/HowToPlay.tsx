@@ -2,6 +2,7 @@ import { Box, Container, Divider, Heading, Text, VStack } from "@chakra-ui/react
 import { useEffect, useState } from "react"
 import Countdown from "react-countdown"
 import Image from "next/image"
+import sfBg from "/public/sf_bg.jpeg"
 
 
 export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Date; scavengerHuntName: string; showHowToPlay: boolean }) => {
@@ -30,7 +31,7 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                 overflow="hidden"
             >
                 <Image
-                    src="/sf_bg.jpeg"
+                    src={sfBg}
                     alt="San Francisco background"
                     fill
                     sizes="100vw"
