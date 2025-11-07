@@ -16,9 +16,15 @@ import {
   Text,
   VStack,
   Image,
-  Box
+  Box,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  IconButton
 } from "@chakra-ui/react";
 import { ChevronDownIcon } from "@chakra-ui/icons";
+import { HiDotsVertical } from "react-icons/hi";
 import { z } from "zod";
 import { serializedChallengeSchema } from "../models/Challenge";
 import { ADMIN_TEAM_ID, getTeamFromCookie } from "../lib/team";
@@ -158,30 +164,88 @@ export default function Page({
                 justifyContent="space-between"
                 alignItems="center"
                 p={2}
-                onClick={() => {
-                  setSelectedSubmission(
-                    s._id === selectedSubmission ? null : s._id
-                  );
-                  router.push({
-                    pathname: "/",
-                    query: {
-                      submission: s._id,
-                    }
-                  },undefined, {shallow: true} )
-                }}
               >
-                <Text flex={1}>
-                  Submission by for <b>{s.challenge.title}</b>!
-                </Text>
+                <Flex
+                  flex={1}
+                  alignItems="center"
+                  onClick={() => {
+                    setSelectedSubmission(
+                      s._id === selectedSubmission ? null : s._id
+                    );
+                    router.push({
+                      pathname: "/",
+                      query: {
+                        submission: s._id,
+                      }
+                    },undefined, {shallow: true} )
+                  }}
+                >
+                  <Text flex={1}>
+                    Submission by for <b>{s.challenge.title}</b>!
+                  </Text>
 
-                <Tag mr={3} colorScheme={s.accepted ? "green" : (s.rejected ? "red" :"orange")}>
-                  {s.accepted ? "Accepted" : (s.rejected ? "Rejected" : "Pending review")}
-                </Tag>
-                <ChevronDownIcon
-                  className={
-                    s._id === selectedSubmission ? "chevron rotate" : "chevron"
-                  }
-                />
+                  <Tag mr={3} colorScheme={s.accepted ? "green" : (s.rejected ? "red" :"orange")}>
+                    {s.accepted ? "Accepted" : (s.rejected ? "Rejected" : "Pending review")}
+                  </Tag>
+                  <ChevronDownIcon
+                    className={
+                      s._id === selectedSubmission ? "chevron rotate" : "chevron"
+                    }
+                  />
+                </Flex>
+                {(team._id === ADMIN_TEAM_ID || team._id === s.teamId) && (
+                  <Menu>
+                    <MenuButton
+                      as={IconButton}
+                      icon={<HiDotsVertical />}
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Options"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <MenuList>
+                      {team._id === ADMIN_TEAM_ID && !s.accepted && !s.rejected && (
+                        <>
+                          <MenuItem
+                            onClick={async () => {
+                              await fetch("/api/approve-submission", {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  submissionId: s._id,
+                                  accepted: true,
+                                })
+                              });
+                              window.location.reload();
+                            }}
+                          >
+                            Approve Submission
+                          </MenuItem>
+                          <MenuItem
+                            onClick={async () => {
+                              await fetch("/api/approve-submission", {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  submissionId: s._id,
+                                  accepted: false,
+                                })
+                              });
+                              window.location.reload();
+                            }}
+                          >
+                            Reject Submission
+                          </MenuItem>
+                        </>
+                      )}
+                      <MenuItem
+                        onClick={() => {
+                          router.push(`/update-submission/${s._id}`);
+                        }}
+                      >
+                        {s.mediaURL ? "Update Video" : "Add Video"}
+                      </MenuItem>
+                    </MenuList>
+                  </Menu>
+                )}
               </Flex>
               <Flex alignItems="left" p={2} direction="column">
                 <Text mr={3} suppressHydrationWarning>
@@ -230,42 +294,6 @@ export default function Page({
                   <Text marginTop={3}>{s.note}</Text>
                 </Flex>
               )}
-              {team._id === ADMIN_TEAM_ID && !s.accepted && !s.rejected ? (
-                <>
-                  <Button
-                    style={{
-                      margin: "2px"
-                    }}
-                    onClick={async () => {
-                      await fetch("/api/approve-submission", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          submissionId: s._id,
-                          accepted: true,
-                        })
-                      });
-                    }}
-                  >
-                    Approve Submission!
-                  </Button>
-                  <Button
-                  style={{
-                    margin: "2px"
-                  }}
-                  onClick={async () => {
-                    await fetch("/api/approve-submission", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        submissionId: s._id,
-                        accepted: false,
-                      })
-                    });
-                  }}
-                >
-                  Reject Submission!
-                </Button>
-              </>
-              ) : null}
             </Card>
           ))}
         </VStack>
