@@ -6,17 +6,10 @@ import Image from "next/image"
 
 export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Date; scavengerHuntName: string; showHowToPlay: boolean }) => {
     const [isClient, setIsClient] = useState(false);
-    const [highQualityLoaded, setHighQualityLoaded] = useState(false);
+    const [imgSrc, setImgSrc] = useState('/sf_bg-min.jpeg');
 
     useEffect(() => {
         setIsClient(true);
-        
-        // Preload high-quality image
-        const img = new window.Image();
-        img.src = '/sf_bg.jpeg';
-        img.onload = () => {
-            setHighQualityLoaded(true);
-        };
     }, []);
 
     return (
@@ -36,34 +29,22 @@ export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Da
                 zIndex={0}
                 overflow="hidden"
             >
-                {/* Low-quality placeholder image */}
                 <Image
-                    src="/sf_bg-min.jpeg"
+                    src={imgSrc}
                     alt="San Francisco background"
                     fill
                     sizes="100vw"
                     style={{ 
                         objectFit: 'cover', 
                         objectPosition: 'center',
-                        opacity: highQualityLoaded ? 0 : 1,
-                        transition: 'opacity 0.5s ease-in-out'
                     }}
                     priority
-                    quality={10}
-                />
-                {/* High-quality image */}
-                <Image
-                    src="/sf_bg.jpeg"
-                    alt="San Francisco background"
-                    fill
-                    sizes="100vw"
-                    style={{ 
-                        objectFit: 'cover', 
-                        objectPosition: 'center',
-                        opacity: highQualityLoaded ? 1 : 0,
-                        transition: 'opacity 0.5s ease-in-out'
+                    onLoadingComplete={() => {
+                        // Switch to high-quality image after initial render
+                        if (imgSrc === '/sf_bg-min.jpeg') {
+                            setImgSrc('/sf_bg.jpeg');
+                        }
                     }}
-                    quality={100}
                 />
             </Box>
 
