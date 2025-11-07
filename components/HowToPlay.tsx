@@ -2,8 +2,7 @@ import { Box, Container, Divider, Heading, Text, VStack } from "@chakra-ui/react
 import { useEffect, useState } from "react"
 import Countdown from "react-countdown"
 import Image from "next/image"
-import sfBg from "/public/sf_bg.jpeg"
-
+import sfBg from "/public/sf_bg.webp"
 
 export default ({ startTime, scavengerHuntName, showHowToPlay }: { startTime: Date; scavengerHuntName: string; showHowToPlay: boolean }) => {
     const [isClient, setIsClient] = useState(false);
