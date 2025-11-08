@@ -204,6 +204,8 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                         This website is not SOC2 compliant.
                         <br />
                         For inquiries, please reach out to any housemate or Sevy.
+                        <br/>
+                        Photo credits: Aivant Goyal
                     </Text>
                     </Box>
                 </VStack>
