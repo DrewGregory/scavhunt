@@ -9,6 +9,7 @@ import { Types } from 'mongoose';
 const requestBodySchema = z.object({
   submissionId: z.string(), 
   accepted: z.boolean().optional(),
+  rejected: z.boolean().optional(),
 });
 
 type ResponseData = {
@@ -38,21 +39,27 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid request body" });
   }
 
-  const { submissionId, accepted } = parsedReq.data;
+  const { submissionId, accepted, rejected } = parsedReq.data;
 
-  if (accepted === undefined || accepted) {
-    await SubmissionModel.findOneAndUpdate({
-      _id: new Types.ObjectId(submissionId),
-    }, {
-      accepted: true,
-    }).exec();
-  } else if (accepted === false) {
-    await SubmissionModel.findOneAndUpdate({
-      _id: new Types.ObjectId(submissionId),
-    }, {
-      rejected: true,
-    }).exec();
+  // Determine the update based on the request
+  let update: { accepted: boolean; rejected: boolean };
+  
+  if (accepted === true) {
+    // Approve submission
+    update = { accepted: true, rejected: false };
+  } else if (rejected === true) {
+    // Reject submission
+    update = { accepted: false, rejected: true };
+  } else {
+    // Reset to pending (both false)
+    update = { accepted: false, rejected: false };
   }
+
+  await SubmissionModel.findOneAndUpdate(
+    { _id: new Types.ObjectId(submissionId) },
+    update
+  ).exec();
+
   return res.status(200).json({
     success: true,
   })

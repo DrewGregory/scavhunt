@@ -231,36 +231,62 @@ export default function Page({
                         _hover={{ bg: "gray.100" }}
                       />
                       <MenuList>
-                        {isAdmin && !s.accepted && !s.rejected && (
+                        {isAdmin && (
                           <>
-                            <MenuItem
-                              onClick={async () => {
-                                await fetch("/api/approve-submission", {
-                                  method: "POST",
-                                  body: JSON.stringify({
-                                    submissionId: s._id,
-                                    accepted: true,
-                                  })
-                                });
-                                window.location.reload();
-                              }}
-                            >
-                              Approve Submission
-                            </MenuItem>
-                            <MenuItem
-                              onClick={async () => {
-                                await fetch("/api/approve-submission", {
-                                  method: "POST",
-                                  body: JSON.stringify({
-                                    submissionId: s._id,
-                                    accepted: false,
-                                  })
-                                });
-                                window.location.reload();
-                              }}
-                            >
-                              Reject Submission
-                            </MenuItem>
+                            {!s.accepted && (
+                              <MenuItem
+                                onClick={async () => {
+                                  await fetch("/api/approve-submission", {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      submissionId: s._id,
+                                      accepted: true,
+                                    })
+                                  });
+                                  window.location.reload();
+                                }}
+                                color={s.rejected ? "green.600" : undefined}
+                                fontWeight={s.rejected ? "semibold" : undefined}
+                              >
+                                {s.rejected ? "✓ Approve Submission" : "Approve Submission"}
+                              </MenuItem>
+                            )}
+                            {!s.rejected && (
+                              <MenuItem
+                                onClick={async () => {
+                                  await fetch("/api/approve-submission", {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      submissionId: s._id,
+                                      rejected: true,
+                                    })
+                                  });
+                                  window.location.reload();
+                                }}
+                                color={s.accepted ? "red.600" : undefined}
+                                fontWeight={s.accepted ? "semibold" : undefined}
+                              >
+                                {s.accepted ? "✗ Reject Submission" : "Reject Submission"}
+                              </MenuItem>
+                            )}
+                            {(s.accepted || s.rejected) && (
+                              <MenuItem
+                                onClick={async () => {
+                                  await fetch("/api/approve-submission", {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      submissionId: s._id,
+                                      accepted: false,
+                                      rejected: false,
+                                    })
+                                  });
+                                  window.location.reload();
+                                }}
+                                color="blue.600"
+                              >
+                                ↺ Reset to Pending
+                              </MenuItem>
+                            )}
                           </>
                         )}
                         <MenuItem
