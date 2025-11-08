@@ -17,7 +17,8 @@ type ChallengeWithSubmissions = {
   submissions: Array<{
     teamId: string;
     accepted: boolean;
-    rejected: boolean;
+    rejected?: boolean;
+    [key: string]: any;
   }>;
 };
 
