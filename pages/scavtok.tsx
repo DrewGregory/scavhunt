@@ -171,6 +171,15 @@ export default function Page({
     videoRefs.current[index] = ref;
   };
 
+
+  const submissionsWithVideos = submissions.filter(
+    (submission) =>
+      submission.mediaURL &&
+      submission.mediaURL
+        .toLowerCase()
+        .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i)
+  );
+
   const randomIntFromInterval = (min: number, max: number) => {
     return Math.floor(Math.random() * (max - min + 1) + min);
   };

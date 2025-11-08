@@ -53,10 +53,16 @@ export default function MediaUploadForm({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const { challengeId } = formData;
 
-  const [uppy] = useState(() => new Uppy().use(Webcam, {
+  const [uppy] = useState(() => new Uppy({
+    restrictions: {
+      maxNumberOfFiles: 1, 
+      minNumberOfFiles: 1,
+    }
+  }).use(Webcam, {
     modes:["video-audio"],
     mobileNativeCamera: true,
     showRecordingLength: true,
+    showVideoSourceDropdown: true,
   }).use(AwsS3, {
     endpoint: apiEndpoint,
     limit: 1,
@@ -160,8 +166,7 @@ export default function MediaUploadForm({
             uppy={uppy}
             proudlyDisplayPoweredByUppy={false}
             width="100%"
-            // keep dashboard compact on mobile
-            height={260}
+            doneButtonHandler={null}
           />
         </Box>
       </FormControl>
