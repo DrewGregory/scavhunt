@@ -13,7 +13,7 @@ import {
   BoxProps,
   FlexProps,
   Heading,
-  Divider
+  Divider,
 } from "@chakra-ui/react";
 import { FiMenu } from "react-icons/fi";
 import {
@@ -22,9 +22,11 @@ import {
   GiPodium,
   GiNotebook,
   GiHouse,
-  GiRuleBook
+  GiRuleBook,
+  GiMagicSwirl,
 } from "react-icons/gi";
-import { FaVideo } from "react-icons/fa";
+import { FaVideo, FaMagic } from "react-icons/fa";
+import { IoChatbubbles } from "react-icons/io5";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useTeam } from "./useTeam";
@@ -40,7 +42,9 @@ const LinkItems: Array<LinkItemProps> = [
   { name: "Challenges", icon: GiNotebook, url: "/challenges" },
   { name: "Leaderboard", icon: GiPodium, url: "/teams" },
   { name: "Map", icon: GiTreasureMap, url: "/map" },
-  { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" }
+  { name: "ScavAI", icon: FaMagic, url: "/scavai" },
+  { name: "Chat", icon: IoChatbubbles, url: "/chat" },
+  { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" },
 ];
 
 export default function NavContainer({
@@ -48,7 +52,7 @@ export default function NavContainer({
   children,
   fullScreen,
   bgColor,
-  hgt
+  hgt,
 }: {
   title: string;
   children: ReactNode;
@@ -59,7 +63,10 @@ export default function NavContainer({
   const { isOpen, onOpen, onClose } = useDisclosure();
   const team = useTeam();
   return (
-    <Box height="100dvh" bg={bgColor ? bgColor : useColorModeValue("gray.100", "gray.900")}>
+    <Box
+      height="100dvh"
+      bg={bgColor ? bgColor : useColorModeValue("gray.100", "gray.900")}
+    >
       <SidebarContent
         title={"Scavhunt"}
         onClose={() => onClose}
@@ -136,7 +143,7 @@ const SidebarContent = ({
       {...rest}
     >
       <Flex h="20" alignItems="center" mx="8" justifyContent="space-between">
-        <Gi3dMeeple size="32" />
+        <GiMagicSwirl size="32" />
         <Text
           fontSize="2xl"
           ml="2"
@@ -180,7 +187,7 @@ const colors = {
   yellow: "#f4e4ad",
   green: "#c4f3c7",
   blue: "#e1fafe",
-  pink: "#f8d3d1"
+  pink: "#f8d3d1",
 };
 
 interface NavItemProps extends FlexProps {
@@ -203,7 +210,7 @@ const NavItem = ({ icon, children, ...rest }: NavItemProps) => {
         role="group"
         cursor="pointer"
         _hover={{
-          bg: colors.green
+          bg: colors.green,
         }}
         {...rest}
       >
