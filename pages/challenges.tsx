@@ -79,6 +79,7 @@ export default function Page({
   const [sortOption, setSortOption] = useState<SortOption>('default');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [hideCompleted, setHideCompleted] = useState<boolean>(false);
+  const [hideFullChallenges, setHideFullChallenges] = useState<boolean>(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -106,10 +107,17 @@ export default function Page({
       )
     : searchFilteredChallenges;
   
+  // Filter out full challenges if hideFullChallenges is true
+  const fullFilteredChallenges = hideFullChallenges
+    ? completedFilteredChallenges.filter(c => 
+        c.submissions.filter(s => s.accepted).length < c.numWinners
+      )
+    : completedFilteredChallenges;
+  
   // Sort challenges based on selected option
   const sortedChallenges = sortOption === 'default' 
-    ? completedFilteredChallenges 
-    : [...completedFilteredChallenges].sort((a, b) => {
+    ? fullFilteredChallenges 
+    : [...fullFilteredChallenges].sort((a, b) => {
         switch (sortOption) {
           case 'points-high':
             return b.pts - a.pts;
@@ -146,23 +154,42 @@ export default function Page({
           <option value="points-low">Points: Low to High</option>
         </Select>
         {team && (
-          <HStack
-            width="100%"
-            bg="white"
-            p={3}
-            borderRadius="md"
-            boxShadow="sm"
-            justifyContent="space-between"
-          >
-            <Text fontSize="sm" fontWeight="medium" color="gray.700">
-              Hide Completed Challenges
-            </Text>
-            <Switch
-              isChecked={hideCompleted}
-              onChange={(e) => setHideCompleted(e.target.checked)}
-              colorScheme="blue"
-            />
-          </HStack>
+          <VStack width="100%" spacing={2}>
+            <HStack
+              width="100%"
+              bg="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="sm"
+              justifyContent="space-between"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                Hide challenges you've finished
+              </Text>
+              <Switch
+                isChecked={hideCompleted}
+                onChange={(e) => setHideCompleted(e.target.checked)}
+                colorScheme="blue"
+              />
+            </HStack>
+            <HStack
+              width="100%"
+              bg="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="sm"
+              justifyContent="space-between"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                Hide challenges at max capacity
+              </Text>
+              <Switch
+                isChecked={hideFullChallenges}
+                onChange={(e) => setHideFullChallenges(e.target.checked)}
+                colorScheme="blue"
+              />
+            </HStack>
+          </VStack>
         )}
         {sortedChallenges.map((c) => (
           <Card
@@ -210,7 +237,7 @@ export default function Page({
                 pb={c._id === selectedChallenge ? 2 : 4}
               >
                 <Text fontSize="sm" color="gray.600">
-                  {c.submissions.filter(s => s.accepted).length} accepted, {c.submissions.filter(s => !s.accepted && !s.rejected).length} pending / {c.numWinners} submission{c.numWinners == 1 ? "" : "s"}
+                  {c.submissions.filter(s => s.accepted).length} of {c.numWinners} spot{c.numWinners === 1 ? "" : "s"} filled • {c.submissions.filter(s => !s.accepted && !s.rejected).length} pending approval
                 </Text>
               </Flex>
               {c._id === selectedChallenge && (
