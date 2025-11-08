@@ -57,6 +57,7 @@ export default function MediaUploadForm({
     modes:["video-audio"],
     mobileNativeCamera: true,
     showRecordingLength: true,
+    showVideoSourceDropdown: true,
   }).use(AwsS3, {
     endpoint: apiEndpoint,
     limit: 1,
@@ -160,8 +161,7 @@ export default function MediaUploadForm({
             uppy={uppy}
             proudlyDisplayPoweredByUppy={false}
             width="100%"
-            // keep dashboard compact on mobile
-            height={260}
+            doneButtonHandler={null}
           />
         </Box>
       </FormControl>
