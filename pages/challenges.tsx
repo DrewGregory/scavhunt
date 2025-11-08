@@ -9,6 +9,7 @@ import {
   Card,
   Flex,
   Heading,
+  Select,
   Text,
   VStack,
 } from "@chakra-ui/react";
@@ -64,6 +65,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   };
 };
 
+type SortOption = 'default' | 'points-high' | 'points-low';
+
 export default function Page({
   challenges
 }: {
@@ -75,6 +78,7 @@ export default function Page({
   const [selectedChallenge, setSelectedChallenge] = useState<string | null>(
     challengeSearchParam
   );
+  const [sortOption, setSortOption] = useState<SortOption>('default');
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -86,10 +90,35 @@ export default function Page({
   }, [ref.current, challengeSearchParam]);
 
   const team = useTeam();
+  
+  // Sort challenges based on selected option
+  const sortedChallenges = sortOption === 'default' 
+    ? challenges 
+    : [...challenges].sort((a, b) => {
+        switch (sortOption) {
+          case 'points-high':
+            return b.pts - a.pts;
+          case 'points-low':
+            return a.pts - b.pts;
+          default:
+            return 0;
+        }
+      });
+  
   return (
     <NavContainer title="Challenges">
       <VStack>
-        {challenges.map((c) => (
+        <Select 
+          value={sortOption} 
+          onChange={(e) => setSortOption(e.target.value as SortOption)}
+          width="100%"
+          mb={2}
+        >
+          <option value="default">Default</option>
+          <option value="points-high">Points: High to Low</option>
+          <option value="points-low">Points: Low to High</option>
+        </Select>
+        {sortedChallenges.map((c) => (
           <Card
             ref={c._id === challengeSearchParam ? ref : null}
             key={c._id}

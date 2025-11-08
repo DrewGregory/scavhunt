@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
 import { LatLngExpression, divIcon, icon } from "leaflet";
 import 'leaflet/dist/leaflet.css';
 import { SerializedChallenge } from '../models/Challenge';
 import Link from 'next/link';
 import { LatestTeamLocation } from '../lib/types';
+import { Box, HStack, Switch, Text } from '@chakra-ui/react';
 
 export default function LeafletMap({
   locations,
@@ -13,6 +14,9 @@ export default function LeafletMap({
   locations: Array<LatestTeamLocation>
   challenges: Array<SerializedChallenge>
 }) {
+  const [showChallenges, setShowChallenges] = useState(true);
+  const [showPlayers, setShowPlayers] = useState(true);
+
   useEffect(() => {
     // This ensures the map container size is calculated correctly
     window.dispatchEvent(new Event('resize'));
@@ -30,21 +34,58 @@ export default function LeafletMap({
 
   const position: LatLngExpression = [37.7749, -122.4194];
   return (
-    <MapContainer center={position} zoom={13} style={{ height: '100%', width: '100%' }}>
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      />
-      {challenges.map(c =>
-        <Marker icon={BlackMarker} key={c._id} position={[c.loc.lat, c.loc.lng]}>
-          <Popup>
-            <Link href={`/challenges?challenge=${c._id}`}>{c.title}</Link>
-          </Popup>
-        </Marker>
-      )}
-      {
-        
-        locations.map(l => 
+    <Box position="relative" height="100%" width="100%">
+      {/* Toggle Controls */}
+      <Box
+        position="absolute"
+        bottom={4}
+        right={4}
+        zIndex={1000}
+        bg="white"
+        p={4}
+        borderRadius="md"
+        boxShadow="lg"
+      >
+        <HStack spacing={4} flexDirection="column" alignItems="flex-start">
+          <HStack>
+            <Switch
+              id="show-challenges"
+              isChecked={showChallenges}
+              onChange={(e) => setShowChallenges(e.target.checked)}
+              colorScheme="blue"
+            />
+            <Text fontSize="sm" fontWeight="medium">
+              Challenges
+            </Text>
+          </HStack>
+          <HStack>
+            <Switch
+              id="show-players"
+              isChecked={showPlayers}
+              onChange={(e) => setShowPlayers(e.target.checked)}
+              colorScheme="blue"
+            />
+            <Text fontSize="sm" fontWeight="medium">
+              Teams
+            </Text>
+          </HStack>
+        </HStack>
+      </Box>
+
+      {/* Map */}
+      <MapContainer center={position} zoom={13} style={{ height: '100%', width: '100%' }}>
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+        {showChallenges && challenges.map(c =>
+          <Marker icon={BlackMarker} key={c._id} position={[c.loc.lat, c.loc.lng]}>
+            <Popup>
+              <Link href={`/challenges?challenge=${c._id}`}>{c.title}</Link>
+            </Popup>
+          </Marker>
+        )}
+        {showPlayers && locations.map(l => 
           <Marker icon={divIcon({
             html: `${l.emoji}`,
             iconSize: [36, 36],
@@ -55,8 +96,8 @@ export default function LeafletMap({
               <Link href={`/teams?team=${l._id}`}>{l.emoji}</Link>
             </Popup>
           </Marker>
-        )
-      }
-    </MapContainer>
+        )}
+      </MapContainer>
+    </Box>
   );
 }

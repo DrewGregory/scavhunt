@@ -30,3 +30,16 @@ export const getTeamFromCookie = async (cookies: NextApiRequestCookies) => {
 
   return team;
 }
+
+export const verifyAdminTeamCode = async (teamCode: string): Promise<boolean> => {
+  await dbConnect();
+  const team = await TeamModel.findOne({
+    teamCode: sha256(teamCode),
+  }).lean().exec();
+  
+  if (!team) {
+    return false;
+  }
+  
+  return isAdminTeam(team._id.toString());
+}
