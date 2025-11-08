@@ -47,7 +47,7 @@ export default function ScavAI({}: InferGetServerSidePropsType<
     {
       role: "assistant",
       content:
-        "Hello! I'm ScavAI, your scavenger hunt assistant. I can help you with information about challenges, tips for finding locations, and answer any questions you have about the hunt. How can I help you today?",
+        "Hello! I'm ScavAI, your scavenger hunt assistant. I can help you with information about challenges, finding the ideal route, and answer any questions you have about the hunt. How can I help you today?",
     },
   ]);
   const [input, setInput] = useState("");
