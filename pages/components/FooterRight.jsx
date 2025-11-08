@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useRouter } from "next/router";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCirclePlus,
@@ -6,15 +7,23 @@ import {
   faHeart,
   faCommentDots,
   faBookmark,
-  faShare
+  faShare,
 } from "@fortawesome/free-solid-svg-icons";
 // import './FooterRight.css';
 import { Text } from "@chakra-ui/react";
-import { useRouter } from "next/router";
 
-function FooterRight({ likes, comments, saves, shares, profilePic }) {
+function FooterRight({
+  likes,
+  comments,
+  saves,
+  shares,
+  profilePic,
+  onCommentClick,
+  submissionId,
+  onLikeUpdate,
+}) {
   const router = useRouter();
-  const [liked, setLiked] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
   const [saved, setSaved] = useState(false);
   const [userAddIcon, setUserAddIcon] = useState(faCirclePlus);
 
@@ -44,8 +53,32 @@ function FooterRight({ likes, comments, saves, shares, profilePic }) {
     return count;
   };
 
-  const handleLikeClick = () => {
-    setLiked((prevLiked) => !prevLiked);
+  const handleLikeClick = async () => {
+    if (isLiking) return;
+
+    setIsLiking(true);
+    try {
+      const response = await fetch("/api/likes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          submissionId: submissionId,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (onLikeUpdate) {
+          onLikeUpdate(data.likes);
+        }
+      }
+    } catch (error) {
+      console.error("Error liking video:", error);
+    } finally {
+      setIsLiking(false);
+    }
   };
 
   return (
@@ -67,16 +100,21 @@ function FooterRight({ likes, comments, saves, shares, profilePic }) {
           style={{
             width: "35px",
             height: "35px",
-            color: liked ? "#FF0000" : "white"
+            color: "white",
+            opacity: isLiking ? 0.5 : 1,
           }}
           onClick={handleLikeClick}
         />
         {/* Displaying the formatted likes count */}
         <p suppressHydrationWarning>
-          {formatLikesCount(parseLikesCount(likes) + (liked ? 1 : 0))}
+          {formatLikesCount(parseLikesCount(likes))}
         </p>
       </div>
-      <div className="sidebar-icon" onClick={() => router.push("/chat")} style={{ cursor: "pointer" }}>
+      <div
+        className="sidebar-icon"
+        onClick={onCommentClick || (() => router.push("/chat"))}
+        style={{ cursor: "pointer" }}
+      >
         {/* The comment icon */}
         <FontAwesomeIcon
           icon={faCommentDots}

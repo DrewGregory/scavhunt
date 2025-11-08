@@ -13,6 +13,7 @@ services:
       - ./lib:/usr/src/app/lib:ro
       - ./models:/usr/src/app/models:ro
       - ./pages:/usr/src/app/pages:ro
+      - ./scripts:/usr/src/app/scripts:ro
 
   db:
     image: mongodb/mongodb-community-server:6.0-ubi8

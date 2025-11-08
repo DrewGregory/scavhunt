@@ -8,7 +8,7 @@ import {
 import { z } from "zod";
 import { serializedChallengeSchema } from "../models/Challenge";
 import { getTeamFromCookie } from "../lib/team";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import VideoCard from "./components/VideoCard";
 import BottomNavbar from "./components/BottomNavbar";
 import TopNavbar from "./components/TopNavbar";
@@ -85,6 +85,22 @@ export default function Page({
   submissions
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const videoRefs = useRef<any>([]);
+  const videoContainerRefs = useRef<any>([]);
+
+  const scrollToVideo = (submissionId: string) => {
+    const index = submissionsWithVideos.findIndex((s) => s._id === submissionId);
+    if (index !== -1 && videoContainerRefs.current[index]) {
+      videoContainerRefs.current[index].scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const submissionsWithVideos = submissions.filter(
+    (submission) =>
+      submission.mediaURL &&
+      submission.mediaURL
+        .toLowerCase()
+        .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4)$/i)
+  );
 
   useEffect(() => {
     const observerOptions = {
@@ -127,40 +143,30 @@ export default function Page({
     videoRefs.current[index] = ref;
   };
 
-  const submissionsWithVideos = submissions.filter(
-    (submission) =>
-      submission.mediaURL &&
-      submission.mediaURL
-        .toLowerCase()
-        .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4)$/i)
-  );
-
-  const randomIntFromInterval = (min: number, max: number) => {
-    return Math.floor(Math.random() * (max - min + 1) + min);
-  };
-
   return (
     <div className="scavtok" suppressHydrationWarning>
       <div className="app">
         <div className="container">
-          <TopNavbar />
+          <TopNavbar onVideoSelect={scrollToVideo} />
           {/* Here we map over the videos array and create VideoCard components */}
           {submissionsWithVideos.map((submission, index) => (
-            <VideoCard
-              key={index}
-              username={submission.team.emoji + " " + submission.team.name}
-              description={submission.note}
-              song={""}
-              likes={randomIntFromInterval(100, 2000)}
-              saves={randomIntFromInterval(0, 100)}
-              comments={randomIntFromInterval(0, 100)}
-              shares={randomIntFromInterval(0, 100)}
-              url={submission.mediaURL}
-              profilePic={submission.team.emoji}
-              setVideoRef={handleVideoRef(index)}
-              autoplay={index === 0}
-              suppressHydrationWarning
-            />
+            <div key={index} ref={(el) => (videoContainerRefs.current[index] = el)}>
+              <VideoCard
+                submissionId={submission._id}
+                username={submission.team.emoji + " " + submission.team.name}
+                description={submission.note}
+                song={""}
+                likes={0}
+                saves={0}
+                comments={0}
+                shares={0}
+                url={submission.mediaURL}
+                profilePic={submission.team.emoji}
+                setVideoRef={handleVideoRef(index)}
+                autoplay={index === 0}
+                suppressHydrationWarning
+              />
+            </div>
           ))}
           <BottomNavbar />
         </div>
