@@ -17,7 +17,6 @@ const requestBodySchema = z.object({
   mediaURL: z.string().optional(),
 });
 
-
 export default async (req: NextApiRequest, res: NextApiResponse) => {
 
   await dbConnect();
@@ -58,7 +57,6 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
   if (mediaURL != null) {
     const spacesKey = process.env.SPACES_KEY;
     assert(spacesKey != null);
-    assert(process.env.SPACES_SECRET != null);
     const spacesSecret = process.env.SPACES_SECRET;
     assert(spacesSecret != null);
     const spacesRegion = process.env.SPACES_REGION;
@@ -68,69 +66,40 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     const spacesEndpoint = process.env.SPACES_ENDPOINT;
     assert(spacesEndpoint != null);
 
-    const mediaURLRegex = new RegExp(`^https://${bucket}\\.${process.env.SPACES_REGION}\\.cdn\\.digitaloceanspaces\\.com/(.+)/(.+)/(.+)`);
-
-    
-    const params: PutObjectCommandInput = {
-      Bucket: bucket,
-      Key: key,
-      Body: fileStream,
-      ContentType: mimetype,
-    };
-  }
-
-  const client = new S3Client({
+    const client = new S3Client({
     credentials: {
-      accessKeyId: process.env.SPACES_KEY,
-      secretAccessKey: process.env.SPACES_SECRET,
+      accessKeyId: spacesKey,
+      secretAccessKey: spacesSecret,
     },
-    region: process.env.SPACES_REGION,
-    endpoint: process.env.SPACES_ENDPOINT,
+    region: spacesRegion,
+    endpoint: spacesEndpoint,
     forcePathStyle: false,
   });
 
-  
-  await client.send(new PutObjectCommand(params));
-  await client.send(new PutObjectAclCommand({
-    Bucket: bucket,
-    Key: key,
-    ACL: "public-read",
-  }));
-
-  
-  
-  if (!skipUpload) {
-    const fileValidation = validateFile({
-      files,
-    })
-    if (fileValidation.status === "error") {
-      const { status, message } = fileValidation;
-      return respond(400, {
-        status, message,
-      });
-    }
-    const { file, mimetype } = fileValidation;
-    
-    
-    
-    const fileType = file.originalFilename?.split(".").pop() ?? "'''";
-    const key = `${challengeId}/${teamId}/${randomBytes(8).toString("hex")}.${fileType}`;
-    mediaURL = `https://${bucket}.${spacesRegion}.cdn.digitaloceanspaces.com/${key}`;
-    try {
-      await uploadSubmission({
-        file,
-        mimetype,
-        bucket,
-        key,
-      });
-    } catch (error: unknown) {
-      console.error(error);
+    const mediaURLRegex = new RegExp(`^https://${bucket}\\.${process.env.SPACES_REGION}\\.cdn\\.digitaloceanspaces\\.com/(.+)/(.+)/(.+)`);
+    const match = mediaURL.match(mediaURLRegex);
+    if (match == null) {
       return respond(400, {
         status: "error",
-        message: "Failed to upload file. Try again or skip upload and send us the file elsewhere",
+        message: "Invalid mediaURL format",
       });
     }
+    const [, challengeIdFromUrl, teamIdFromUrl, fileName] = match;
+    if (challengeIdFromUrl !== challengeId || teamIdFromUrl !== teamId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid media URL"
+      })
+    }
+    
+    const key = `${challengeId}/${teamId}/${fileName}`;
+    await client.send(new PutObjectAclCommand({
+      Bucket: bucket,
+      Key: key,
+      ACL: "public-read",
+    }));
   }
+
 
   const submission = await SubmissionModel.create({
     teamId,
