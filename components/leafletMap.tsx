@@ -93,7 +93,7 @@ export default function LeafletMap({
             className: 'teamMarker',
           })} key={l._id} position={[l.latestLocation.lat, l.latestLocation.lng]}>
             <Popup>
-              <Link href={`/teams?team=${l._id}`}>{l.emoji}</Link>
+              <Link href={`/teams?team=${l._id}`}>{l.emoji} {l.name}</Link>
             </Popup>
           </Marker>
         )}

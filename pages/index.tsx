@@ -11,6 +11,7 @@ import {
   Card,
   Flex,
   Heading,
+  Input,
   Link,
   Tag,
   Text,
@@ -138,6 +139,7 @@ export default function Page({
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(
     submissionSearchParam
   );
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -148,6 +150,13 @@ export default function Page({
     }
   }, [ref.current, submissionSearchParam]);
 
+  // Filter submissions based on search query (case-insensitive)
+  const filteredSubmissions = searchQuery.trim() === '' 
+    ? submissions 
+    : submissions.filter(s => 
+        s.team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.challenge.title.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
   return team != null ? (
     <NavContainer title="Home">
@@ -157,7 +166,22 @@ export default function Page({
         </Heading>
       ) : (
         <VStack justifyContent="flex-start" width="100%" spacing={4}>
-          {submissions.map((s) => (
+          <Input
+            placeholder="Search by team name or challenge name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            width="100%"
+            bg="white"
+            borderRadius="md"
+            boxShadow="sm"
+            size="md"
+          />
+          {filteredSubmissions.length === 0 ? (
+            <Heading size="md" color="gray.500" textAlign="center" mt={8}>
+              No submissions match your search.
+            </Heading>
+          ) : null}
+          {filteredSubmissions.map((s) => (
             <Card
               ref={s._id === submissionSearchParam ? ref : null}
               key={s._id}

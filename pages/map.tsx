@@ -48,6 +48,7 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
     {
       $set: {
         "emoji": { $first: "$team.emoji" },
+        "name": { $first: "$team.name" },
       }
     },
     {
@@ -55,6 +56,7 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
         _id: 1,
         latestLocation: 1,
         emoji: 1,
+        name: 1,
       }
     }
   ]);
