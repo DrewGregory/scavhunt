@@ -158,6 +158,16 @@ export default function Page({
         s.challenge.title.toLowerCase().includes(searchQuery.toLowerCase())
       );
 
+  // Helper function to get submission number for a challenge
+  const getSubmissionNumber = (submission: typeof submissions[0]) => {
+    const challengeSubmissions = submissions
+      .filter(s => s.challengeId === submission.challengeId && s.accepted)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    
+    const index = challengeSubmissions.findIndex(s => s._id === submission._id);
+    return index >= 0 ? index + 1 : null;
+  };
+
   return team != null ? (
     <NavContainer title="Home">
       {submissions.length === 0 ? (
@@ -240,6 +250,11 @@ export default function Page({
                       {s.team.emoji} {s.team.name}
                     </Link>
                   </Text>
+                  {s.accepted && getSubmissionNumber(s) && (
+                    <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                      Submission #{getSubmissionNumber(s)} of {s.challenge.numWinners} spot{s.challenge.numWinners === 1 ? "" : "s"}
+                    </Text>
+                  )}
                 </Flex>
 
                 <Flex alignItems="center" gap={2}>
