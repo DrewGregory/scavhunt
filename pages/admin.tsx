@@ -233,6 +233,64 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteChallenge = async (challengeId: string, challengeTitle: string) => {
+    if (!confirm(`Are you sure you want to delete "${challengeTitle}"? This can only be done if there are no submissions for this challenge.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/delete-challenge', {
+        method: 'DELETE',
+        body: JSON.stringify({ challengeId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to delete challenge');
+        return;
+      }
+
+      await loadChallenges();
+      alert('Challenge deleted successfully!');
+    } catch (err) {
+      alert('Failed to delete challenge');
+    }
+  };
+
+  const handleBulkDeleteChallenges = async () => {
+    if (!confirm('Are you sure you want to delete ALL challenges that have no submissions? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/bulk-delete-challenges', {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to bulk delete challenges');
+        return;
+      }
+
+      await loadChallenges();
+      
+      let message = data.message;
+      if (data.skippedCount > 0) {
+        message += `\n\nSkipped ${data.skippedCount} challenge(s) with submissions.`;
+      }
+      if (data.deletedCount === 0) {
+        message = 'No challenges were deleted. All challenges have submissions.';
+      }
+      
+      alert(message);
+    } catch (err) {
+      alert('Failed to bulk delete challenges');
+    }
+  };
+
   if (!currentTeam || loading) {
     return (
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
@@ -388,6 +446,18 @@ export default function AdminPage() {
         .edit-button:hover {
           background-color: #0051cc;
         }
+        .delete-button {
+          background-color: #dc3545;
+          color: white;
+        }
+        .delete-button:hover {
+          background-color: #c82333;
+        }
+        .action-buttons {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
         .modal {
           position: fixed;
           top: 0;
@@ -521,7 +591,6 @@ export default function AdminPage() {
                     <tr>
                       <th>Team</th>
                       <th>Members</th>
-                      <th>Team Code</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -536,9 +605,6 @@ export default function AdminPage() {
                               {idx + 1}. {member.firstName} {member.familyName}
                             </div>
                           ))}
-                        </td>
-                        <td style={{ wordBreak: 'break-all', fontSize: '12px' }}>
-                          {team.teamCode}
                         </td>
                       </tr>
                     ))}
@@ -696,18 +762,43 @@ export default function AdminPage() {
                         <td>{challenge.loc.lng.toFixed(4)}</td>
                         <td>{challenge.numWinners}</td>
                         <td>
-                          <button
-                            className="small-button edit-button"
-                            onClick={() => setEditingChallenge(challenge)}
-                          >
-                            Edit
-                          </button>
+                          <div className="action-buttons">
+                            <button
+                              className="small-button edit-button"
+                              onClick={() => setEditingChallenge(challenge)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="small-button delete-button"
+                              onClick={() => handleDeleteChallenge(challenge._id, challenge.title)}
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </section>
+
+            {/* Bulk Delete Challenges */}
+            <section className="section">
+              <h2 className="section-title">Bulk Delete Challenges</h2>
+              <p style={{ marginBottom: '15px', fontSize: '14px', color: '#666' }}>
+                Delete all challenges that have no submissions. Challenges with submissions will be skipped.
+              </p>
+              <button
+                onClick={handleBulkDeleteChallenges}
+                className="button"
+                style={{ backgroundColor: '#dc3545', maxWidth: '300px' }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#c82333'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc3545'}
+              >
+                Bulk Delete Unused Challenges
+              </button>
             </section>
 
             {/* Import CSV */}
