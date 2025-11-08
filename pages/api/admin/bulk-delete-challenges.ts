@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import dbConnect from "../../../lib/dbConnect";
+import { dbConnect } from "../../../lib/dbConnect";
 import { ChallengeModel } from "../../../models/Challenge";
 import { SubmissionModel } from "../../../models/Submission";
 import { TeamModel } from "../../../models/Team";
