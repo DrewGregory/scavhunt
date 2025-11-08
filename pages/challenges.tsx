@@ -9,8 +9,10 @@ import {
   Card,
   Flex,
   Heading,
+  HStack,
   Input,
   Select,
+  Switch,
   Text,
   VStack,
 } from "@chakra-ui/react";
@@ -76,6 +78,7 @@ export default function Page({
   );
   const [sortOption, setSortOption] = useState<SortOption>('default');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [hideCompleted, setHideCompleted] = useState<boolean>(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -89,17 +92,24 @@ export default function Page({
   const team = useTeam();
   
   // Filter challenges based on search query (case-insensitive)
-  const filteredChallenges = searchQuery.trim() === '' 
+  const searchFilteredChallenges = searchQuery.trim() === '' 
     ? challenges 
     : challenges.filter(c => 
         c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.prompt.toLowerCase().includes(searchQuery.toLowerCase())
       );
   
+  // Filter out completed challenges if hideCompleted is true
+  const completedFilteredChallenges = hideCompleted && team
+    ? searchFilteredChallenges.filter(c => 
+        !c.submissions.some(s => s.teamId === (team as any)._id && s.accepted)
+      )
+    : searchFilteredChallenges;
+  
   // Sort challenges based on selected option
   const sortedChallenges = sortOption === 'default' 
-    ? filteredChallenges 
-    : [...filteredChallenges].sort((a, b) => {
+    ? completedFilteredChallenges 
+    : [...completedFilteredChallenges].sort((a, b) => {
         switch (sortOption) {
           case 'points-high':
             return b.pts - a.pts;
@@ -135,6 +145,25 @@ export default function Page({
           <option value="points-high">Points: High to Low</option>
           <option value="points-low">Points: Low to High</option>
         </Select>
+        {team && (
+          <HStack
+            width="100%"
+            bg="white"
+            p={3}
+            borderRadius="md"
+            boxShadow="sm"
+            justifyContent="space-between"
+          >
+            <Text fontSize="sm" fontWeight="medium" color="gray.700">
+              Hide Completed Challenges
+            </Text>
+            <Switch
+              isChecked={hideCompleted}
+              onChange={(e) => setHideCompleted(e.target.checked)}
+              colorScheme="blue"
+            />
+          </HStack>
+        )}
         {sortedChallenges.map((c) => (
           <Card
             ref={c._id === challengeSearchParam ? ref : null}
