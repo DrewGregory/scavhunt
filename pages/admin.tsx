@@ -938,61 +938,97 @@ export default function AdminPage() {
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <h2 className="modal-title">Edit Challenge</h2>
               <form onSubmit={handleUpdateChallenge} className="form">
-                <input
-                  type="text"
-                  placeholder="Title"
-                  value={editingChallenge.title}
-                  onChange={(e) => setEditingChallenge({ ...editingChallenge, title: e.target.value })}
-                  required
-                  className="input"
-                />
-                <textarea
-                  placeholder="Prompt"
-                  value={editingChallenge.prompt}
-                  onChange={(e) => setEditingChallenge({ ...editingChallenge, prompt: e.target.value })}
-                  required
-                  className="textarea"
-                />
-                <input
-                  type="number"
-                  placeholder="Points"
-                  value={editingChallenge.pts}
-                  onChange={(e) => setEditingChallenge({ ...editingChallenge, pts: Number(e.target.value) })}
-                  required
-                  className="input"
-                />
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="Latitude"
-                  value={editingChallenge.loc.lat}
-                  onChange={(e) => setEditingChallenge({ 
-                    ...editingChallenge, 
-                    loc: { ...editingChallenge.loc, lat: Number(e.target.value) }
-                  })}
-                  required
-                  className="input"
-                />
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="Longitude"
-                  value={editingChallenge.loc.lng}
-                  onChange={(e) => setEditingChallenge({ 
-                    ...editingChallenge, 
-                    loc: { ...editingChallenge.loc, lng: Number(e.target.value) }
-                  })}
-                  required
-                  className="input"
-                />
-                <input
-                  type="number"
-                  placeholder="Number of Winners"
-                  value={editingChallenge.numWinners}
-                  onChange={(e) => setEditingChallenge({ ...editingChallenge, numWinners: Number(e.target.value) })}
-                  required
-                  className="input"
-                />
+                <div>
+                  <label htmlFor="challenge-title" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
+                    Title
+                  </label>
+                  <input
+                    id="challenge-title"
+                    type="text"
+                    placeholder="Title"
+                    value={editingChallenge.title}
+                    onChange={(e) => setEditingChallenge({ ...editingChallenge, title: e.target.value })}
+                    required
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="challenge-prompt" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
+                    Prompt
+                  </label>
+                  <textarea
+                    id="challenge-prompt"
+                    placeholder="Prompt"
+                    value={editingChallenge.prompt}
+                    onChange={(e) => setEditingChallenge({ ...editingChallenge, prompt: e.target.value })}
+                    required
+                    className="textarea"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="challenge-points" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
+                    Points
+                  </label>
+                  <input
+                    id="challenge-points"
+                    type="number"
+                    placeholder="Points"
+                    value={editingChallenge.pts}
+                    onChange={(e) => setEditingChallenge({ ...editingChallenge, pts: Number(e.target.value) })}
+                    required
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="challenge-latitude" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
+                    Latitude
+                  </label>
+                  <input
+                    id="challenge-latitude"
+                    type="number"
+                    step="any"
+                    placeholder="Latitude"
+                    value={editingChallenge.loc.lat}
+                    onChange={(e) => setEditingChallenge({ 
+                      ...editingChallenge, 
+                      loc: { ...editingChallenge.loc, lat: Number(e.target.value) }
+                    })}
+                    required
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="challenge-longitude" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
+                    Longitude
+                  </label>
+                  <input
+                    id="challenge-longitude"
+                    type="number"
+                    step="any"
+                    placeholder="Longitude"
+                    value={editingChallenge.loc.lng}
+                    onChange={(e) => setEditingChallenge({ 
+                      ...editingChallenge, 
+                      loc: { ...editingChallenge.loc, lng: Number(e.target.value) }
+                    })}
+                    required
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="challenge-winners" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
+                    Number of Winners
+                  </label>
+                  <input
+                    id="challenge-winners"
+                    type="number"
+                    placeholder="Number of Winners"
+                    value={editingChallenge.numWinners}
+                    onChange={(e) => setEditingChallenge({ ...editingChallenge, numWinners: Number(e.target.value) })}
+                    required
+                    className="input"
+                  />
+                </div>
                 <div className="modal-buttons">
                   <button type="submit" className="button">Save Changes</button>
                   <button
