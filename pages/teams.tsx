@@ -132,7 +132,13 @@ export default function Page({
       : new Date();
   return (
     <NavContainer title="Leaderboard">
-      <Card height={450} p={2} m={1.5}>
+      <Card 
+        height={450} 
+        p={4} 
+        mb={4}
+        boxShadow="sm"
+        borderRadius="lg"
+      >
         <ResponsiveLine
           data={pointData}
           margin={{ top: 50, right: 100, bottom: 75, left: 60 }}
@@ -208,37 +214,74 @@ export default function Page({
           ]}
         />
       </Card>
-      <Flex direction="column" justifyContent="space-between">
-        {teamsSortedbyPts.map((t) => (
+      <Flex direction="column" gap={4}>
+        {teamsSortedbyPts.map((t, index) => (
           <Card
             key={t._id}
-            p="2"
-            m="1.5"
+            cursor="pointer"
             onClick={() => {
               setSelectedTeam(t._id === selectedTeam ? null : t._id);
             }}
             className={t._id === selectedTeam ? "card open" : "card"}
+            boxShadow="sm"
+            _hover={{ boxShadow: "md" }}
+            transition="all 0.2s"
+            borderRadius="lg"
           >
             <Flex direction="column">
-              <Flex direction="row" justifyContent="space-between" m={1.5}>
-                <Text>
-                  {t.emoji} {t.name}
-                </Text>
-                <Text>
-                  {t.pts} Points
+              <Flex 
+                direction="row" 
+                justifyContent="space-between" 
+                alignItems="center"
+                p={4}
+                gap={3}
+              >
+                <Flex alignItems="center" gap={3} flex={1}>
+                  <Text 
+                    fontSize="lg" 
+                    fontWeight="bold" 
+                    color="gray.500"
+                    minWidth="30px"
+                  >
+                    #{index + 1}
+                  </Text>
+                  <Text fontSize="lg" fontWeight="semibold" color="gray.800">
+                    {t.emoji} {t.name}
+                  </Text>
+                </Flex>
+                <Flex alignItems="center" gap={2}>
+                  <Text fontWeight="bold" color="gray.700" fontSize="md">
+                    {t.pts} pts
+                  </Text>
                   <ChevronDownIcon
+                    w={5}
+                    h={5}
+                    color="gray.500"
                     className={
                       t._id === selectedTeam ? "chevron rotate" : "chevron"
                     }
                   />
-                </Text>
+                </Flex>
               </Flex>
               {selectedTeam === t._id && (
-                <Flex alignItems="left" m={1.5} direction="column">
-                  <Heading size="medium">Team Members</Heading>
-                  <UnorderedList>
+                <Flex 
+                  direction="column"
+                  px={4}
+                  pb={4}
+                  pt={2}
+                  borderTop="1px"
+                  borderColor="gray.100"
+                  className="expandable-content"
+                >
+                  <Heading size="sm" mb={3} color="gray.700">
+                    Team Members
+                  </Heading>
+                  <UnorderedList spacing={1} ml={4}>
                     {t.members.map((m, idx) => (
-                      <ListItem key={`${m.firstName}${m.familyName || idx}`}>
+                      <ListItem 
+                        key={`${m.firstName}${m.familyName || idx}`}
+                        color="gray.600"
+                      >
                         {m.firstName}{m.familyName ? ` ${m.familyName}` : ''}
                       </ListItem>
                     ))}

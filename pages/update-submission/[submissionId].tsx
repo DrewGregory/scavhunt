@@ -105,70 +105,109 @@ export default function UpdateSubmission({
 
   return (
     <NavContainer title={`Update Submission - ${challenge.title}`}>
-      <Card p={5}>
-        <VStack spacing={4}>
-          <Text fontSize="lg" fontWeight="bold">
+      <Card 
+        p={6}
+        boxShadow="sm"
+        borderRadius="lg"
+        bg="white"
+      >
+        <VStack spacing={5}>
+          <Text fontSize="xl" fontWeight="semibold" color="gray.800" alignSelf="flex-start">
             Update Video for: {challenge.title}
           </Text>
           
           {submission.mediaURL && (
-            <Box width="100%">
-              <Text fontSize="sm" mb={2}>Current submission:</Text>
-              {submission.mediaURL
-                .toLowerCase()
-                .match(/\.(jpg|jpeg|png|gif)$/i) && (
-                <Image
-                  maxWidth="100%"
-                  src={submission.mediaURL}
-                  alt={submission.note}
-                  objectFit="cover"
-                />
-              )}
-              {submission.mediaURL
-                .toLowerCase()
-                .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4)$/i) && (
-                <Box
-                  as="video"
-                  controls
-                  src={submission.mediaURL}
-                  objectFit="contain"
-                  sx={{
-                    aspectRatio: "16/9",
-                    width: "100%"
-                  }}
-                />
-              )}
-              {!submission.mediaURL.match(/\.(jpg|jpeg|png|gif)$/i) &&
-                !submission.mediaURL.match(/\.(mpg|mp2|mpeg|mpe|mpv|mp4)$/i) && (
-                  <a href={submission.mediaURL}>View current media</a>
+            <Box 
+              width="100%" 
+              p={4} 
+              bg="gray.50" 
+              borderRadius="md"
+              borderLeft="3px solid"
+              borderColor="gray.300"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700" mb={3}>
+                Current submission:
+              </Text>
+              <Box display="flex" justifyContent="center">
+                {submission.mediaURL
+                  .toLowerCase()
+                  .match(/\.(jpg|jpeg|png|gif)$/i) && (
+                  <Image
+                    maxWidth="100%"
+                    maxHeight="400px"
+                    src={submission.mediaURL}
+                    alt={submission.note}
+                    objectFit="contain"
+                    borderRadius="md"
+                    boxShadow="sm"
+                  />
                 )}
+                {submission.mediaURL
+                  .toLowerCase()
+                  .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4)$/i) && (
+                  <Box
+                    as="video"
+                    controls
+                    src={submission.mediaURL}
+                    objectFit="contain"
+                    borderRadius="md"
+                    boxShadow="sm"
+                    sx={{
+                      aspectRatio: "16/9",
+                      width: "100%",
+                      maxWidth: "600px"
+                    }}
+                  />
+                )}
+                {!submission.mediaURL.match(/\.(jpg|jpeg|png|gif)$/i) &&
+                  !submission.mediaURL.match(/\.(mpg|mp2|mpeg|mpe|mpv|mp4)$/i) && (
+                    <Text 
+                      as="a" 
+                      href={submission.mediaURL}
+                      color="blue.600"
+                      fontWeight="medium"
+                      _hover={{ textDecoration: "underline" }}
+                    >
+                      View current media
+                    </Text>
+                  )}
+              </Box>
             </Box>
           )}
 
           {!submission.mediaURL && (
-            <Text fontSize="sm" color="gray.600">
-              No media currently uploaded for this submission.
-            </Text>
+            <Box 
+              width="100%" 
+              p={4} 
+              bg="gray.50" 
+              borderRadius="md"
+              textAlign="center"
+            >
+              <Text fontSize="sm" color="gray.600">
+                No media currently uploaded for this submission.
+              </Text>
+            </Box>
           )}
 
           <Box width="100%" borderTop="1px solid" borderColor="gray.200" pt={4}>
-            <Text fontSize="sm" fontWeight="bold" mb={2}>Update submission:</Text>
+            <Text fontSize="md" fontWeight="semibold" color="gray.700" mb={4}>
+              Update submission:
+            </Text>
+            <MediaUploadForm
+              apiEndpoint="/api/update-submission-media"
+              formData={{ submissionId: submission._id, challengeId: submission.challengeId }}
+              onSuccess={() => {
+                setTimeout(() => {
+                  router.push("/");
+                }, 2000);
+              }}
+              buttonText={submission.mediaURL ? "Update" : "Upload"}
+              showNoteField={true}
+              initialNote={submission.note}
+              noteRequired={false}
+              showSkipUpload={false}
+            />
           </Box>
-
-          <MediaUploadForm
-            apiEndpoint="/api/update-submission-media"
-            formData={{ submissionId: submission._id, challengeId: submission.challengeId }}
-            onSuccess={() => {
-              setTimeout(() => {
-                router.push("/");
-              }, 2000);
-            }}
-            buttonText={submission.mediaURL ? "Update" : "Upload"}
-            showNoteField={true}
-            initialNote={submission.note}
-            noteRequired={false}
-            showSkipUpload={false}
-          />
         </VStack>
       </Card>
     </NavContainer>

@@ -140,32 +140,48 @@ export default function Page({
 
   return (
     <NavContainer title="Chat">
-      <VStack spacing={2} alignItems="stretch" pb="0">
+      <VStack spacing={3} alignItems="stretch" pb="0">
         {messages.length === 0 ? (
-          <Flex direction="column" alignItems="center" justifyContent="center" py={10} color="gray.400">
-            <Icon as={GiBubbles} boxSize={20} mb={4} />
-            <Text fontSize="lg">No messages yet. Start the conversation!</Text>
+          <Flex 
+            direction="column" 
+            alignItems="center" 
+            justifyContent="center" 
+            py={16} 
+            color="gray.400"
+          >
+            <Icon as={GiBubbles} boxSize={20} mb={4} opacity={0.5} />
+            <Text fontSize="lg" fontWeight="medium">No messages yet. Start the conversation!</Text>
           </Flex>
         ) : (
           messages.map((msg, index) => (
             <Card 
               key={`${msg._id}-${index}`} 
-              p={3} 
+              p={4} 
               width="100%"
               bg={msg.isAdmin ? "blue.50" : "white"}
               borderColor={msg.isAdmin ? "blue.200" : "gray.200"}
               borderWidth="1px"
+              boxShadow="sm"
+              borderRadius="lg"
+              transition="all 0.2s"
+              _hover={{ boxShadow: "md" }}
             >
-              <Flex direction="column">
-                <Flex justifyContent="space-between" alignItems="center" mb={1}>
-                  <Text fontWeight="bold" fontSize="sm" color={msg.isAdmin ? "blue.700" : "inherit"}>
+              <Flex direction="column" gap={2}>
+                <Flex justifyContent="space-between" alignItems="center">
+                  <Text 
+                    fontWeight="bold" 
+                    fontSize="sm" 
+                    color={msg.isAdmin ? "blue.700" : "gray.800"}
+                  >
                     {msg.teamName}
                   </Text>
                   <Text fontSize="xs" color="gray.500">
                     {new Date(msg.createdAt).toLocaleString()}
                   </Text>
                 </Flex>
-                <Text fontSize="sm">{msg.message}</Text>
+                <Text fontSize="sm" color="gray.700" lineHeight="tall">
+                  {msg.message}
+                </Text>
               </Flex>
             </Card>
           ))
@@ -182,6 +198,7 @@ export default function Page({
         p={4}
         borderTop="1px solid"
         borderColor="gray.200"
+        boxShadow="sm"
         zIndex={10}
       >
         <Flex gap={2}>
@@ -191,11 +208,14 @@ export default function Page({
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             disabled={isSending}
+            borderRadius="md"
+            _focus={{ borderColor: "blue.400", boxShadow: "0 0 0 1px var(--chakra-colors-blue-400)" }}
           />
           <Button
             onClick={handleSendMessage}
             isLoading={isSending}
             colorScheme="blue"
+            borderRadius="md"
           >
             Send
           </Button>

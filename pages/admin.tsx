@@ -336,39 +336,6 @@ export default function AdminPage() {
     }
   };
 
-  const handleBulkDeleteChallenges = async () => {
-    if (!confirm('Are you sure you want to delete ALL challenges that have no submissions? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/admin/bulk-delete-challenges', {
-        method: 'DELETE',
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || 'Failed to bulk delete challenges');
-        return;
-      }
-
-      await loadChallenges();
-      
-      let message = data.message;
-      if (data.skippedCount > 0) {
-        message += `\n\nSkipped ${data.skippedCount} challenge(s) with submissions.`;
-      }
-      if (data.deletedCount === 0) {
-        message = 'No challenges were deleted. All challenges have submissions.';
-      }
-      
-      alert(message);
-    } catch (err) {
-      alert('Failed to bulk delete challenges');
-    }
-  };
-
   if (!currentTeam || loading) {
     return (
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
@@ -889,22 +856,6 @@ export default function AdminPage() {
                   </tbody>
                 </table>
               </div>
-            </section>
-
-            {/* Bulk Delete Challenges */}
-            <section className="section">
-              <h2 className="section-title">Bulk Delete Challenges</h2>
-              <p style={{ marginBottom: '15px', fontSize: '14px', color: '#666' }}>
-                Delete all challenges that have no submissions. Challenges with submissions will be skipped.
-              </p>
-              <button
-                type="button"
-                onClick={handleBulkDeleteChallenges}
-                className="button"
-                style={{ backgroundColor: '#dc3545', maxWidth: '300px' }}
-              >
-                Bulk Delete Unused Challenges
-              </button>
             </section>
 
             {/* Import CSV */}

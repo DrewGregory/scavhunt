@@ -107,12 +107,14 @@ export default function Page({
   
   return (
     <NavContainer title="Challenges">
-      <VStack>
+      <VStack spacing={4}>
         <Select 
           value={sortOption} 
           onChange={(e) => setSortOption(e.target.value as SortOption)}
           width="100%"
-          mb={2}
+          bg="white"
+          borderRadius="md"
+          boxShadow="sm"
         >
           <option value="default">Default</option>
           <option value="points-high">Points: High to Low</option>
@@ -123,51 +125,92 @@ export default function Page({
             ref={c._id === challengeSearchParam ? ref : null}
             key={c._id}
             width="100%"
-            p={2}
-            onClick={() => {
-              setSelectedChallenge(c._id === selectedChallenge ? null : c._id);
-            }}
             className={c._id === selectedChallenge ? "card open" : "card"}
+            boxShadow="sm"
+            _hover={{ boxShadow: "md" }}
+            transition="all 0.2s"
+            borderRadius="lg"
           >
             <Flex direction="column">
               <Flex
                 direction="row"
                 justifyContent="space-between"
                 alignItems="center"
-                p={2}
+                p={4}
+                gap={3}
+                cursor="pointer"
+                onClick={() => {
+                  setSelectedChallenge(c._id === selectedChallenge ? null : c._id);
+                }}
               >
-                <Heading size="sm" flex={1} mr={2}>
+                <Heading size="md" flex={1} color="gray.800">
                   {c.title}
                 </Heading>
-                <Text mr={1}>{c.pts} points</Text>
-                <ChevronDownIcon
-                  className={
-                    c._id === selectedChallenge ? "chevron rotate" : "chevron"
-                  }
-                />
+                <Flex alignItems="center" gap={2}>
+                  <Text fontWeight="semibold" color="gray.700" fontSize="md">
+                    {c.pts} pts
+                  </Text>
+                  <ChevronDownIcon
+                    w={5}
+                    h={5}
+                    color="gray.500"
+                    className={
+                      c._id === selectedChallenge ? "chevron rotate" : "chevron"
+                    }
+                  />
+                </Flex>
               </Flex>
               <Flex
                 direction="row"
-                justifyContent="space-between"
-                alignItems="center"
-                p={2}
+                px={4}
+                pb={c._id === selectedChallenge ? 2 : 4}
               >
-                <Text mr={1}>
-                  {c.submissions.filter(s => s.accepted).length} accepted, {c.submissions.filter(s => !s.accepted && !s.rejected).length} pending /{c.numWinners} submission
-                  {c.numWinners == 1 ? "" : "s"}
+                <Text fontSize="sm" color="gray.600">
+                  {c.submissions.filter(s => s.accepted).length} accepted, {c.submissions.filter(s => !s.accepted && !s.rejected).length} pending / {c.numWinners} submission{c.numWinners == 1 ? "" : "s"}
                 </Text>
               </Flex>
               {c._id === selectedChallenge && (
-                <VStack pt={2} spacing={2} alignItems="left">
-                  <Text fontSize="sm">{c.prompt}</Text>
-                  {team == null ? null : (
+                <VStack 
+                  px={4} 
+                  pb={4} 
+                  spacing={3} 
+                  alignItems="left"
+                  borderTop="1px"
+                  borderColor="gray.100"
+                  pt={3}
+                  className="expandable-content"
+                >
+                  <Text 
+                    fontSize="sm" 
+                    color="gray.700" 
+                    lineHeight="tall"
+                    sx={{
+                      "& a": {
+                        color: "blue.600",
+                        textDecoration: "underline",
+                        _hover: {
+                          color: "blue.700"
+                        }
+                      }
+                    }}
+                    dangerouslySetInnerHTML={{ 
+                      __html: c.prompt.replace(
+                        /(https?:\/\/[^\s]+)/g, 
+                        '<a href="$1" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">$1</a>'
+                      )
+                    }}
+                  />
+                  {team != null && (
                     <Button
+                      colorScheme="blue"
+                      size="md"
                       onClick={(e) => {
                         router.push(`/submit/${c._id}`);
                         e.stopPropagation();
                       }}
+                      width="fit-content"
                     >
-                      Submit
+                      Submit Challenge
                     </Button>
                   )}
                 </VStack>

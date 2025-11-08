@@ -140,17 +140,31 @@ export default function ScavAI({}: InferGetServerSidePropsType<
             bg={message.role === "user" ? "blue.50" : "green.50"}
             alignSelf={message.role === "user" ? "flex-end" : "flex-start"}
             maxW="80%"
+            boxShadow="sm"
+            borderRadius="lg"
+            transition="all 0.2s"
+            _hover={{ boxShadow: "md" }}
+            borderWidth="1px"
+            borderColor={message.role === "user" ? "blue.100" : "green.100"}
           >
             <HStack spacing={2} mb={2}>
-              {message.role === "assistant" && <FaMagic />}
-              <Text fontWeight="bold">
+              {message.role === "assistant" && <FaMagic color="var(--chakra-colors-green-600)" />}
+              <Text 
+                fontWeight="bold" 
+                fontSize="sm"
+                color={message.role === "user" ? "blue.700" : "green.700"}
+              >
                 {message.role === "user" ? "You" : "ScavAI"}
               </Text>
             </HStack>
             {message.role === "user" ? (
-              <Text whiteSpace="pre-wrap">{message.content}</Text>
+              <Text whiteSpace="pre-wrap" color="gray.700" lineHeight="tall">
+                {message.content}
+              </Text>
             ) : (
               <Box
+                color="gray.700"
+                lineHeight="tall"
                 sx={{
                   "& p": { mb: 2 },
                   "& ul, & ol": { ml: 4, mb: 2 },
@@ -180,10 +194,21 @@ export default function ScavAI({}: InferGetServerSidePropsType<
           </Card>
         ))}
         {isLoading && (
-          <Card p={4} bg="green.50" alignSelf="flex-start" maxW="80%">
+          <Card 
+            p={4} 
+            bg="green.50" 
+            alignSelf="flex-start" 
+            maxW="80%"
+            boxShadow="sm"
+            borderRadius="lg"
+            borderWidth="1px"
+            borderColor="green.100"
+          >
             <HStack spacing={2}>
-              <Spinner size="sm" />
-              <Text>ScavAI is thinking...</Text>
+              <Spinner size="sm" color="green.600" />
+              <Text color="green.700" fontWeight="medium" fontSize="sm">
+                ScavAI is thinking...
+              </Text>
             </HStack>
           </Card>
         )}
@@ -199,6 +224,7 @@ export default function ScavAI({}: InferGetServerSidePropsType<
         p={4}
         borderTop="1px solid"
         borderColor="gray.200"
+        boxShadow="sm"
         zIndex={10}
       >
         <HStack>
@@ -208,12 +234,15 @@ export default function ScavAI({}: InferGetServerSidePropsType<
             onKeyPress={handleKeyPress}
             placeholder="Ask me anything about the scavenger hunt..."
             disabled={isLoading}
+            borderRadius="md"
+            _focus={{ borderColor: "green.400", boxShadow: "0 0 0 1px var(--chakra-colors-green-400)" }}
           />
           <Button
             onClick={handleSend}
             colorScheme="green"
             isLoading={isLoading}
             disabled={!input.trim()}
+            borderRadius="md"
           >
             Send
           </Button>

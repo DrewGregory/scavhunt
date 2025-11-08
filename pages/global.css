@@ -8,21 +8,38 @@ body {
 }
 
 .card {
-  transition: padding 0.3s ease-out;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
   overflow: visible;
-  padding: 8px;
 }
 
-.card.open {
-  padding: 16px;
+/* Only apply hover effects on non-touch devices */
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    transform: translateY(-1px);
+  }
 }
 
 .chevron {
-  transition: transform 0.3s ease-out;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .chevron.rotate {
   transform: rotate(180deg);
+}
+
+.expandable-content {
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .teamMarker {

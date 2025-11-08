@@ -64,7 +64,12 @@ export default function Submit({
 
   return (
     <NavContainer title={challenge.title}>
-      <Card p={5}>
+      <Card 
+        p={6}
+        boxShadow="sm"
+        borderRadius="lg"
+        bg="white"
+      >
         <MediaUploadForm
           apiEndpoint="/api/upload"
           formData={{ challengeId }}

@@ -171,17 +171,29 @@ export default function MediaUploadForm({
     return files[0].uploadURL || "";
   }, [uppy, uploadComplete]);
   return (
-      <VStack spacing={4} width="100%">
+      <VStack spacing={5} width="100%">
       
       <FormControl as="fieldset" width="100%">
-        <FormLabel as="legend">Upload video</FormLabel>
-        <Box width="100%" sx={{
-          // ensure the dashboard never overflows on small screens
-          ".uppy-Dashboard-inner": { maxWidth: "100%" },
-          ".uppy-Dashboard-AddFiles": { flexDirection: ["column", "row"], gap: 3 },
-          ".uppy-Dashboard-FileList": { maxWidth: "100%", width: "100%" },
-          ".uppy-Dashboard-Item": { maxWidth: "100%" },
-        }}>
+        <FormLabel 
+          as="legend" 
+          fontWeight="semibold" 
+          color="gray.700"
+          mb={3}
+        >
+          Upload video
+        </FormLabel>
+        <Box 
+          width="100%" 
+          borderRadius="md"
+          overflow="hidden"
+          sx={{
+            // ensure the dashboard never overflows on small screens
+            ".uppy-Dashboard-inner": { maxWidth: "100%" },
+            ".uppy-Dashboard-AddFiles": { flexDirection: ["column", "row"], gap: 3 },
+            ".uppy-Dashboard-FileList": { maxWidth: "100%", width: "100%" },
+            ".uppy-Dashboard-Item": { maxWidth: "100%" },
+          }}
+        >
           <Dashboard
             uppy={uppy}
             proudlyDisplayPoweredByUppy={false}
@@ -198,11 +210,14 @@ export default function MediaUploadForm({
             onChange={(e) => {
               setSkipUpload(e.target.checked);
             }}
+            colorScheme="blue"
           >
-            Skip upload (If having trouble, try again after submission, or send video to your point of contact)
+            <Box as="span" fontSize="sm" color="gray.700">
+              Skip upload (If having trouble, try again after submission, or send video to your point of contact)
+            </Box>
           </Checkbox>
           {skipUploadHelperText && (
-            <FormHelperText>
+            <FormHelperText fontSize="sm" color="gray.600">
               {skipUploadHelperText}
             </FormHelperText>
           )}
@@ -211,22 +226,42 @@ export default function MediaUploadForm({
 
       {showNoteField && (
         <FormControl as="fieldset" width="100%">
-          <FormLabel as="legend">Add note</FormLabel>
+          <FormLabel 
+            as="legend"
+            fontWeight="semibold"
+            color="gray.700"
+            mb={2}
+          >
+            Add note
+          </FormLabel>
           <Input
             type="text"
             onChange={(e) => setNote(e.target.value)}
             value={note}
+            borderRadius="md"
+            _focus={{ borderColor: "blue.400", boxShadow: "0 0 0 1px var(--chakra-colors-blue-400)" }}
           />
         </FormControl>
       )}
 
       {result && (
-        <Alert status={result.success ? "success" : "error"}>
+        <Alert 
+          status={result.success ? "success" : "error"}
+          borderRadius="md"
+        >
           {result.message}
         </Alert>
       )}
 
-      <Button onClick={handleSubmit} isLoading={isSubmitting} width="100%">
+      <Button 
+        onClick={handleSubmit} 
+        isLoading={isSubmitting} 
+        width="100%"
+        colorScheme="blue"
+        size="lg"
+        borderRadius="md"
+        mt={2}
+      >
         {buttonText}
       </Button>
     </VStack>

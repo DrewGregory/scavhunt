@@ -152,26 +152,34 @@ export default function Page({
   return team != null ? (
     <NavContainer title="Home">
       {submissions.length === 0 ? (
-        <Heading>No Submissions Yet!</Heading>
+        <Heading size="lg" color="gray.500" textAlign="center" mt={8}>
+          No Submissions Yet!
+        </Heading>
       ) : (
-        <VStack justifyContent="flex-start" width="100%">
+        <VStack justifyContent="flex-start" width="100%" spacing={4}>
           {submissions.map((s) => (
             <Card
               ref={s._id === submissionSearchParam ? ref : null}
               key={s._id}
-              p="2"
               width="100%"
               className={s._id === selectedSubmission ? "card open" : "card"}
+              boxShadow="sm"
+              _hover={{ boxShadow: "md" }}
+              transition="all 0.2s"
+              borderRadius="lg"
             >
               <Flex
                 direction="row"
                 justifyContent="space-between"
-                alignItems="center"
-                p={2}
+                alignItems="flex-start"
+                p={4}
+                gap={3}
               >
                 <Flex
                   flex={1}
-                  alignItems="center"
+                  direction="column"
+                  gap={2}
+                  cursor="pointer"
                   onClick={() => {
                     setSelectedSubmission(
                       s._id === selectedSubmission ? null : s._id
@@ -184,118 +192,192 @@ export default function Page({
                     },undefined, {shallow: true} )
                   }}
                 >
-                  <Text flex={1}>
-                    Submission by for <b>{s.challenge.title}</b>!
+                  <Flex alignItems="center" gap={2} flexWrap="wrap">
+                    <Text fontSize="lg" fontWeight="semibold" color="gray.800">
+                      {s.challenge.title}
+                    </Text>
+                    <Tag 
+                      size="sm" 
+                      colorScheme={s.accepted ? "green" : (s.rejected ? "red" : "orange")}
+                      fontWeight="medium"
+                    >
+                      {s.accepted ? "Accepted" : (s.rejected ? "Rejected" : "Pending")}
+                    </Tag>
+                  </Flex>
+                  <Text fontSize="sm" color="gray.600" suppressHydrationWarning>
+                    {formatDistance(new Date(s.createdAt), new Date())} ago by{" "}
+                    <Link 
+                      href={`/teams?team=${s.teamId}`}
+                      fontWeight="medium"
+                      color="gray.700"
+                      _hover={{ color: "gray.900", textDecoration: "underline" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {s.team.emoji} {s.team.name}
+                    </Link>
                   </Text>
+                </Flex>
 
-                  <Tag mr={3} colorScheme={s.accepted ? "green" : (s.rejected ? "red" :"orange")}>
-                    {s.accepted ? "Accepted" : (s.rejected ? "Rejected" : "Pending review")}
-                  </Tag>
+                <Flex alignItems="center" gap={2}>
+                  {(isAdmin || team._id === s.teamId) && s._id === selectedSubmission && (
+                    <Menu>
+                      <MenuButton
+                        as={IconButton}
+                        icon={<HiDotsVertical />}
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Options"
+                        onClick={(e) => e.stopPropagation()}
+                        _hover={{ bg: "gray.100" }}
+                      />
+                      <MenuList>
+                        {isAdmin && !s.accepted && !s.rejected && (
+                          <>
+                            <MenuItem
+                              onClick={async () => {
+                                await fetch("/api/approve-submission", {
+                                  method: "POST",
+                                  body: JSON.stringify({
+                                    submissionId: s._id,
+                                    accepted: true,
+                                  })
+                                });
+                                window.location.reload();
+                              }}
+                            >
+                              Approve Submission
+                            </MenuItem>
+                            <MenuItem
+                              onClick={async () => {
+                                await fetch("/api/approve-submission", {
+                                  method: "POST",
+                                  body: JSON.stringify({
+                                    submissionId: s._id,
+                                    accepted: false,
+                                  })
+                                });
+                                window.location.reload();
+                              }}
+                            >
+                              Reject Submission
+                            </MenuItem>
+                          </>
+                        )}
+                        <MenuItem
+                          onClick={() => {
+                            router.push(`/update-submission/${s._id}`);
+                          }}
+                        >
+                          {s.mediaURL ? "Update Video" : "Add Video"}
+                        </MenuItem>
+                        {isAdmin && (
+                          <MenuItem
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (confirm("Are you sure you want to delete this submission? This action cannot be undone.")) {
+                                try {
+                                  const response = await fetch("/api/delete-submission", {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      submissionId: s._id,
+                                    })
+                                  });
+                                  if (response.ok) {
+                                    window.location.reload();
+                                  } else {
+                                    const data = await response.json();
+                                    alert(data.error || "Failed to delete submission");
+                                  }
+                                } catch (error) {
+                                  alert("Failed to delete submission");
+                                }
+                              }
+                            }}
+                            color="red.600"
+                            _hover={{ bg: "red.50" }}
+                          >
+                            Delete Submission
+                          </MenuItem>
+                        )}
+                      </MenuList>
+                    </Menu>
+                  )}
                   <ChevronDownIcon
+                    w={5}
+                    h={5}
+                    color="gray.500"
                     className={
                       s._id === selectedSubmission ? "chevron rotate" : "chevron"
                     }
                   />
                 </Flex>
-                {(isAdmin || team._id === s.teamId) && (
-                  <Menu>
-                    <MenuButton
-                      as={IconButton}
-                      icon={<HiDotsVertical />}
-                      variant="ghost"
-                      size="sm"
-                      aria-label="Options"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <MenuList>
-                      {isAdmin && !s.accepted && !s.rejected && (
-                        <>
-                          <MenuItem
-                            onClick={async () => {
-                              await fetch("/api/approve-submission", {
-                                method: "POST",
-                                body: JSON.stringify({
-                                  submissionId: s._id,
-                                  accepted: true,
-                                })
-                              });
-                              window.location.reload();
-                            }}
-                          >
-                            Approve Submission
-                          </MenuItem>
-                          <MenuItem
-                            onClick={async () => {
-                              await fetch("/api/approve-submission", {
-                                method: "POST",
-                                body: JSON.stringify({
-                                  submissionId: s._id,
-                                  accepted: false,
-                                })
-                              });
-                              window.location.reload();
-                            }}
-                          >
-                            Reject Submission
-                          </MenuItem>
-                        </>
-                      )}
-                      <MenuItem
-                        onClick={() => {
-                          router.push(`/update-submission/${s._id}`);
-                        }}
-                      >
-                        {s.mediaURL ? "Update Video" : "Add Video"}
-                      </MenuItem>
-                    </MenuList>
-                  </Menu>
-                )}
               </Flex>
-              <Flex alignItems="left" p={2} direction="column">
-                <Text mr={3} suppressHydrationWarning>
-                  {formatDistance(new Date(s.createdAt), new Date())} ago by{" "}
-                  <Link href={`/teams?team=${team._id}`}>
-                    {s.team.emoji} {s.team.name}
-                  </Link>
-                </Text>
-              </Flex>
+
               {s._id === selectedSubmission && (
-                <Flex alignItems="center" p={2} direction="column">
-                  {s.mediaURL &&
-                    s.mediaURL
-                      .toLowerCase()
-                      .match(/\.(jpg|jpeg|png|gif)$/i) && (
-                      <>
+                <Flex 
+                  direction="column" 
+                  gap={4} 
+                  px={4} 
+                  pb={4}
+                  pt={2}
+                  borderTop="1px"
+                  borderColor="gray.100"
+                  className="expandable-content"
+                >
+                  {s.mediaURL && (
+                    <Box width="100%" display="flex" justifyContent="center">
+                      {s.mediaURL.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/i) && (
                         <Image
-                          maxWidth="50%"
+                          maxWidth="100%"
+                          maxHeight="500px"
                           src={s.mediaURL}
                           alt={s.note}
-                          objectFit="cover"
+                          objectFit="contain"
+                          borderRadius="md"
+                          boxShadow="sm"
                         />
-                      </>
-                    )}
-                  {s.mediaURL &&
-                    s.mediaURL
-                      .toLowerCase()
-                      .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i) && (
-                      <>
+                      )}
+                      {s.mediaURL.toLowerCase().match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i) && (
                         <Box
                           as="video"
                           controls
                           src={s.mediaURL}
+                          width="100%"
+                          maxWidth="800px"
                           objectFit="contain"
+                          borderRadius="md"
+                          boxShadow="sm"
                           sx={{
                             aspectRatio: "16/9"
                           }}
                         />
-                      </>
-                    )}
-                  {s.mediaURL &&
-                    !s.mediaURL.match(/\.(jpg|jpeg|png|gif)$/i) &&
-                    !s.mediaURL.match(/\.(mpg|mp2|mpeg|mpe|mpv|mp4|webm)$/i) && (
-                      <a href={s.mediaURL}>View media</a>
-                    )}
-                  <Text marginTop={3}>{s.note}</Text>
+                      )}
+                      {!s.mediaURL.match(/\.(jpg|jpeg|png|gif)$/i) &&
+                        !s.mediaURL.match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i) && (
+                        <Link 
+                          href={s.mediaURL}
+                          color="blue.600"
+                          fontWeight="medium"
+                          _hover={{ textDecoration: "underline" }}
+                        >
+                          View media
+                        </Link>
+                      )}
+                    </Box>
+                  )}
+                  {s.note && (
+                    <Box 
+                      bg="gray.50" 
+                      p={4} 
+                      borderRadius="md"
+                      borderLeft="3px solid"
+                      borderColor="gray.300"
+                    >
+                      <Text color="gray.700" lineHeight="tall">
+                        {s.note}
+                      </Text>
+                    </Box>
+                  )}
                 </Flex>
               )}
             </Card>

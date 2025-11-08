@@ -23,13 +23,13 @@ import {
   GiNotebook,
   GiHouse,
   GiRuleBook,
-  GiMagicSwirl,
 } from "react-icons/gi";
 import { FaVideo, FaMagic } from "react-icons/fa";
 import { IoChatbubbles } from "react-icons/io5";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useTeam } from "./useTeam";
+import Image from "next/image";
 
 interface LinkItemProps {
   name: string;
@@ -165,7 +165,15 @@ const SidebarContent = ({
       {...rest}
     >
       <Flex h="20" alignItems="center" mx="8" justifyContent="space-between">
-        <GiMagicSwirl size="32" />
+        <Box position="relative" width="32px" height="32px" flexShrink={0}>
+          <Image
+            src="/favicon.ico"
+            alt="Logo"
+            width={32}
+            height={32}
+            style={{ objectFit: "contain" }}
+          />
+        </Box>
         <Text
           fontSize="2xl"
           ml="2"
