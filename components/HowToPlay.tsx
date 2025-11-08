@@ -186,7 +186,7 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                         <Text fontSize={{ base: "md", md: "lg" }} lineHeight="tall" textAlign="center">
                             Remember: have fun, wear sunscreen, and take whimsical, vertical videos!!!
                             <br /><br />
-                            We'll see you at closing ceremonies at 6pm in Alamo Square 🧺
+                            We'll see you at closing ceremonies at 4pm in Alamo Square 🧺
                         </Text>
                     </Box>
 
