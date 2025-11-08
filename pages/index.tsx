@@ -158,14 +158,22 @@ export default function Page({
         s.challenge.title.toLowerCase().includes(searchQuery.toLowerCase())
       );
 
-  // Helper function to get submission number for a challenge
+  // Helper function to get submission number for a challenge (chronologically)
   const getSubmissionNumber = (submission: typeof submissions[0]) => {
     const challengeSubmissions = submissions
-      .filter(s => s.challengeId === submission.challengeId && s.accepted)
+      .filter(s => s.challengeId === submission.challengeId && !s.rejected)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     
     const index = challengeSubmissions.findIndex(s => s._id === submission._id);
     return index >= 0 ? index + 1 : null;
+  };
+
+  // Helper function to get counts for a challenge
+  const getChallengeStats = (submission: typeof submissions[0]) => {
+    const allSubmissions = submissions.filter(s => s.challengeId === submission.challengeId);
+    const acceptedCount = allSubmissions.filter(s => s.accepted).length;
+    const pendingCount = allSubmissions.filter(s => !s.accepted && !s.rejected).length;
+    return { acceptedCount, pendingCount };
   };
 
   return team != null ? (
@@ -250,11 +258,25 @@ export default function Page({
                       {s.team.emoji} {s.team.name}
                     </Link>
                   </Text>
-                  {s.accepted && getSubmissionNumber(s) && (
-                    <Text fontSize="xs" color="gray.500" fontWeight="medium">
-                      Submission #{getSubmissionNumber(s)} of {s.challenge.numWinners} spot{s.challenge.numWinners === 1 ? "" : "s"}
-                    </Text>
-                  )}
+                  {!s.rejected && getSubmissionNumber(s) && (() => {
+                    const { acceptedCount, pendingCount } = getChallengeStats(s);
+                    const submissionNum = getSubmissionNumber(s);
+                    
+                    if (s.accepted) {
+                      return (
+                        <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                          Submission #{submissionNum} of {s.challenge.numWinners} spot{s.challenge.numWinners === 1 ? "" : "s"}
+                        </Text>
+                      );
+                    } else {
+                      // For pending submissions
+                      return (
+                        <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                          Submission #{submissionNum} ({acceptedCount} accepted, {pendingCount} pending / {s.challenge.numWinners} spot{s.challenge.numWinners === 1 ? "" : "s"})
+                        </Text>
+                      );
+                    }
+                  })()}
                 </Flex>
 
                 <Flex alignItems="center" gap={2}>
