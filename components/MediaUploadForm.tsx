@@ -9,7 +9,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import axios from "axios";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { submissionResponseBodySchema } from "../lib/types";
 import Uppy from '@uppy/core';
 import Dashboard from '@uppy/react/dashboard';
@@ -99,18 +99,8 @@ export default function MediaUploadForm({
         const { message } = response;
         setResult({ success: false, message });
       } else {
-        setFile(null);
         setNote("");
         setSkipUpload(false);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
         setResult({ success: true, message: response.message });
         if (onSuccess) {
           onSuccess();
@@ -142,6 +132,13 @@ export default function MediaUploadForm({
 
   return (
       <VStack spacing={4} width="100%">
+      
+      <FormControl as="fieldset" width="100%">
+        <FormLabel as="legend">Upload video</FormLabel>
+        <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} />
+      </FormControl>
+
+      {showSkipUpload && (
         <FormControl as="fieldset" width="100%">
           <Checkbox
             isChecked={skipUpload}
@@ -173,6 +170,12 @@ export default function MediaUploadForm({
       {result && (
         <Alert status={result.success ? "success" : "error"}>
           {result.message}
+        </Alert>
+      )}
+
+      <Button onClick={handleSubmit} isLoading={isSubmitting} width="100%">
+        {buttonText}
+      </Button>
     </VStack>
   );
 }
