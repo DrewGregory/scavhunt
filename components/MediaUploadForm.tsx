@@ -53,7 +53,12 @@ export default function MediaUploadForm({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const { challengeId } = formData;
 
-  const [uppy] = useState(() => new Uppy().use(Webcam, {
+  const [uppy] = useState(() => new Uppy({
+    restrictions: {
+      maxNumberOfFiles: 1, 
+      minNumberOfFiles: 1,
+    }
+  }).use(Webcam, {
     modes:["video-audio"],
     mobileNativeCamera: true,
     showRecordingLength: true,
