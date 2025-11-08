@@ -132,7 +132,7 @@ export default function Page({
       submission.mediaURL &&
       submission.mediaURL
         .toLowerCase()
-        .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4)$/i)
+        .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i)
   );
 
   const randomIntFromInterval = (min: number, max: number) => {
