@@ -143,7 +143,7 @@ const SidebarContent = ({
       {...rest}
     >
       <Flex h="20" alignItems="center" mx="8" justifyContent="space-between">
-        <GiMagicSwirl size="32" />
+        <Gi3dMeeple size="32" />
         <Text
           fontSize="2xl"
           ml="2"
