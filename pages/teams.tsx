@@ -146,7 +146,7 @@ export default function Page({
             format: "%Y-%m-%d, %H:%M:%S",
             type: "time",
             precision: "minute",
-            min: new Date(2024, 7, 25, 10, 0, 0, 0),
+            min: startTime,
             max: maxDate,
             useUTC: true
           }}
