@@ -85,14 +85,12 @@ export default function Page({
   submissions
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const videoRefs = useRef<any>([]);
+  const containerRef = useRef<any>(null);
   const videoContainerRefs = useRef<any>([]);
-
-  const scrollToVideo = (submissionId: string) => {
-    const index = submissionsWithVideos.findIndex((s) => s._id === submissionId);
-    if (index !== -1 && videoContainerRefs.current[index]) {
-      videoContainerRefs.current[index].scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
+  const [videoStats, setVideoStats] = useState<{
+    likes: Record<string, number>;
+    comments: Record<string, number>;
+  }>({ likes: {}, comments: {} });
 
   const submissionsWithVideos = submissions.filter(
     (submission) =>
@@ -101,6 +99,36 @@ export default function Page({
         .toLowerCase()
         .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4)$/i)
   );
+
+  const scrollToVideo = (submissionId: string) => {
+    const index = submissionsWithVideos.findIndex((s) => s._id === submissionId);
+    if (index !== -1 && videoRefs.current[index]) {
+      videoRefs.current[index].scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
+  useEffect(() => {
+    const fetchVideoStats = async () => {
+      try {
+        const response = await fetch("/api/video-stats");
+        if (response.ok) {
+          const data = await response.json();
+          setVideoStats(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch video stats:", error);
+      }
+    };
+    fetchVideoStats();
+  }, []);
+
+  useEffect(() => {
+    // Scroll container to top on mount to ensure first video is visible
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     const observerOptions = {
@@ -143,30 +171,53 @@ export default function Page({
     videoRefs.current[index] = ref;
   };
 
+  const randomIntFromInterval = (min: number, max: number) => {
+    return Math.floor(Math.random() * (max - min + 1) + min);
+  };
+
+  const updateCommentCount = (submissionId: string) => {
+    setVideoStats((prev) => ({
+      ...prev,
+      comments: {
+        ...prev.comments,
+        [submissionId]: (prev.comments[submissionId] || 0) + 1
+      }
+    }));
+  };
+
+  const updateLikeCount = (submissionId: string, newCount: number) => {
+    setVideoStats((prev) => ({
+      ...prev,
+      likes: {
+        ...prev.likes,
+        [submissionId]: newCount
+      }
+    }));
+  };
+
   return (
     <div className="scavtok" suppressHydrationWarning>
       <div className="app">
-        <div className="container">
+        <div className="container" ref={containerRef}>
           <TopNavbar onVideoSelect={scrollToVideo} />
           {/* Here we map over the videos array and create VideoCard components */}
           {submissionsWithVideos.map((submission, index) => (
-            <div key={index} ref={(el) => (videoContainerRefs.current[index] = el)}>
-              <VideoCard
-                submissionId={submission._id}
-                username={submission.team.emoji + " " + submission.team.name}
-                description={submission.note}
-                song={""}
-                likes={0}
-                saves={0}
-                comments={0}
-                shares={0}
-                url={submission.mediaURL}
-                profilePic={submission.team.emoji}
-                setVideoRef={handleVideoRef(index)}
-                autoplay={index === 0}
-                suppressHydrationWarning
-              />
-            </div>
+            <VideoCard
+              key={index}
+              submissionId={submission._id}
+              username={submission.team.emoji + " " + submission.team.name}
+              description={submission.note}
+              song={""}
+              likes={videoStats.likes[submission._id] || randomIntFromInterval(100, 2000)}
+              comments={videoStats.comments[submission._id] || 0}
+              url={submission.mediaURL}
+              profilePic={submission.team.emoji}
+              setVideoRef={handleVideoRef(index)}
+              autoplay={index === 0}
+              onCommentAdded={() => updateCommentCount(submission._id)}
+              onLikeUpdate={(newCount) => updateLikeCount(submission._id, newCount)}
+              suppressHydrationWarning
+            />
           ))}
           <BottomNavbar />
         </div>

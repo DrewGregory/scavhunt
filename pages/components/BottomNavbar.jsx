@@ -32,7 +32,6 @@ function BottomNavbar() {
         <span className="item-name">Create</span>
       </div>
       <div className="nav-item">
-        <FontAwesomeIcon icon={fa7} className="notification" />
         <FontAwesomeIcon icon={faInbox} className="icon" />
         <span className="item-name">Inbox</span>
       </div>

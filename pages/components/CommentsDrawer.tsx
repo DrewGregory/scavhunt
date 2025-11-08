@@ -29,6 +29,7 @@ interface CommentsDrawerProps {
   onClose: () => void;
   submissionId: string;
   initialCommentCount: number;
+  onCommentAdded?: () => void;
 }
 
 const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
@@ -36,6 +37,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   onClose,
   submissionId,
   initialCommentCount,
+  onCommentAdded,
 }) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -82,6 +84,9 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
       if (response.ok) {
         setNewComment("");
         await fetchComments();
+        if (onCommentAdded) {
+          onCommentAdded();
+        }
       }
     } catch (error) {
       console.error("Error posting comment:", error);

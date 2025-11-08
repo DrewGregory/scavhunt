@@ -10,33 +10,16 @@ const VideoCard = (props) => {
     description,
     song,
     likes,
-    shares,
     comments,
-    saves,
     profilePic,
     setVideoRef,
     autoplay,
-    submissionId
+    submissionId,
+    onCommentAdded,
+    onLikeUpdate
   } = props;
   const videoRef = useRef(null);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
-  const [actualLikes, setActualLikes] = useState(likes);
-
-  useEffect(() => {
-    // Fetch real like count
-    const fetchLikes = async () => {
-      try {
-        const response = await fetch(`/api/likes?submissionId=${submissionId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setActualLikes(data.likes);
-        }
-      } catch (error) {
-        console.error("Failed to fetch likes:", error);
-      }
-    };
-    fetchLikes();
-  }, [submissionId]);
 
   useEffect(() => {
     if (autoplay) {
@@ -79,14 +62,12 @@ const VideoCard = (props) => {
           <div className="footer-right">
             {/* The right part of the container */}
             <FooterRight
-              likes={actualLikes}
-              shares={shares}
+              likes={likes}
               comments={comments}
-              saves={saves}
               profilePic={profilePic}
               submissionId={submissionId}
               onCommentClick={() => setIsCommentsOpen(true)}
-              onLikeUpdate={(newLikes) => setActualLikes(newLikes)}
+              onLikeUpdate={onLikeUpdate}
             />
           </div>
         </div>
@@ -96,6 +77,7 @@ const VideoCard = (props) => {
         onClose={() => setIsCommentsOpen(false)}
         submissionId={submissionId}
         initialCommentCount={comments}
+        onCommentAdded={onCommentAdded}
       />
     </>
   );

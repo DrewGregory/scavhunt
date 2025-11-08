@@ -6,6 +6,7 @@ export interface Chat {
   teamId: ObjectId;
   teamName: string;
   message: string;
+  threadId?: ObjectId;
   createdAt: Date;
   id: string;
 }
@@ -15,6 +16,7 @@ export const serializedChatSchema = baseMongooseSchema.merge(
     teamId: mongooseIdSchema,
     teamName: z.string(),
     message: z.string(),
+    threadId: mongooseIdSchema.optional(),
     createdAt: z.date().transform((x) => x.toISOString()),
   })
 );
@@ -34,6 +36,11 @@ const ChatSchema = new mongoose.Schema<Chat>({
   message: {
     type: String,
     required: true,
+  },
+  threadId: {
+    type: Types.ObjectId,
+    required: false,
+    index: true,
   },
   createdAt: {
     type: Date,

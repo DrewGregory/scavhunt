@@ -14,11 +14,20 @@
 
   .container {
     position: relative;
-    height: 667px;
-    width: 375px;
-    border-radius: 25px;
+    height: 100dvh;
+    width: 100vw;
+    max-width: 400px;
     overflow: scroll;
     scroll-snap-type: y mandatory;
+  }
+
+  @media (min-width: 768px) {
+    .container {
+      border-radius: 25px;
+      height: 90vh;
+      max-height: 844px;
+      max-width: 375px;
+    }
   }
 
   .container::-webkit-scrollbar {
