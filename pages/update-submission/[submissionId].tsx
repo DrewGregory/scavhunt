@@ -10,7 +10,7 @@ import { GetServerSideProps, InferGetServerSidePropsType } from "next";
 import { dbConnect } from "../../lib/dbConnect";
 import { SubmissionModel } from "../../models/Submission";
 import { ChallengeModel } from "../../models/Challenge";
-import { ADMIN_TEAM_ID, TEAM_COOKIE_NAME, getTeamFromCookie } from "../../lib/team";
+import { isAdminTeam, TEAM_COOKIE_NAME, getTeamFromCookie } from "../../lib/team";
 import NavContainer from "../../components/NavContainer";
 import MediaUploadForm from "../../components/MediaUploadForm";
 
@@ -58,7 +58,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
   // Check if the user is admin OR the original submitter
   const teamId = team._id.toHexString();
-  const isAdmin = teamId === ADMIN_TEAM_ID;
+  const isAdmin = isAdminTeam(teamId);
   const isOriginalSubmitter = submission.teamId.toString() === teamId;
   
   if (!isAdmin && !isOriginalSubmitter) {

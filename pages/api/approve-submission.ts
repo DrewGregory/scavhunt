@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { dbConnect } from '../../lib/dbConnect';
-import { ADMIN_TEAM_ID, getTeamFromCookie } from '../../lib/team';
+import { isAdminTeam, getTeamFromCookie } from '../../lib/team';
 
 import { z } from "zod";
 import { SubmissionModel } from '../../models/Submission';
@@ -29,7 +29,7 @@ export default async function handler(
   }
 
   const teamId = team?._id.toHexString();
-  if (teamId !== ADMIN_TEAM_ID) {
+  if (!isAdminTeam(teamId)) {
     return res.status(400).json({ error: "Insufficient team permisison to approve submissions" });
   }
   

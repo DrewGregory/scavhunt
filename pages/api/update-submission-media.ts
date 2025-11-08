@@ -6,7 +6,7 @@ import { Types } from "mongoose";
 import assert from "assert";
 import { dbConnect } from "../../lib/dbConnect";
 import { SubmissionResponseBody } from "../../lib/types";
-import { ADMIN_TEAM_ID, getTeamFromCookie } from "../../lib/team";
+import { isAdminTeam, getTeamFromCookie } from "../../lib/team";
 import { PutObjectAclCommand, PutObjectCommand, PutObjectCommandInput, S3Client } from "@aws-sdk/client-s3";
 import { NextApiRequestCookies } from "next/dist/server/api-utils";
 import { randomBytes } from "crypto";
@@ -106,7 +106,7 @@ const validateForm = async ({
   }
 
   // Check if the user is admin OR the original submitter
-  const isAdmin = teamId === ADMIN_TEAM_ID;
+  const isAdmin = isAdminTeam(teamId);
   const isOriginalSubmitter = submission.teamId.toString() === teamId;
   
   if (!isAdmin && !isOriginalSubmitter) {

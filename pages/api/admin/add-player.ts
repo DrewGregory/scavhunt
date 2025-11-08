@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { dbConnect } from '../../../lib/dbConnect';
 import { TeamModel } from '../../../models/Team';
-import { getTeamFromCookie, ADMIN_TEAM_ID } from '../../../lib/team';
+import { getTeamFromCookie, isAdminTeam } from '../../../lib/team';
 import { z } from 'zod';
 
 const RequestBody = z.object({
@@ -18,7 +18,7 @@ export default async function handler(
   
   // Check if user is admin
   const team = await getTeamFromCookie(req.cookies);
-  if (team == null || team._id.toString() !== ADMIN_TEAM_ID) {
+  if (team == null || !isAdminTeam(team._id.toString())) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 

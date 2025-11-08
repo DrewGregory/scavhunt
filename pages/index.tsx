@@ -27,7 +27,7 @@ import { ChevronDownIcon } from "@chakra-ui/icons";
 import { HiDotsVertical } from "react-icons/hi";
 import { z } from "zod";
 import { serializedChallengeSchema } from "../models/Challenge";
-import { ADMIN_TEAM_ID, getTeamFromCookie } from "../lib/team";
+import { isAdminTeam, getTeamFromCookie } from "../lib/team";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -106,7 +106,7 @@ export const getServerSideProps = async (
     .parse(submissionsRaw);
 
   const team = serializedTeamSchema.parse(teamRaw);
-  const isAdmin = teamRaw._id.toString() === ADMIN_TEAM_ID;
+  const isAdmin = isAdminTeam(teamRaw._id.toString());
 
   return {
     props: {

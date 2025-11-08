@@ -3,7 +3,18 @@ import { TeamModel } from "../models/Team";
 import { dbConnect } from "./dbConnect";
 import { sha256 } from "./hash";
 
-export const ADMIN_TEAM_ID = process.env.ADMIN_TEAM_ID ?? "invalid_team_id";
+// Parse comma-separated admin team IDs from environment variable
+const parseAdminTeamIds = (): string[] => {
+  const adminTeamIds = process.env.ADMIN_TEAM_ID ?? "invalid_team_id";
+  return adminTeamIds.split(',').map(id => id.trim()).filter(id => id.length > 0);
+};
+
+export const ADMIN_TEAM_IDS = parseAdminTeamIds();
+
+// Helper function to check if a team ID is an admin
+export const isAdminTeam = (teamId: string): boolean => {
+  return ADMIN_TEAM_IDS.includes(teamId);
+};
 
 export const TEAM_COOKIE_NAME = "teamCode";
 
