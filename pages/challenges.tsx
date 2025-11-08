@@ -45,11 +45,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           foreignField: "challengeId",
           as: "submissions"
         }
-      },
-      {
-        $sort: {
-          pts: -1
-        }
       }
     ]);
   })();
