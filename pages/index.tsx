@@ -258,6 +258,19 @@ export default function Page({
                 </Flex>
 
                 <Flex alignItems="center" gap={2}>
+                  <Flex
+                    alignItems="center"
+                    justifyContent="center"
+                    bg="blue.50"
+                    borderRadius="md"
+                    px={3}
+                    py={1}
+                    minWidth="fit-content"
+                  >
+                    <Text fontSize="md" fontWeight="bold" color="blue.700">
+                      {s.challenge.pts} pts
+                    </Text>
+                  </Flex>
                   {(isAdmin || team._id === s.teamId) && s._id === selectedSubmission && (
                     <Menu>
                       <MenuButton
