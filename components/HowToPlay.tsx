@@ -111,6 +111,8 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                             • If you have trouble uploading your video, you can skip the upload and try again after, or send it to your point of contact instead!
                             <br /><br />
                             • We may put together a highlight reel of the best submissions at the end of the hunt! If you'd prefer for videos of you to not be included, let us know.
+                            <br /><br />
+                            • All submissions have to be approved by HQ before they count!
                         </Text>
                     </Box>
 
@@ -136,7 +138,7 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                             <br /><br />
                             • You can see every team's latest location on the map! The site will ask for location permissions.
                             <br /><br />
-                            • New features include: ScavAI and Chat! Have fun with them!
+                            • Check out the new features that our intern built: ScavAI and Chat! Have fun with them (and obviously, be respectful!)
                         </Text>
                     </Box>
 
