@@ -140,11 +140,19 @@ export default function AdminPage() {
   };
 
   if (!currentTeam || loading) {
-    return <div style={styles.container}>Loading...</div>;
+    return (
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+        Loading...
+      </div>
+    );
   }
 
   if (error) {
-    return <div style={styles.container}>{error}</div>;
+    return (
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+        {error}
+      </div>
+    );
   }
 
   const getTeamPlayers = (teamId: string) => {
@@ -153,236 +161,282 @@ export default function AdminPage() {
   };
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>Admin Panel</h1>
+    <>
+      <style jsx>{`
+        .admin-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 20px;
+          font-family: Arial, sans-serif;
+        }
+        .title {
+          font-size: 32px;
+          margin-bottom: 30px;
+          color: #333;
+        }
+        .section {
+          margin-bottom: 40px;
+          padding: 20px;
+          background-color: #f5f5f5;
+          border-radius: 8px;
+        }
+        .section-title {
+          font-size: 24px;
+          margin-bottom: 20px;
+          color: #555;
+        }
+        .teams-list {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+          gap: 15px;
+        }
+        .team-card {
+          background-color: white;
+          padding: 15px;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .team-name {
+          font-size: 18px;
+          margin-bottom: 10px;
+          color: #333;
+        }
+        .team-info {
+          font-size: 12px;
+          color: #666;
+          margin-bottom: 5px;
+          word-break: break-all;
+        }
+        .members-list {
+          margin-top: 10px;
+          font-size: 14px;
+        }
+        .member {
+          padding: 5px 0;
+          border-top: 1px solid #eee;
+        }
+        .form {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          max-width: 100%;
+        }
+        .input, .select {
+          padding: 12px;
+          font-size: 16px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .select {
+          background-color: white;
+        }
+        .button {
+          padding: 14px;
+          font-size: 16px;
+          background-color: #0070f3;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-weight: bold;
+          width: 100%;
+        }
+        .button:hover {
+          background-color: #0051cc;
+        }
+        .button:active {
+          transform: scale(0.98);
+        }
 
-      {/* Teams List */}
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>All Teams</h2>
-        <div style={styles.teamsList}>
-          {teams.map((team) => (
-            <div key={team._id} style={styles.teamCard}>
-              <h3 style={styles.teamName}>
-                {team.emoji} {team.name}
-              </h3>
-              <p style={styles.teamInfo}>ID: {team._id}</p>
-              <p style={styles.teamInfo}>Members: {team.members.length}</p>
-              <div style={styles.membersList}>
-                {team.members.map((member, idx) => (
-                  <div key={idx} style={styles.member}>
-                    {idx}. {member.firstName} {member.familyName}
-                  </div>
-                ))}
+        @media (min-width: 768px) {
+          .admin-container {
+            padding: 30px;
+          }
+          .form {
+            max-width: 400px;
+          }
+          .button {
+            width: auto;
+            min-width: 150px;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .admin-container {
+            padding: 15px;
+          }
+          .title {
+            font-size: 24px;
+            margin-bottom: 20px;
+          }
+          .section {
+            padding: 15px;
+            margin-bottom: 20px;
+          }
+          .section-title {
+            font-size: 20px;
+            margin-bottom: 15px;
+          }
+          .teams-list {
+            grid-template-columns: 1fr;
+          }
+          .team-card {
+            padding: 12px;
+          }
+          .team-name {
+            font-size: 16px;
+          }
+        }
+      `}</style>
+      <div className="admin-container">
+        <h1 className="title">Admin Panel</h1>
+
+        {/* Teams List */}
+        <section className="section">
+          <h2 className="section-title">All Teams</h2>
+          <div className="teams-list">
+            {teams.map((team) => (
+              <div key={team._id} className="team-card">
+                <h3 className="team-name">
+                  {team.emoji} {team.name}
+                </h3>
+                <p className="team-info">Code: {team.teamCode}</p>
+                <p className="team-info">Members: {team.members.length}</p>
+                <div className="members-list">
+                  {team.members.map((member, idx) => (
+                    <div key={idx} className="member">
+                      {idx}. {member.firstName} {member.familyName}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Create Team */}
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Create New Team</h2>
-        <form onSubmit={handleCreateTeam} style={styles.form}>
-          <input
-            type="text"
-            placeholder="Team Name"
-            value={newTeamName}
-            onChange={(e) => setNewTeamName(e.target.value)}
-            required
-            style={styles.input}
-          />
-          <input
-            type="text"
-            placeholder="Emoji (e.g., 🚀)"
-            value={newTeamEmoji}
-            onChange={(e) => setNewTeamEmoji(e.target.value)}
-            required
-            style={styles.input}
-          />
-          <input
-            type="text"
-            placeholder="Team Code"
-            value={newTeamCode}
-            onChange={(e) => setNewTeamCode(e.target.value)}
-            required
-            style={styles.input}
-          />
-          <button type="submit" style={styles.button}>Create Team</button>
-        </form>
-      </section>
-
-      {/* Add Player */}
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Add Player to Team</h2>
-        <form onSubmit={handleAddPlayer} style={styles.form}>
-          <select
-            value={selectedTeamForPlayer}
-            onChange={(e) => setSelectedTeamForPlayer(e.target.value)}
-            required
-            style={styles.select}
-          >
-            <option value="">Select Team</option>
-            {teams.map((team) => (
-              <option key={team._id} value={team._id}>
-                {team.emoji} {team.name}
-              </option>
             ))}
-          </select>
-          <input
-            type="text"
-            placeholder="First Name"
-            value={newPlayerFirstName}
-            onChange={(e) => setNewPlayerFirstName(e.target.value)}
-            required
-            style={styles.input}
-          />
-          <input
-            type="text"
-            placeholder="Family Name"
-            value={newPlayerFamilyName}
-            onChange={(e) => setNewPlayerFamilyName(e.target.value)}
-            required
-            style={styles.input}
-          />
-          <button type="submit" style={styles.button}>Add Player</button>
-        </form>
-      </section>
+          </div>
+        </section>
 
-      {/* Move Player */}
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Move Player Between Teams</h2>
-        <form onSubmit={handleMovePlayer} style={styles.form}>
-          <select
-            value={moveFromTeam}
-            onChange={(e) => setMoveFromTeam(e.target.value)}
-            required
-            style={styles.select}
-          >
-            <option value="">From Team</option>
-            {teams.map((team) => (
-              <option key={team._id} value={team._id}>
-                {team.emoji} {team.name}
-              </option>
-            ))}
-          </select>
-          
-          {moveFromTeam && (
-            <select
-              value={movePlayerIndex}
-              onChange={(e) => setMovePlayerIndex(e.target.value)}
+        {/* Create Team */}
+        <section className="section">
+          <h2 className="section-title">Create New Team</h2>
+          <form onSubmit={handleCreateTeam} className="form">
+            <input
+              type="text"
+              placeholder="Team Name"
+              value={newTeamName}
+              onChange={(e) => setNewTeamName(e.target.value)}
               required
-              style={styles.select}
+              className="input"
+            />
+            <input
+              type="text"
+              placeholder="Emoji (e.g., 🚀)"
+              value={newTeamEmoji}
+              onChange={(e) => setNewTeamEmoji(e.target.value)}
+              required
+              className="input"
+            />
+            <input
+              type="text"
+              placeholder="Team Code"
+              value={newTeamCode}
+              onChange={(e) => setNewTeamCode(e.target.value)}
+              required
+              className="input"
+            />
+            <button type="submit" className="button">Create Team</button>
+          </form>
+        </section>
+
+        {/* Add Player */}
+        <section className="section">
+          <h2 className="section-title">Add Player to Team</h2>
+          <form onSubmit={handleAddPlayer} className="form">
+            <select
+              value={selectedTeamForPlayer}
+              onChange={(e) => setSelectedTeamForPlayer(e.target.value)}
+              required
+              className="select"
             >
-              <option value="">Select Player</option>
-              {getTeamPlayers(moveFromTeam).map((member, idx) => (
-                <option key={idx} value={idx}>
-                  {member.firstName} {member.familyName}
+              <option value="">Select Team</option>
+              {teams.map((team) => (
+                <option key={team._id} value={team._id}>
+                  {team.emoji} {team.name}
                 </option>
               ))}
             </select>
-          )}
+            <input
+              type="text"
+              placeholder="First Name"
+              value={newPlayerFirstName}
+              onChange={(e) => setNewPlayerFirstName(e.target.value)}
+              required
+              className="input"
+            />
+            <input
+              type="text"
+              placeholder="Family Name"
+              value={newPlayerFamilyName}
+              onChange={(e) => setNewPlayerFamilyName(e.target.value)}
+              required
+              className="input"
+            />
+            <button type="submit" className="button">Add Player</button>
+          </form>
+        </section>
 
-          <select
-            value={moveToTeam}
-            onChange={(e) => setMoveToTeam(e.target.value)}
-            required
-            style={styles.select}
-          >
-            <option value="">To Team</option>
-            {teams.map((team) => (
-              <option key={team._id} value={team._id}>
-                {team.emoji} {team.name}
-              </option>
-            ))}
-          </select>
-          
-          <button type="submit" style={styles.button}>Move Player</button>
-        </form>
-      </section>
-    </div>
+        {/* Move Player */}
+        <section className="section">
+          <h2 className="section-title">Move Player Between Teams</h2>
+          <form onSubmit={handleMovePlayer} className="form">
+            <select
+              value={moveFromTeam}
+              onChange={(e) => setMoveFromTeam(e.target.value)}
+              required
+              className="select"
+            >
+              <option value="">From Team</option>
+              {teams.map((team) => (
+                <option key={team._id} value={team._id}>
+                  {team.emoji} {team.name}
+                </option>
+              ))}
+            </select>
+            
+            {moveFromTeam && (
+              <select
+                value={movePlayerIndex}
+                onChange={(e) => setMovePlayerIndex(e.target.value)}
+                required
+                className="select"
+              >
+                <option value="">Select Player</option>
+                {getTeamPlayers(moveFromTeam).map((member, idx) => (
+                  <option key={idx} value={idx}>
+                    {member.firstName} {member.familyName}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <select
+              value={moveToTeam}
+              onChange={(e) => setMoveToTeam(e.target.value)}
+              required
+              className="select"
+            >
+              <option value="">To Team</option>
+              {teams.map((team) => (
+                <option key={team._id} value={team._id}>
+                  {team.emoji} {team.name}
+                </option>
+              ))}
+            </select>
+            
+            <button type="submit" className="button">Move Player</button>
+          </form>
+        </section>
+      </div>
+    </>
   );
 }
-
-const styles = {
-  container: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '20px',
-    fontFamily: 'Arial, sans-serif',
-  },
-  title: {
-    fontSize: '32px',
-    marginBottom: '30px',
-    color: '#333',
-  },
-  section: {
-    marginBottom: '40px',
-    padding: '20px',
-    backgroundColor: '#f5f5f5',
-    borderRadius: '8px',
-  },
-  sectionTitle: {
-    fontSize: '24px',
-    marginBottom: '20px',
-    color: '#555',
-  },
-  teamsList: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-    gap: '15px',
-  },
-  teamCard: {
-    backgroundColor: 'white',
-    padding: '15px',
-    borderRadius: '8px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-  },
-  teamName: {
-    fontSize: '18px',
-    marginBottom: '10px',
-    color: '#333',
-  },
-  teamInfo: {
-    fontSize: '12px',
-    color: '#666',
-    marginBottom: '5px',
-  },
-  membersList: {
-    marginTop: '10px',
-    fontSize: '14px',
-  },
-  member: {
-    padding: '5px 0',
-    borderTop: '1px solid #eee',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '10px',
-    maxWidth: '400px',
-  },
-  input: {
-    padding: '10px',
-    fontSize: '14px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-  },
-  select: {
-    padding: '10px',
-    fontSize: '14px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    backgroundColor: 'white',
-  },
-  button: {
-    padding: '12px',
-    fontSize: '16px',
-    backgroundColor: '#0070f3',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontWeight: 'bold' as const,
-  },
-};
-
