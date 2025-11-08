@@ -47,9 +47,9 @@ cp .env.example .env.local
 
 And fill out the environment variables accordingly:
 
-### ADMIN_TEAM_ID
+### ADMIN_ID
 
-The ObjectId(s) for the team(s) you want to be able to approve and reject submissions in the submission feed. You can specify multiple admin teams by separating them with commas (e.g., `ADMIN_TEAM_ID=id1,id2,id3`). See **Load example data** for more information.
+The ObjectId(s) for the team(s) you want to be able to approve and reject submissions in the submission feed. You can specify multiple admin teams by separating them with commas (e.g., `ADMIN_ID=id1,id2,id3`). See **Load example data** for more information.
 
 ### END_TIME_ISO_STRING
 
@@ -94,7 +94,7 @@ cp scripts/example_teams.csv scripts/teams.csv
 
 Note the team names and begin codes. You will need to distribute these team codes to allow users of that team to sign in via `http://localhost/begin/<team code here>` (of course, replace these team code)
 
-In addition, pick the team(s) that you want to be the "admin team(s)" (which can approve or reject submissions), and take a note of the ID(s). You can specify multiple admin teams in the `ADMIN_TEAM_ID` environment variable by separating them with commas
+In addition, pick the team(s) that you want to be the "admin team(s)" (which can approve or reject submissions), and take a note of the ID(s). You can specify multiple admin teams in the `ADMIN_ID` environment variable by separating them with commas
 
 Run this within the devcontainer:
 
