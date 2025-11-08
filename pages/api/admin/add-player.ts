@@ -7,7 +7,7 @@ import { z } from 'zod';
 const RequestBody = z.object({
   teamId: z.string(),
   firstName: z.string(),
-  familyName: z.string(),
+  familyName: z.string().optional(),
 });
 
 export default async function handler(

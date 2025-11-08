@@ -2,8 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { dbConnect } from "../../../lib/dbConnect";
 import { ChallengeModel } from "../../../models/Challenge";
 import { SubmissionModel } from "../../../models/Submission";
-import { TeamModel } from "../../../models/Team";
-import { isAdminTeam } from "../../../lib/team";
+import { getTeamFromCookie, isAdminTeam } from "../../../lib/team";
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,12 +15,7 @@ export default async function handler(
   await dbConnect();
 
   // Check admin authorization
-  const teamCode = req.cookies.teamCode;
-  if (!teamCode) {
-    return res.status(403).json({ error: "Unauthorized" });
-  }
-
-  const team = await TeamModel.findOne({ teamCode });
+  const team = await getTeamFromCookie(req.cookies);
   if (!team || !isAdminTeam(team._id.toString())) {
     return res.status(403).json({ error: "Unauthorized" });
   }

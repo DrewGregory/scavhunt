@@ -120,7 +120,7 @@ export const getServerSideProps = async (
   };
 };
 
-const HowToPlay = dynamic(() => import("../components/HowToPlay"), {
+const CountdownPage = dynamic(() => import("../components/CountdownPage"), {
   ssr: false
 });
 
@@ -304,6 +304,6 @@ export default function Page({
       )}
     </NavContainer>
   ) : (
-    <HowToPlay startTime={parseISO(startTimeISO)} scavengerHuntName={scavengerHuntName} showHowToPlay={showHowToPlay}/>
+    <CountdownPage startTime={parseISO(startTimeISO)} scavengerHuntName={scavengerHuntName} showHowToPlay={showHowToPlay}/>
   );
 }

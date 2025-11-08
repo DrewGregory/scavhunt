@@ -4,7 +4,7 @@ import { useTeam } from '../components/useTeam';
 
 interface Member {
   firstName: string;
-  familyName: string;
+  familyName?: string;
   _id?: string;
 }
 
@@ -28,12 +28,31 @@ interface Challenge {
   numWinners: number;
 }
 
+interface ScavAIMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
+
+interface ScavAIConversation {
+  _id: string;
+  teamId: string;
+  teamName: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  firstMessage: string;
+  messages: ScavAIMessage[];
+}
+
 export default function AdminPage() {
   const currentTeam = useTeam();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'teams' | 'challenges'>('teams');
+  const [activeTab, setActiveTab] = useState<'teams' | 'challenges' | 'scavai'>('teams');
   const [teams, setTeams] = useState<Team[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [scavaiConversations, setScavaiConversations] = useState<ScavAIConversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<ScavAIConversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -53,6 +72,8 @@ export default function AdminPage() {
   // Challenge form states
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [teamsCsvFile, setTeamsCsvFile] = useState<File | null>(null);
+  const [newTeamCodes, setNewTeamCodes] = useState<Array<{ name: string; emoji: string; teamCode: string }> | null>(null);
 
   const loadTeams = async () => {
     try {
@@ -84,10 +105,25 @@ export default function AdminPage() {
     }
   };
 
+  const loadScavAIConversations = async () => {
+    try {
+      const res = await fetch('/api/admin/scavai-conversations');
+      if (res.status === 403) {
+        router.push('/');
+        return;
+      }
+      const data = await res.json();
+      setScavaiConversations(data.conversations);
+    } catch (err) {
+      setError('Failed to load ScavAI conversations');
+    }
+  };
+
   useEffect(() => {
     if (currentTeam) {
       loadTeams();
       loadChallenges();
+      loadScavAIConversations();
     }
   }, [currentTeam]);
 
@@ -231,6 +267,48 @@ export default function AdminPage() {
     } catch (err) {
       alert('Failed to import challenges');
     }
+  };
+
+  const handleImportTeamsCSV = async () => {
+    if (!teamsCsvFile) {
+      alert('Please select a CSV file');
+      return;
+    }
+
+    try {
+      const csvContent = await teamsCsvFile.text();
+      const res = await fetch('/api/admin/import-teams', {
+        method: 'POST',
+        body: JSON.stringify({ csvContent }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to import teams');
+        return;
+      }
+
+      const data = await res.json();
+      setTeamsCsvFile(null);
+      await loadTeams();
+      
+      // Show team codes modal if any new teams were created
+      if (data.newTeamCodes && data.newTeamCodes.length > 0) {
+        setNewTeamCodes(data.newTeamCodes);
+      } else {
+        alert(data.message || 'Teams imported successfully!');
+      }
+    } catch (err) {
+      alert('Failed to import teams');
+    }
+  };
+
+  const copyTeamCodesToClipboard = () => {
+    if (!newTeamCodes) return;
+    
+    const text = newTeamCodes.map(tc => `${tc.emoji} ${tc.name}: ${tc.teamCode}`).join('\n');
+    navigator.clipboard.writeText(text);
+    alert('Team codes copied to clipboard!');
   };
 
   const handleDeleteChallenge = async (challengeId: string, challengeTitle: string) => {
@@ -578,6 +656,12 @@ export default function AdminPage() {
           >
             Challenges
           </button>
+          <button
+            className={`tab ${activeTab === 'scavai' ? 'active' : ''}`}
+            onClick={() => setActiveTab('scavai')}
+          >
+            ScavAI Conversations
+          </button>
         </div>
 
         {activeTab === 'teams' && (
@@ -602,7 +686,7 @@ export default function AdminPage() {
                         <td>
                           {team.members.map((member, idx) => (
                             <div key={idx}>
-                              {idx + 1}. {member.firstName} {member.familyName}
+                              {idx + 1}. {member.firstName}{member.familyName ? ` ${member.familyName}` : ''}
                             </div>
                           ))}
                         </td>
@@ -710,7 +794,7 @@ export default function AdminPage() {
                     <option value="">Select Player</option>
                     {getTeamPlayers(moveFromTeam).map((member, idx) => (
                       <option key={idx} value={idx}>
-                        {member.firstName} {member.familyName}
+                        {member.firstName}{member.familyName ? ` ${member.familyName}` : ''}
                       </option>
                     ))}
                   </select>
@@ -732,6 +816,29 @@ export default function AdminPage() {
                 
                 <button type="submit" className="button">Move Player</button>
               </form>
+            </section>
+
+            {/* Import Teams from CSV */}
+            <section className="section">
+              <h2 className="section-title">Import Teams from CSV</h2>
+              <div className="file-input-wrapper">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setTeamsCsvFile(e.target.files?.[0] || null)}
+                  className="input file-input"
+                />
+                <button
+                  onClick={handleImportTeamsCSV}
+                  className="button"
+                  disabled={!teamsCsvFile}
+                >
+                  Import CSV
+                </button>
+              </div>
+              <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
+                CSV format: Emoji, Name, Size, names (comma-separated "FirstName LastName")
+              </p>
             </section>
           </>
         )}
@@ -791,11 +898,10 @@ export default function AdminPage() {
                 Delete all challenges that have no submissions. Challenges with submissions will be skipped.
               </p>
               <button
+                type="button"
                 onClick={handleBulkDeleteChallenges}
                 className="button"
                 style={{ backgroundColor: '#dc3545', maxWidth: '300px' }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#c82333'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc3545'}
               >
                 Bulk Delete Unused Challenges
               </button>
@@ -822,6 +928,55 @@ export default function AdminPage() {
               <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
                 CSV format: title, prompt, pts, (ignored), lat, lng, numWinners
               </p>
+            </section>
+          </>
+        )}
+
+        {activeTab === 'scavai' && (
+          <>
+            {/* ScavAI Conversations List */}
+            <section className="section">
+              <h2 className="section-title">All ScavAI Conversations</h2>
+              <div className="table-container">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Team</th>
+                      <th>Messages</th>
+                      <th>First Message</th>
+                      <th>Started</th>
+                      <th>Last Updated</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scavaiConversations.map((conversation) => (
+                      <tr key={conversation._id}>
+                        <td><strong>{conversation.teamName}</strong></td>
+                        <td>{conversation.messageCount}</td>
+                        <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {conversation.firstMessage}
+                        </td>
+                        <td>{new Date(conversation.createdAt).toLocaleString()}</td>
+                        <td>{new Date(conversation.updatedAt).toLocaleString()}</td>
+                        <td>
+                          <button
+                            className="small-button edit-button"
+                            onClick={() => setSelectedConversation(conversation)}
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {scavaiConversations.length === 0 && (
+                <p style={{ textAlign: 'center', marginTop: '20px', color: '#666' }}>
+                  No ScavAI conversations yet.
+                </p>
+              )}
             </section>
           </>
         )}
@@ -901,7 +1056,130 @@ export default function AdminPage() {
             </div>
           </div>
         )}
-      </div>
-    </>
-  );
-}
+
+         {/* ScavAI Conversation Modal */}
+         {selectedConversation && (
+           <div className="modal" onClick={() => setSelectedConversation(null)}>
+             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+               <h2 className="modal-title">
+                 ScavAI Conversation - {selectedConversation.teamName}
+               </h2>
+               <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
+                 Started: {new Date(selectedConversation.createdAt).toLocaleString()}
+                 {' | '}
+                 Last Updated: {new Date(selectedConversation.updatedAt).toLocaleString()}
+               </p>
+               <div style={{
+                 maxHeight: '60vh',
+                 overflowY: 'auto',
+                 border: '1px solid #ddd',
+                 borderRadius: '8px',
+                 padding: '20px',
+                 backgroundColor: '#f9f9f9'
+               }}>
+                 {selectedConversation.messages.map((message, index) => (
+                   <div
+                     key={index}
+                     style={{
+                       marginBottom: '16px',
+                       padding: '12px',
+                       borderRadius: '8px',
+                       backgroundColor: message.role === 'user' ? '#e3f2fd' : '#f1f8e9',
+                       border: `1px solid ${message.role === 'user' ? '#90caf9' : '#c5e1a5'}`,
+                     }}
+                   >
+                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                       <strong style={{ color: message.role === 'user' ? '#1976d2' : '#689f38' }}>
+                         {message.role === 'user' ? '👤 User' : '🤖 ScavAI'}
+                       </strong>
+                       <span style={{ fontSize: '12px', color: '#666' }}>
+                         {new Date(message.timestamp).toLocaleString()}
+                       </span>
+                     </div>
+                     <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                       {message.content}
+                     </p>
+                   </div>
+                 ))}
+               </div>
+               <div style={{ marginTop: '20px' }}>
+                 <button
+                   type="button"
+                   className="button"
+                   onClick={() => setSelectedConversation(null)}
+                 >
+                   Close
+                 </button>
+               </div>
+             </div>
+           </div>
+         )}
+
+         {/* New Team Codes Modal */}
+         {newTeamCodes && (
+           <div className="modal" onClick={() => setNewTeamCodes(null)}>
+             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+               <h2 className="modal-title">
+                 🎉 New Team Codes Generated
+               </h2>
+               <p style={{ fontSize: '14px', color: '#d32f2f', marginBottom: '20px', fontWeight: 'bold' }}>
+                 ⚠️ IMPORTANT: Save these codes now! They cannot be retrieved later.
+               </p>
+               <div style={{
+                 maxHeight: '50vh',
+                 overflowY: 'auto',
+                 border: '1px solid #ddd',
+                 borderRadius: '8px',
+                 padding: '20px',
+                 backgroundColor: '#f9f9f9',
+                 marginBottom: '20px'
+               }}>
+                 {newTeamCodes.map((teamCode, index) => (
+                   <div
+                     key={index}
+                     style={{
+                       marginBottom: '12px',
+                       padding: '12px',
+                       borderRadius: '8px',
+                       backgroundColor: 'white',
+                       border: '1px solid #ddd',
+                     }}
+                   >
+                     <div style={{ marginBottom: '4px', fontWeight: 'bold', fontSize: '16px' }}>
+                       {teamCode.emoji} {teamCode.name}
+                     </div>
+                     <div style={{ 
+                       fontFamily: 'monospace', 
+                       fontSize: '14px', 
+                       color: '#0070f3',
+                       wordBreak: 'break-all'
+                     }}>
+                       {teamCode.teamCode}
+                     </div>
+                   </div>
+                 ))}
+               </div>
+               <div className="modal-buttons">
+                 <button
+                   type="button"
+                   className="button"
+                   onClick={copyTeamCodesToClipboard}
+                   style={{ backgroundColor: '#0070f3' }}
+                 >
+                   📋 Copy All to Clipboard
+                 </button>
+                 <button
+                   type="button"
+                   className="button button-secondary"
+                   onClick={() => setNewTeamCodes(null)}
+                 >
+                   Close
+                 </button>
+               </div>
+             </div>
+           </div>
+         )}
+       </div>
+     </>
+   );
+ }

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { dbConnect } from "../../../lib/dbConnect";
-import { getTeamFromCookie } from "../../../lib/team";
+import { getTeamFromCookie, isAdminTeam } from "../../../lib/team";
 import { z } from "zod";
 import { ChatModel, serializedChatSchema, SerializedChat } from "../../../models/Chat";
 
@@ -62,6 +62,7 @@ export default async function handler(
       teamId: team._id,
       teamName: team.name,
       message: message,
+      isAdmin: isAdminTeam(team._id.toString()),
       createdAt: new Date(),
     });
 

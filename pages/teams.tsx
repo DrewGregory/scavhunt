@@ -237,9 +237,9 @@ export default function Page({
                 <Flex alignItems="left" m={1.5} direction="column">
                   <Heading size="medium">Team Members</Heading>
                   <UnorderedList>
-                    {t.members.map((m) => (
-                      <ListItem key={`${m.firstName}${m.familyName}`}>
-                        {m.firstName} {m.familyName}
+                    {t.members.map((m, idx) => (
+                      <ListItem key={`${m.firstName}${m.familyName || idx}`}>
+                        {m.firstName}{m.familyName ? ` ${m.familyName}` : ''}
                       </ListItem>
                     ))}
                   </UnorderedList>

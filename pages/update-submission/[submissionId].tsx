@@ -157,7 +157,7 @@ export default function UpdateSubmission({
 
           <MediaUploadForm
             apiEndpoint="/api/update-submission-media"
-            formData={{ submissionId: submission._id }}
+            formData={{ submissionId: submission._id, challengeId: submission.challengeId }}
             onSuccess={() => {
               setTimeout(() => {
                 router.push("/");

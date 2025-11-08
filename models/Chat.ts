@@ -6,6 +6,7 @@ export interface Chat {
   teamId: ObjectId;
   teamName: string;
   message: string;
+  isAdmin: boolean;
   createdAt: Date;
   id: string;
 }
@@ -15,6 +16,7 @@ export const serializedChatSchema = baseMongooseSchema.merge(
     teamId: mongooseIdSchema,
     teamName: z.string(),
     message: z.string(),
+    isAdmin: z.boolean().default(false),
     createdAt: z.date().transform((x) => x.toISOString()),
   })
 );
@@ -34,6 +36,11 @@ const ChatSchema = new mongoose.Schema<Chat>({
   message: {
     type: String,
     required: true,
+  },
+  isAdmin: {
+    type: Boolean,
+    required: true,
+    default: false,
   },
   createdAt: {
     type: Date,

@@ -6,6 +6,9 @@ import { parse } from 'csv-parse/sync';
 import { TeamModel } from "../models/Team";
 import { randomBytes } from "node:crypto";
 import { sha256 } from "../lib/hash";
+import { ScavAIConversationModel } from "../models/ScavAIConversation";
+import { ChatModel } from "../models/Chat";
+import { SubmissionModel } from "../models/Submission";
 
 const recordsSchema = z.array(
   z.array(z.string())
@@ -40,10 +43,18 @@ const updateChallengesFromCSV = async () => {
 };
 
 
-const parseMembers = (membersString :string) => {
+const parseMembers = (membersString: string) => {
   return membersString.split(", ").map(m => {
-    const [firstName, familyName] = m.split(" ");
-    return {firstName, familyName};
+    const parts = m.trim().split(" ");
+    if (parts.length === 1) {
+      // Single name - use it as firstName
+      return { firstName: parts[0] };
+    } else {
+      // Multiple parts - first is firstName, rest is familyName
+      const firstName = parts[0];
+      const familyName = parts.slice(1).join(" ");
+      return { firstName, familyName };
+    }
   });
 }
 
@@ -80,11 +91,20 @@ export const updateTeamsFromCSV = async () => {
   }
 }
 
+const dropDB = async () => {
+  await SubmissionModel.deleteMany({});
+  await ChallengeModel.deleteMany({});
+  await TeamModel.deleteMany({});
+  await ChatModel.deleteMany({});
+  await ScavAIConversationModel.deleteMany({});
+}
+
 
 if (require.main === module) {
   (async () => {
     console.log("Connecting to DB");
     await dbConnect();
+    // await dropDB();
     await updateChallengesFromCSV();
     await updateTeamsFromCSV();
     console.log("Migration complete.");

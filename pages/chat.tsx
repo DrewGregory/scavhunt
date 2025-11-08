@@ -148,10 +148,17 @@ export default function Page({
           </Flex>
         ) : (
           messages.map((msg, index) => (
-            <Card key={`${msg._id}-${index}`} p={3} width="100%">
+            <Card 
+              key={`${msg._id}-${index}`} 
+              p={3} 
+              width="100%"
+              bg={msg.isAdmin ? "blue.50" : "white"}
+              borderColor={msg.isAdmin ? "blue.200" : "gray.200"}
+              borderWidth="1px"
+            >
               <Flex direction="column">
                 <Flex justifyContent="space-between" alignItems="center" mb={1}>
-                  <Text fontWeight="bold" fontSize="sm">
+                  <Text fontWeight="bold" fontSize="sm" color={msg.isAdmin ? "blue.700" : "inherit"}>
                     {msg.teamName}
                   </Text>
                   <Text fontSize="xs" color="gray.500">

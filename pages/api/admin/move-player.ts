@@ -49,10 +49,11 @@ export default async function handler(
       { $push: { members: player } }
     );
 
-    // Remove player from source team
+    // Remove player from source team by rebuilding the members array without the removed player
+    const updatedMembers = fromTeam.members.filter((_, idx) => idx !== playerIndex);
     await TeamModel.findByIdAndUpdate(
       fromTeamId,
-      { $pull: { members: { firstName: player.firstName, familyName: player.familyName } } }
+      { $set: { members: updatedMembers } }
     );
 
     return res.status(200).json({ success: true });

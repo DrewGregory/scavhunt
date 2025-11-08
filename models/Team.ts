@@ -10,7 +10,7 @@ export interface Team {
   members: Array<{
     _id: string;
     firstName: string;
-    familyName: string;
+    familyName?: string;
   }>
 }
 
@@ -22,7 +22,7 @@ export const serializedTeamSchema = baseMongooseSchema.merge(z.object({
   members: z.array(
     z.object({
       firstName: z.string(),
-      familyName: z.string(),
+      familyName: z.string().optional(),
     })
   ),
 }));
@@ -51,7 +51,7 @@ const TeamSchema = new mongoose.Schema<TeamDocument>({
         },
         familyName: {
           type: String,
-          required: true,
+          required: false,
         },
       }
     ],

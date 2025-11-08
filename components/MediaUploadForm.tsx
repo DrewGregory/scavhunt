@@ -10,7 +10,7 @@ import {
   Box,
 } from "@chakra-ui/react";
 import axios from "axios";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { submissionResponseBodySchema } from "../lib/types";
 import Uppy from '@uppy/core';
 import Dashboard from '@uppy/react/dashboard';
@@ -51,6 +51,7 @@ export default function MediaUploadForm({
     message: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [uploadComplete, setUploadComplete] = useState<boolean>(false);
   const { challengeId } = formData;
 
   const [uppy] = useState(() => new Uppy({
@@ -84,6 +85,25 @@ export default function MediaUploadForm({
     },
   }));
 
+  // Listen to Uppy events to update state when uploads complete
+  useEffect(() => {
+    const handleUploadSuccess = () => {
+      setUploadComplete(true);
+    };
+    
+    const handleFileRemoved = () => {
+      setUploadComplete(false);
+    };
+
+    uppy.on('upload-success', handleUploadSuccess);
+    uppy.on('file-removed', handleFileRemoved);
+    
+    return () => {
+      uppy.off('upload-success', handleUploadSuccess);
+      uppy.off('file-removed', handleFileRemoved);
+    };
+  }, [uppy]);
+
   const handleSubmit = async () => {
     if (!mediaURL && !skipUpload) {
       setResult({ success: false, message: "Please select a file to upload." });
@@ -104,7 +124,7 @@ export default function MediaUploadForm({
           mediaURL,
           skipUpload,
           note,
-          challengeId,
+          ...formData,
         })
       })
       const response = submissionResponseBodySchema.parse(await res.json());      
@@ -143,13 +163,13 @@ export default function MediaUploadForm({
     }
   };
 
-  const files = uppy.getFiles();
   const mediaURL = useMemo(() => {
+    const files = uppy.getFiles();
     if (files.length === 0) {
       return "";
     }
     return files[0].uploadURL || "";
-  }, [files]);
+  }, [uppy, uploadComplete]);
   return (
       <VStack spacing={4} width="100%">
       
@@ -179,7 +199,7 @@ export default function MediaUploadForm({
               setSkipUpload(e.target.checked);
             }}
           >
-            Skip upload
+            Skip upload (If having trouble, try again after submission, or send video to your point of contact)
           </Checkbox>
           {skipUploadHelperText && (
             <FormHelperText>

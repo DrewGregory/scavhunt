@@ -11,6 +11,7 @@ const requestBodySchema = z.object({
   challengeId: z.string(), 
   note: z.string(),
   mediaURL: z.string().optional(),
+  skipUpload: z.boolean().optional(),
 });
 
 export default async (req: NextApiRequest, res: NextApiResponse) => {
@@ -31,7 +32,7 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
   if (!parsedReq.success) {
     return res.status(400).json({ error: "Invalid request body" });
   }
-  const { challengeId, note, mediaURL } = parsedReq.data;
+  const { challengeId, note, mediaURL, skipUpload } = parsedReq.data;
 
   if (note == null || note === "") {
     return {
@@ -50,7 +51,15 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     };
   }
 
-  if (mediaURL != null) {
+  // If skip upload is enabled, we don't need mediaURL
+  if (!skipUpload && (mediaURL == null || mediaURL === "")) {
+    return respond(400, {
+      status: "error",
+      message: "Please upload a file or check 'Skip upload'",
+    });
+  }
+
+  if (mediaURL != null && mediaURL !== "") {
     const spacesKey = process.env.SPACES_KEY;
     assert(spacesKey != null);
     const spacesSecret = process.env.SPACES_SECRET;

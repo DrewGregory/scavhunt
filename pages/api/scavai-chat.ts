@@ -4,6 +4,7 @@ import { ChallengeModel } from "../../models/Challenge";
 import { getTeamFromCookie } from "../../lib/team";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
+import { ScavAIConversationModel } from "../../models/ScavAIConversation";
 
 const RequestBody = z.object({
   message: z.string(),
@@ -15,10 +16,12 @@ const RequestBody = z.object({
       })
     )
     .optional(),
+  conversationId: z.string().optional(),
 });
 
 type ResponseData = {
   response: string;
+  conversationId?: string;
   error?: string;
 };
 
@@ -44,7 +47,7 @@ export default async function handler(
     return;
   }
 
-  const { message, history } = parsedReq.data;
+  const { message, history, conversationId } = parsedReq.data;
 
   try {
     // Fetch all challenges
@@ -138,7 +141,50 @@ Since the locations aren't a secret, you can share the locations if the user ask
       return;
     }
 
-    res.status(200).json({ response: responseText });
+    // Save or update the conversation
+    try {
+      const now = new Date();
+      const userMessage = {
+        role: "user" as const,
+        content: message,
+        timestamp: now,
+      };
+      const assistantMessage = {
+        role: "assistant" as const,
+        content: responseText,
+        timestamp: new Date(),
+      };
+
+      if (conversationId) {
+        // Update existing conversation
+        await ScavAIConversationModel.findByIdAndUpdate(conversationId, {
+          $push: {
+            messages: { $each: [userMessage, assistantMessage] },
+          },
+          updatedAt: new Date(),
+        });
+      } else {
+        // Create new conversation
+        const newConversation = await ScavAIConversationModel.create({
+          teamId: team._id,
+          teamName: team.name,
+          messages: [userMessage, assistantMessage],
+          createdAt: now,
+          updatedAt: now,
+        });
+        // Return the conversation ID so frontend can track it
+        res.status(200).json({
+          response: responseText,
+          conversationId: newConversation._id.toString(),
+        });
+        return;
+      }
+    } catch (saveError) {
+      console.error("Error saving conversation:", saveError);
+      // Don't fail the request if saving fails
+    }
+
+    res.status(200).json({ response: responseText, conversationId });
   } catch (error) {
     console.error("Error in scavai-chat:", error);
     if (error instanceof Error) {

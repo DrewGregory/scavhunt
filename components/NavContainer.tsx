@@ -53,12 +53,14 @@ export default function NavContainer({
   fullScreen,
   bgColor,
   hgt,
+  hideTopBar,
 }: {
   title: string;
   children: ReactNode;
   fullScreen?: boolean;
   bgColor?: string;
   hgt?: string;
+  hideTopBar?: boolean;
 }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const team = useTeam();
@@ -84,32 +86,52 @@ export default function NavContainer({
           <SidebarContent title={"Scavhunt"} onClose={onClose} />
         </DrawerContent>
       </Drawer>
-      <MobileNav
-        display={{ base: "flex", md: "none" }}
-        height="10dvh"
-        title={title}
-        onOpen={onOpen}
-      />
-      <Flex
-        display={{ base: "none", md: "flex" }}
-        width="80vw"
-        ml="20vw"
-        p={4}
-        height="10dvh"
-        alignItems="center"
-        flexDirection="row"
-        backgroundColor={bgColor ? bgColor : "white"}
-      >
-        <Text flex={1} fontSize="2xl" fontFamily="monospace" fontWeight="bold">
-          {title}
-        </Text>
-        {team && <Text>{team.emoji}</Text>}
-      </Flex>
+      {!hideTopBar && (
+        <MobileNav
+          display={{ base: "flex", md: "none" }}
+          height="10dvh"
+          title={title}
+          onOpen={onOpen}
+        />
+      )}
+      {hideTopBar && (
+        <IconButton
+          display={{ base: "block", md: "none" }}
+          position="fixed"
+          top={4}
+          left={4}
+          zIndex={10}
+          variant="solid"
+          onClick={onOpen}
+          aria-label="open menu"
+          icon={<FiMenu />}
+          bg="whiteAlpha.600"
+          backdropFilter="blur(8px)"
+          _hover={{ bg: "whiteAlpha.700" }}
+        />
+      )}
+      {!hideTopBar && (
+        <Flex
+          display={{ base: "none", md: "flex" }}
+          width="80vw"
+          ml="20vw"
+          p={4}
+          height="10dvh"
+          alignItems="center"
+          flexDirection="row"
+          backgroundColor={bgColor ? bgColor : "white"}
+        >
+          <Text flex={1} fontSize="2xl" fontFamily="monospace" fontWeight="bold">
+            {title}
+          </Text>
+          {team && <Text>{team.emoji}</Text>}
+        </Flex>
+      )}
       <Box
         ml={{ base: 0, md: "20vw" }}
         p={fullScreen ? 0 : 4}
         width={{ base: "100vw", md: "80vw" }}
-        height={hgt ? hgt : "90dvh"}
+        height={hgt ? hgt : (hideTopBar ? "100dvh" : "90dvh")}
         overflow="scroll"
         background={bgColor ? bgColor : "white"}
         pb={"150px"}

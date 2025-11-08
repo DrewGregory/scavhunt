@@ -52,6 +52,7 @@ export default function ScavAI({}: InferGetServerSidePropsType<
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -79,6 +80,7 @@ export default function ScavAI({}: InferGetServerSidePropsType<
         body: JSON.stringify({
           message: input,
           history: messages,
+          conversationId: conversationId,
         }),
       });
 
@@ -87,6 +89,11 @@ export default function ScavAI({}: InferGetServerSidePropsType<
       }
 
       const data = await response.json();
+
+      // Update conversation ID if received
+      if (data.conversationId && !conversationId) {
+        setConversationId(data.conversationId);
+      }
 
       // Check if we got an error or empty response
       if (data.error || !data.response || data.response.trim() === "") {
