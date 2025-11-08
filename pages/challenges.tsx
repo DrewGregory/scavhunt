@@ -9,6 +9,7 @@ import {
   Card,
   Flex,
   Heading,
+  Input,
   Select,
   Text,
   VStack,
@@ -74,6 +75,7 @@ export default function Page({
     challengeSearchParam
   );
   const [sortOption, setSortOption] = useState<SortOption>('default');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -86,10 +88,18 @@ export default function Page({
 
   const team = useTeam();
   
+  // Filter challenges based on search query (case-insensitive)
+  const filteredChallenges = searchQuery.trim() === '' 
+    ? challenges 
+    : challenges.filter(c => 
+        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.prompt.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+  
   // Sort challenges based on selected option
   const sortedChallenges = sortOption === 'default' 
-    ? challenges 
-    : [...challenges].sort((a, b) => {
+    ? filteredChallenges 
+    : [...filteredChallenges].sort((a, b) => {
         switch (sortOption) {
           case 'points-high':
             return b.pts - a.pts;
@@ -103,6 +113,16 @@ export default function Page({
   return (
     <NavContainer title="Challenges">
       <VStack spacing={4}>
+        <Input
+          placeholder="Search challenges..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          width="100%"
+          bg="white"
+          borderRadius="md"
+          boxShadow="sm"
+          size="md"
+        />
         <Select 
           value={sortOption} 
           onChange={(e) => setSortOption(e.target.value as SortOption)}
