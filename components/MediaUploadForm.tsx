@@ -9,7 +9,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import axios from "axios";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { submissionResponseBodySchema } from "../lib/types";
 import Uppy from '@uppy/core';
 import Dashboard from '@uppy/react/dashboard';
@@ -45,7 +45,6 @@ export default function MediaUploadForm({
 }: MediaUploadFormProps) {
   const [note, setNote] = useState<string>(initialNote);
   const [skipUpload, setSkipUpload] = useState<boolean>(false);
-  const [mediaURL, setMediaURL] = useState<string>("");
   const [result, setResult] = useState<{
     success: boolean;
     message: string;
@@ -130,6 +129,13 @@ export default function MediaUploadForm({
     }
   };
 
+  const files = uppy.getFiles();
+  const mediaURL = useMemo(() => {
+    if (files.length === 0) {
+      return "";
+    }
+    return files[0].uploadURL || "";
+  }, [files]);
   return (
       <VStack spacing={4} width="100%">
       
