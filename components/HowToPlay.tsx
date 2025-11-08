@@ -78,7 +78,7 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                             Challenges
                         </Heading>
                         <Text fontSize={{ base: "md", md: "lg" }} lineHeight="tall">
-                            • We've spread 100+ challenges across the city
+                            • We've spread 75+ challenges across the city
                             <br /><br />
                             • It's a choose your own adventure! You decide where you go and in what order
                             <br /><br />
