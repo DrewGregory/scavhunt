@@ -76,7 +76,7 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     forcePathStyle: false,
   });
 
-    const mediaURLRegex = new RegExp(`^https://${bucket}\\.${process.env.SPACES_REGION}\\.cdn\\.digitaloceanspaces\\.com/(.+)/(.+)/(.+)`);
+    const mediaURLRegex = new RegExp(`^https://${bucket}\\.${process.env.SPACES_REGION}\\.digitaloceanspaces\\.com/(.+)/(.+)/(.+)`);
     const match = mediaURL.match(mediaURLRegex);
     if (match == null) {
       return respond(400, {
