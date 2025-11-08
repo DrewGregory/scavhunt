@@ -277,7 +277,7 @@ export default function Page({
                   {s.mediaURL &&
                     s.mediaURL
                       .toLowerCase()
-                      .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4)$/i) && (
+                      .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i) && (
                       <>
                         <Box
                           as="video"
@@ -292,7 +292,7 @@ export default function Page({
                     )}
                   {s.mediaURL &&
                     !s.mediaURL.match(/\.(jpg|jpeg|png|gif)$/i) &&
-                    !s.mediaURL.match(/\.(mpg|mp2|mpeg|mpe|mpv|mp4)$/i) && (
+                    !s.mediaURL.match(/\.(mpg|mp2|mpeg|mpe|mpv|mp4|webm)$/i) && (
                       <a href={s.mediaURL}>View media</a>
                     )}
                   <Text marginTop={3}>{s.note}</Text>

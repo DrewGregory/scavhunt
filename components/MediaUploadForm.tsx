@@ -66,6 +66,9 @@ export default function MediaUploadForm({
       return {
         method,
         url: url.data.url,
+        headers: {
+          'Content-Type': file.type,
+        }
       }
     },
   }));

@@ -1,14 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { SubmissionModel } from "../../models/Submission";
-import { ChallengeModel } from "../../models/Challenge";
-import { Types } from "mongoose";
 import assert from "assert";
 import { dbConnect } from "../../lib/dbConnect";
 import { SubmissionResponseBody } from "../../lib/types";
 import { getTeamFromCookie } from "../../lib/team";
 import { PutObjectAclCommand, PutObjectCommand, PutObjectCommandInput, S3Client } from "@aws-sdk/client-s3";
-import { NextApiRequestCookies } from "next/dist/server/api-utils";
-import { randomBytes } from "crypto";
 import { z } from 'zod';
 
 const requestBodySchema = z.object({
