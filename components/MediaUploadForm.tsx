@@ -7,6 +7,7 @@ import {
   FormLabel,
   Input,
   VStack,
+  Box,
 } from "@chakra-ui/react";
 import axios from "axios";
 import { useState, useMemo } from "react";
@@ -52,7 +53,11 @@ export default function MediaUploadForm({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const { challengeId } = formData;
 
-  const [uppy] = useState(() => new Uppy().use(Webcam).use(AwsS3, {
+  const [uppy] = useState(() => new Uppy().use(Webcam, {
+    modes:["video-audio"],
+    mobileNativeCamera: true,
+    showRecordingLength: true,
+  }).use(AwsS3, {
     endpoint: apiEndpoint,
     limit: 1,
     getUploadParameters: async (file, options) => {
@@ -144,7 +149,21 @@ export default function MediaUploadForm({
       
       <FormControl as="fieldset" width="100%">
         <FormLabel as="legend">Upload video</FormLabel>
-        <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} />
+        <Box width="100%" sx={{
+          // ensure the dashboard never overflows on small screens
+          ".uppy-Dashboard-inner": { maxWidth: "100%" },
+          ".uppy-Dashboard-AddFiles": { flexDirection: ["column", "row"], gap: 3 },
+          ".uppy-Dashboard-FileList": { maxWidth: "100%", width: "100%" },
+          ".uppy-Dashboard-Item": { maxWidth: "100%" },
+        }}>
+          <Dashboard
+            uppy={uppy}
+            proudlyDisplayPoweredByUppy={false}
+            width="100%"
+            // keep dashboard compact on mobile
+            height={260}
+          />
+        </Box>
       </FormControl>
 
       {showSkipUpload && (
