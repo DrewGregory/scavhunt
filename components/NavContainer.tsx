@@ -132,9 +132,11 @@ export default function NavContainer({
         p={fullScreen ? 0 : 4}
         width={{ base: "100vw", md: "80vw" }}
         height={hgt ? hgt : (hideTopBar ? "100dvh" : "90dvh")}
-        overflow="scroll"
+        overflow={fullScreen ? "hidden" : "scroll"}
         background={bgColor ? bgColor : "white"}
-        pb={"150px"}
+        pb={fullScreen ? 0 : "150px"}
+        display={fullScreen ? "flex" : "block"}
+        flexDirection={fullScreen ? "column" : undefined}
       >
         {children}
       </Box>

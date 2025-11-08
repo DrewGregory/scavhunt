@@ -76,7 +76,7 @@ export default function Page({
 }) {
   return (
     <NavContainer title="Map" fullScreen>
-      <Flex grow={1} w="100%" h="100%" p={0}>
+      <Flex flex={1} w="100%" h="100%" p={0}>
         <LeafletMap challenges={challenges} locations={locations} />
       </Flex>
     </NavContainer>
