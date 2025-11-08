@@ -39,11 +39,10 @@ export default async function handler(
 
     const filter: any = {};
     if (threadId) {
+      // If threadId is provided, only get messages for that thread
       filter.threadId = new Types.ObjectId(threadId);
-    } else {
-      // For main chat, exclude messages with threadId
-      filter.threadId = { $exists: false };
     }
+    // If no threadId, get all messages (both general and video comments)
 
     const messages = await ChatModel.find(filter)
       .sort({ createdAt: -1 })

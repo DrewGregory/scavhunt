@@ -9,9 +9,11 @@ import {
   Input,
   Text,
   VStack,
+  Badge,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
 import { GiSpeechBubbles } from "react-icons/gi";
+import { FaVideo } from "react-icons/fa";
 import NavContainer from "../components/NavContainer";
 import { useTeam } from "../components/useTeam";
 import { getTeamFromCookie } from "../lib/team";
@@ -151,9 +153,16 @@ export default function Page({
             <Card key={`${msg._id}-${index}`} p={3} width="100%">
               <Flex direction="column">
                 <Flex justifyContent="space-between" alignItems="center" mb={1}>
-                  <Text fontWeight="bold" fontSize="sm">
-                    {msg.teamName}
-                  </Text>
+                  <Flex alignItems="center" gap={2}>
+                    <Text fontWeight="bold" fontSize="sm">
+                      {msg.teamName}
+                    </Text>
+                    {msg.threadId && (
+                      <Badge colorScheme="purple" display="flex" alignItems="center" p={1}>
+                        <Icon as={FaVideo} boxSize={3} />
+                      </Badge>
+                    )}
+                  </Flex>
                   <Text fontSize="xs" color="gray.500">
                     {new Date(msg.createdAt).toLocaleString()}
                   </Text>
