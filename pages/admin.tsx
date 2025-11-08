@@ -1029,28 +1029,28 @@ export default function AdminPage() {
                  backgroundColor: '#f9f9f9'
                }}>
                  {selectedConversation.messages.map((message, index) => (
-                   <div
-                     key={index}
-                     style={{
-                       marginBottom: '16px',
-                       padding: '12px',
-                       borderRadius: '8px',
-                       backgroundColor: message.role === 'user' ? '#e3f2fd' : '#f1f8e9',
-                       border: `1px solid ${message.role === 'user' ? '#90caf9' : '#c5e1a5'}`,
-                     }}
-                   >
-                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                       <strong style={{ color: message.role === 'user' ? '#1976d2' : '#689f38' }}>
-                         {message.role === 'user' ? '👤 User' : '🤖 ScavAI'}
-                       </strong>
-                       <span style={{ fontSize: '12px', color: '#666' }}>
-                         {new Date(message.timestamp).toLocaleString()}
-                       </span>
-                     </div>
-                     <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                       {message.content}
-                     </p>
-                   </div>
+                  <div
+                    key={index}
+                    style={{
+                      marginBottom: '16px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      backgroundColor: message.role === 'user' ? '#e3f2fd' : '#f1f8e9',
+                      border: `1px solid ${message.role === 'user' ? '#90caf9' : '#c5e1a5'}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <strong style={{ color: message.role === 'user' ? '#1976d2' : '#689f38' }}>
+                        {message.role === 'user' ? `👤 ${selectedConversation.teamName}` : '🤖 ScavAI'}
+                      </strong>
+                      <span style={{ fontSize: '12px', color: '#666' }}>
+                        {new Date(message.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {message.content}
+                    </p>
+                  </div>
                  ))}
                </div>
                <div style={{ marginTop: '20px' }}>

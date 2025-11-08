@@ -72,16 +72,22 @@ export default function ScavAI({}: InferGetServerSidePropsType<
     setIsLoading(true);
 
     try {
+      const requestBody: any = {
+        message: input,
+        history: messages,
+      };
+      
+      // Only include conversationId if it exists
+      if (conversationId) {
+        requestBody.conversationId = conversationId;
+      }
+      
       const response = await fetch("/api/scavai-chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          message: input,
-          history: messages,
-          conversationId: conversationId,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
