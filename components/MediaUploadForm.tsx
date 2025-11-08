@@ -1,11 +1,4 @@
 import {
-  Alert,
-  Button,
-  Checkbox,
-  FormControl,
-  FormHelperText,
-  FormLabel,
-  Input,
   VStack,
 } from "@chakra-ui/react";
 import axios from "axios";
@@ -18,8 +11,7 @@ import AwsS3 from '@uppy/aws-s3';
 
 import '@uppy/core/css/style.min.css';
 import '@uppy/dashboard/css/style.min.css';
-
-
+import '@uppy/webcam/css/style.min.css';
 
 interface MediaUploadFormProps {
   apiEndpoint: string;
@@ -38,13 +30,10 @@ export default function MediaUploadForm({
   apiEndpoint,
   formData,
   onSuccess,
-  buttonText = "Upload",
-  acceptedFileTypes = "image/*,video/*",
   showNoteField = false,
   initialNote = "",
   noteRequired = false,
   showSkipUpload = false,
-  skipUploadHelperText = "If you're having trouble uploading your video, you can skip it — but please still take and send videos to us! We're hoping to save them as a memory and maybe make a video out of it!",
 }: MediaUploadFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState<string>(initialNote);
@@ -63,6 +52,7 @@ export default function MediaUploadForm({
       const { challengeId } = formData;
       const url = await axios.post("/api/presigned-url", {
         challengeId, 
+        filename: file.name,
         fileType: file.type,
         contentType: file.type
       });
@@ -155,7 +145,7 @@ export default function MediaUploadForm({
 
   return (
       <VStack spacing={4} width="100%">
-      <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} />
+      <Dashboard uppy={uppy} proudlyDisplayPoweredByUppy={false} doneButtonHandler={() => {console.log(uppy.getFiles()[0].uploadURL)}}/>
       {/* <FormControl as="fieldset" width="100%">
         <FormLabel as="legend">Upload video</FormLabel>
         <Input
@@ -210,9 +200,9 @@ export default function MediaUploadForm({
         </Alert>
       )} */}
 
-      <Button onClick={handleSubmit} isLoading={isSubmitting} width="100%">
+      {/* <Button onClick={handleSubmit} isLoading={isSubmitting} width="100%">
         {buttonText}
-      </Button>
+      </Button> */}
     </VStack>
   );
 }
