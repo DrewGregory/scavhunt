@@ -7,7 +7,6 @@ import { randomBytes } from "crypto";
 type PresignedRequestBody = {
   challengeId?: string;
   filename?: string; // original filename, used to derive extension
-  fileType?: string; // alternative to filename
   contentType?: string;
 };
 
@@ -23,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const body = (req.body ?? {}) as PresignedRequestBody;
-  const { challengeId, filename, fileType, contentType } = body;
+  const { challengeId, filename, contentType } = body;
   if (!challengeId || typeof challengeId !== "string") {
     return res.status(400).json({ error: "Missing or invalid 'challengeId' in request body" });
   }
@@ -50,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // determine file extension same way upload.ts does
   const extFromFilename = filename?.split(".").pop();
-  const fileExt = (fileType ?? extFromFilename ?? "") as string;
+  const fileExt = extFromFilename ?? "";
   if (!fileExt) {
     return res.status(400).json({ error: "Missing file extension (provide filename or fileType)" });
   }

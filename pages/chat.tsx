@@ -12,8 +12,8 @@ import {
   Badge,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
-import { GiSpeechBubbles } from "react-icons/gi";
 import { FaVideo } from "react-icons/fa";
+import { GiBubbles, GiSpeechBubbles } from "react-icons/gi";
 import NavContainer from "../components/NavContainer";
 import { useTeam } from "../components/useTeam";
 import { getTeamFromCookie } from "../lib/team";
@@ -145,7 +145,7 @@ export default function Page({
       <VStack spacing={2} alignItems="stretch" pb="0">
         {messages.length === 0 ? (
           <Flex direction="column" alignItems="center" justifyContent="center" py={10} color="gray.400">
-            <Icon as={GiSpeechBubbles} boxSize={20} mb={4} />
+            <Icon as={GiBubbles} boxSize={20} mb={4} />
             <Text fontSize="lg">No messages yet. Start the conversation!</Text>
           </Flex>
         ) : (
