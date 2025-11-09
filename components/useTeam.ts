@@ -12,7 +12,8 @@ export const useTeam = (): Team | null => {
 
   useEffect(() => {
     // Skip location tracking if disabled via environment variable
-    if (process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING === 'true') {
+    const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
+    if (disableTracking === 'true' || disableTracking === '1') {
       return;
     }
     

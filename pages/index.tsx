@@ -279,23 +279,25 @@ export default function Page({
             size="md"
           />
           <VStack width="100%" spacing={2}>
-            <HStack
-              width="100%"
-              bg="white"
-              p={3}
-              borderRadius="md"
-              boxShadow="sm"
-              justifyContent="space-between"
-            >
-              <Text fontSize="sm" fontWeight="medium" color="gray.700">
-                Sort by favorites
-              </Text>
-              <Switch
-                isChecked={sortByFavorites}
-                onChange={(e) => setSortByFavorites(e.target.checked)}
-                colorScheme="red"
-              />
-            </HStack>
+            {isAdmin && (
+              <HStack
+                width="100%"
+                bg="white"
+                p={3}
+                borderRadius="md"
+                boxShadow="sm"
+                justifyContent="space-between"
+              >
+                <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                  Sort by favorites <Text as="span" fontSize="xs" color="gray.500">[Visible to Admins Only]</Text>
+                </Text>
+                <Switch
+                  isChecked={sortByFavorites}
+                  onChange={(e) => setSortByFavorites(e.target.checked)}
+                  colorScheme="red"
+                />
+              </HStack>
+            )}
             <HStack
               width="100%"
               bg="white"
@@ -427,9 +429,11 @@ export default function Page({
                       size="md"
                       fontSize="xl"
                     />
-                    <Text fontSize="sm" fontWeight="semibold" color="gray.600" minW="15px">
-                      {favoriteCounts[s._id] || 0}
-                    </Text>
+                    {(isAdmin && sortByFavorites) && (
+                      <Text fontSize="sm" fontWeight="semibold" color="gray.600" minW="15px">
+                        {favoriteCounts[s._id] || 0}
+                      </Text>
+                    )}
                   </Flex>
                   {(isAdmin || team._id === s.teamId) && (
                     <Box visibility={s._id === selectedSubmission ? "visible" : "hidden"} width="32px">
