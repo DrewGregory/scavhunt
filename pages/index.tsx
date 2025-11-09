@@ -28,7 +28,7 @@ import {
 } from "@chakra-ui/react";
 import { ChevronDownIcon } from "@chakra-ui/icons";
 import { HiDotsVertical } from "react-icons/hi";
-import { AiFillStar, AiOutlineStar } from "react-icons/ai";
+import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
 import { z } from "zod";
 import { serializedChallengeSchema } from "../models/Challenge";
 import { isAdminTeam, getTeamFromCookie } from "../lib/team";
@@ -293,7 +293,7 @@ export default function Page({
               <Switch
                 isChecked={sortByFavorites}
                 onChange={(e) => setSortByFavorites(e.target.checked)}
-                colorScheme="yellow"
+                colorScheme="red"
               />
             </HStack>
             <HStack
@@ -310,7 +310,7 @@ export default function Page({
               <Switch
                 isChecked={showOnlyMyFavorites}
                 onChange={(e) => setShowOnlyMyFavorites(e.target.checked)}
-                colorScheme="yellow"
+                colorScheme="red"
               />
             </HStack>
           </VStack>
@@ -416,12 +416,12 @@ export default function Page({
                   <Flex alignItems="center" gap={0}>
                     <IconButton
                       aria-label="Toggle favorite"
-                      icon={userFavorites.has(s._id) ? <AiFillStar /> : <AiOutlineStar />}
+                      icon={userFavorites.has(s._id) ? <AiFillHeart /> : <AiOutlineHeart />}
                       onClick={(e) => toggleFavorite(s._id, e)}
                       variant="ghost"
-                      color={userFavorites.has(s._id) ? "yellow.500" : "gray.400"}
+                      color={userFavorites.has(s._id) ? "red.500" : "gray.400"}
                       _hover={{ 
-                        color: userFavorites.has(s._id) ? "yellow.600" : "gray.500",
+                        color: userFavorites.has(s._id) ? "red.600" : "gray.500",
                         bg: "transparent"
                       }}
                       size="md"

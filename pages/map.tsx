@@ -46,7 +46,7 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
   })();
 
   // Skip fetching locations if location tracking is disabled
-  const locationsRaw = process.env.DISABLE_LOCATION_TRACKING === 'true' 
+  const locationsRaw = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING === 'true' 
     ? [] 
     : await LocationModel.aggregate([
         {

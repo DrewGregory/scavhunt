@@ -83,20 +83,15 @@ The [Digital Ocean Spaces Key Secret](https://docs.digitalocean.com/products/spa
 
 The scavenger hunt start time in the form of an ISOString.
 
-### DISABLE_LOCATION_TRACKING (Optional)
+### NEXT_PUBLIC_DISABLE_LOCATION_TRACKING (Optional)
 
 Set to `true` to disable location tracking entirely. When enabled:
+- The browser will not request location permissions from users
 - No location updates will be saved to the database
 - Team locations will not be displayed on the map
 - No location data will be sent from server to client
 
-### NEXT_PUBLIC_DISABLE_LOCATION_TRACKING (Optional)
-
-Set to `true` to disable client-side location tracking. When enabled:
-- The browser will not request location permissions from users
-- No location data will be collected from users' browsers
-
-**Note**: To fully disable location tracking, set both `DISABLE_LOCATION_TRACKING` and `NEXT_PUBLIC_DISABLE_LOCATION_TRACKING` to `true`. This ensures both server-side storage and client-side collection are disabled.
+This is useful if you want to run the scavenger hunt without real-time team tracking features.
 
 ## Load example data
 
