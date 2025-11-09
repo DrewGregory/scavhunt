@@ -11,6 +11,11 @@ export const useTeam = (): Team | null => {
   const [location, setLocation] = useState<LatLngLiteral>();
 
   useEffect(() => {
+    // Skip location tracking if disabled via environment variable
+    if (process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING === 'true') {
+      return;
+    }
+    
     navigator.geolocation.getCurrentPosition(p => {
       const { latitude, longitude } = p.coords;
       setLocation({

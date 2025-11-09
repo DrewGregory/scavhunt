@@ -11,8 +11,10 @@ import {
   Card,
   Flex,
   Heading,
+  HStack,
   Input,
   Link,
+  Switch,
   Tag,
   Text,
   VStack,
@@ -26,6 +28,7 @@ import {
 } from "@chakra-ui/react";
 import { ChevronDownIcon } from "@chakra-ui/icons";
 import { HiDotsVertical } from "react-icons/hi";
+import { AiFillStar, AiOutlineStar } from "react-icons/ai";
 import { z } from "zod";
 import { serializedChallengeSchema } from "../models/Challenge";
 import { isAdminTeam, getTeamFromCookie } from "../lib/team";
@@ -140,8 +143,75 @@ export default function Page({
     submissionSearchParam
   );
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [userFavorites, setUserFavorites] = useState<Set<string>>(new Set());
+  const [favoriteCounts, setFavoriteCounts] = useState<Record<string, number>>({});
+  const [sortByFavorites, setSortByFavorites] = useState<boolean>(false);
+  const [showOnlyMyFavorites, setShowOnlyMyFavorites] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string>('');
 
   const ref = useRef<HTMLDivElement>(null);
+
+  // Generate or load userId from localStorage on mount
+  useEffect(() => {
+    let storedUserId = localStorage.getItem('scavhunt-userId');
+    if (!storedUserId) {
+      // Generate a unique user ID
+      storedUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('scavhunt-userId', storedUserId);
+    }
+    setUserId(storedUserId);
+  }, []);
+
+  // Fetch favorites from server when userId is available
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchFavorites = async () => {
+      try {
+        const response = await fetch(`/api/favorites?userId=${userId}`);
+        const data = await response.json();
+        setUserFavorites(new Set(data.userFavorites));
+        setFavoriteCounts(data.counts);
+      } catch (error) {
+        console.error('Failed to fetch favorites', error);
+      }
+    };
+
+    fetchFavorites();
+  }, [userId]);
+
+  const toggleFavorite = async (submissionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!userId) return;
+
+    try {
+      const response = await fetch('/api/toggle-favorite', {
+        method: 'POST',
+        body: JSON.stringify({ submissionId, userId }),
+      });
+      const data = await response.json();
+
+      // Update local state
+      setUserFavorites(prev => {
+        const newSet = new Set(prev);
+        if (data.favorited) {
+          newSet.add(submissionId);
+        } else {
+          newSet.delete(submissionId);
+        }
+        return newSet;
+      });
+
+      // Update counts
+      setFavoriteCounts(prev => ({
+        ...prev,
+        [submissionId]: (prev[submissionId] || 0) + (data.favorited ? 1 : -1),
+      }));
+    } catch (error) {
+      console.error('Failed to toggle favorite', error);
+    }
+  };
 
   useEffect(() => {
     const current = ref.current;
@@ -151,12 +221,26 @@ export default function Page({
   }, [ref.current, submissionSearchParam]);
 
   // Filter submissions based on search query (case-insensitive)
-  const filteredSubmissions = searchQuery.trim() === '' 
+  const searchFilteredSubmissions = searchQuery.trim() === '' 
     ? submissions 
     : submissions.filter(s => 
         s.team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.challenge.title.toLowerCase().includes(searchQuery.toLowerCase())
       );
+
+  // Filter by user's favorites if enabled
+  const favoritesFilteredSubmissions = showOnlyMyFavorites
+    ? searchFilteredSubmissions.filter(s => userFavorites.has(s._id))
+    : searchFilteredSubmissions;
+
+  // Sort submissions by global favorite count if enabled
+  const filteredSubmissions = sortByFavorites
+    ? [...favoritesFilteredSubmissions].sort((a, b) => {
+        const aCount = favoriteCounts[a._id] || 0;
+        const bCount = favoriteCounts[b._id] || 0;
+        return bCount - aCount; // Most favorited first
+      })
+    : favoritesFilteredSubmissions;
 
   // Helper function to get submission number for a challenge (chronologically)
   const getSubmissionNumber = (submission: typeof submissions[0]) => {
@@ -194,6 +278,42 @@ export default function Page({
             boxShadow="sm"
             size="md"
           />
+          <VStack width="100%" spacing={2}>
+            <HStack
+              width="100%"
+              bg="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="sm"
+              justifyContent="space-between"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                Sort by favorites
+              </Text>
+              <Switch
+                isChecked={sortByFavorites}
+                onChange={(e) => setSortByFavorites(e.target.checked)}
+                colorScheme="yellow"
+              />
+            </HStack>
+            <HStack
+              width="100%"
+              bg="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="sm"
+              justifyContent="space-between"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                Show only my favorites
+              </Text>
+              <Switch
+                isChecked={showOnlyMyFavorites}
+                onChange={(e) => setShowOnlyMyFavorites(e.target.checked)}
+                colorScheme="yellow"
+              />
+            </HStack>
+          </VStack>
           {filteredSubmissions.length === 0 ? (
             <Heading size="md" color="gray.500" textAlign="center" mt={8}>
               No submissions match your search.
@@ -279,7 +399,7 @@ export default function Page({
                   })()}
                 </Flex>
 
-                <Flex alignItems="center" gap={2}>
+                <Flex alignItems="center" gap={1} flexShrink={0}>
                   <Flex
                     alignItems="center"
                     justifyContent="center"
@@ -293,8 +413,27 @@ export default function Page({
                       {s.challenge.pts} pts
                     </Text>
                   </Flex>
-                  {(isAdmin || team._id === s.teamId) && s._id === selectedSubmission && (
-                    <Menu>
+                  <Flex alignItems="center" gap={0}>
+                    <IconButton
+                      aria-label="Toggle favorite"
+                      icon={userFavorites.has(s._id) ? <AiFillStar /> : <AiOutlineStar />}
+                      onClick={(e) => toggleFavorite(s._id, e)}
+                      variant="ghost"
+                      color={userFavorites.has(s._id) ? "yellow.500" : "gray.400"}
+                      _hover={{ 
+                        color: userFavorites.has(s._id) ? "yellow.600" : "gray.500",
+                        bg: "transparent"
+                      }}
+                      size="md"
+                      fontSize="xl"
+                    />
+                    <Text fontSize="sm" fontWeight="semibold" color="gray.600" minW="15px">
+                      {favoriteCounts[s._id] || 0}
+                    </Text>
+                  </Flex>
+                  {(isAdmin || team._id === s.teamId) && (
+                    <Box visibility={s._id === selectedSubmission ? "visible" : "hidden"} width="32px">
+                      <Menu>
                       <MenuButton
                         as={IconButton}
                         icon={<HiDotsVertical />}
@@ -401,6 +540,7 @@ export default function Page({
                         )}
                       </MenuList>
                     </Menu>
+                    </Box>
                   )}
                   <ChevronDownIcon
                     w={5}

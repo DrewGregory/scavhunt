@@ -45,41 +45,44 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
     ]);
   })();
 
-  const locationsRaw = await LocationModel.aggregate([
-    {
-      $sort: {
-        createdAt: -1
-      }
-    },
-    {
-      $group: {
-        _id: "$teamId",
-        latestLocation: { $first: "$loc" }
-      }
-    },
-    {
-      $lookup: {
-        from: "teams",
-        localField: "_id",
-        foreignField: "_id",
-        as: "team",
-      }
-    },
-    {
-      $set: {
-        "emoji": { $first: "$team.emoji" },
-        "name": { $first: "$team.name" },
-      }
-    },
-    {
-      $project: {
-        _id: 1,
-        latestLocation: 1,
-        emoji: 1,
-        name: 1,
-      }
-    }
-  ]);
+  // Skip fetching locations if location tracking is disabled
+  const locationsRaw = process.env.DISABLE_LOCATION_TRACKING === 'true' 
+    ? [] 
+    : await LocationModel.aggregate([
+        {
+          $sort: {
+            createdAt: -1
+          }
+        },
+        {
+          $group: {
+            _id: "$teamId",
+            latestLocation: { $first: "$loc" }
+          }
+        },
+        {
+          $lookup: {
+            from: "teams",
+            localField: "_id",
+            foreignField: "_id",
+            as: "team",
+          }
+        },
+        {
+          $set: {
+            "emoji": { $first: "$team.emoji" },
+            "name": { $first: "$team.name" },
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            latestLocation: 1,
+            emoji: 1,
+            name: 1,
+          }
+        }
+      ]);
 
   return {
     props: {

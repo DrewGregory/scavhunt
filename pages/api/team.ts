@@ -31,7 +31,8 @@ export default async function handler(
   const parsedReq = RequestBody.safeParse(JSON.parse(req.body))
   if (parsedReq.success) {
     const {location} = parsedReq.data; 
-    if (location != null) {
+    // Skip location tracking if disabled via environment variable
+    if (location != null && process.env.DISABLE_LOCATION_TRACKING !== 'true') {
       const teamId = team._id;
       const latestLocation = await LocationModel.findOne({
         teamId,
