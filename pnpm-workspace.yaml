@@ -1,0 +1,12 @@
+packages:
+  - .
+
+# Minimum release age (in minutes) for packages before they can be installed.
+# This reduces the risk of installing compromised/defective packages by
+# delaying installation of newly published versions.
+# 1440 minutes = 24 hours.
+minimumReleaseAge: 1440
+
+# Behave strictly: fail resolution rather than silently falling back to a
+# version that is too new, when none satisfies minimumReleaseAge.
+minimumReleaseAgeStrict: true

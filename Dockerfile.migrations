@@ -15,12 +15,12 @@ ENV NODE_ENV development
 WORKDIR /usr/src/app
 
 # Download dependencies as a separate step to take advantage of Docker's caching.
-# Leverage a cache mount to /root/.yarn to speed up subsequent builds.
-# Leverage a bind mounts to package.json and yarn.lock to avoid having to copy them into
-# into this layer.
+# Leverage a cache mount to pnpm's store to speed up subsequent builds.
+# Leverage a bind mount to package.json and pnpm-lock.yaml to avoid having to copy them into
+# this layer.
 RUN --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=yarn.lock,target=yarn.lock \
-    yarn install --frozen-lockfile
+    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    pnpm install --frozen-lockfile
 
 ENV NODE_ENV production
 

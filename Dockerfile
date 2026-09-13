@@ -16,20 +16,20 @@ FROM node:${NODE_VERSION}-alpine
 WORKDIR /usr/src/app
 
 # Download dependencies as a separate step to take advantage of Docker's caching.
-# Leverage a cache mount to /root/.yarn to speed up subsequent builds.
-# Leverage a bind mounts to package.json and yarn.lock to avoid having to copy them into
-# into this layer.
+# Leverage a cache mount to pnpm's store to speed up subsequent builds.
+# Leverage a bind mount to package.json and pnpm-lock.yaml to avoid having to copy them into
+# this layer.
 RUN --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=yarn.lock,target=yarn.lock \
-    --mount=type=cache,target=/root/.yarn \
-    yarn install --frozen-lockfile
+    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 
 # Copy the rest of the source files into the image.
 COPY . .
 
 # build using non-production environment
-RUN yarn build
+RUN pnpm build
 
 # Run the application as a non-root user.
 USER node
@@ -41,4 +41,4 @@ EXPOSE 80
 ENV NODE_ENV production
 
 # Run the application.
-CMD yarn start
+CMD pnpm start
