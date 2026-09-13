@@ -21,7 +21,7 @@ export const getServerSideProps : GetServerSideProps = async(context) => {
   return {
     redirect: {
       destination: "/how-to-play",
-      permanent: true,
+      permanent: false,
     }
   }
 }

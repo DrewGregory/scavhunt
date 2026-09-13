@@ -10,19 +10,26 @@ export const useTeam = (): Team | null => {
 
   const [location, setLocation] = useState<LatLngLiteral>();
 
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(p => {
-      const { latitude, longitude } = p.coords;
-      setLocation({
-        lat: latitude,
-        lng: longitude,
-      });
-    }, e => {
-      if (e.code === e.PERMISSION_DENIED) {
-        alert("Please give us permission to track your team's location.");
-      }
-    })
-  }, [])
+  // Hardcode location tracking as false for now since env var is glitchy
+  // useEffect(() => {
+  //   // Skip location tracking if disabled via environment variable
+  //   const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
+  //   if (disableTracking === 'true' || disableTracking === '1') {
+  //     return;
+  //   }
+    
+  //   navigator.geolocation.getCurrentPosition(p => {
+  //     const { latitude, longitude } = p.coords;
+  //     setLocation({
+  //       lat: latitude,
+  //       lng: longitude,
+  //     });
+  //   }, e => {
+  //     if (e.code === e.PERMISSION_DENIED) {
+  //       alert("Please give us permission to track your team's location.");
+  //     }
+  //   })
+  // }, [])
 
   useEffect(() => {
     (async () => {

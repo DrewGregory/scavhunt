@@ -9,7 +9,10 @@ import {
   Card,
   Flex,
   Heading,
+  HStack,
+  Input,
   Select,
+  Switch,
   Text,
   VStack,
 } from "@chakra-ui/react";
@@ -74,6 +77,9 @@ export default function Page({
     challengeSearchParam
   );
   const [sortOption, setSortOption] = useState<SortOption>('default');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [hideCompleted, setHideCompleted] = useState<boolean>(false);
+  const [hideFullChallenges, setHideFullChallenges] = useState<boolean>(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -86,10 +92,32 @@ export default function Page({
 
   const team = useTeam();
   
+  // Filter challenges based on search query (case-insensitive)
+  const searchFilteredChallenges = searchQuery.trim() === '' 
+    ? challenges 
+    : challenges.filter(c => 
+        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.prompt.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+  
+  // Filter out completed challenges if hideCompleted is true
+  const completedFilteredChallenges = hideCompleted && team
+    ? searchFilteredChallenges.filter(c => 
+        !c.submissions.some(s => s.teamId === (team as any)._id && s.accepted)
+      )
+    : searchFilteredChallenges;
+  
+  // Filter out full challenges if hideFullChallenges is true
+  const fullFilteredChallenges = hideFullChallenges
+    ? completedFilteredChallenges.filter(c => 
+        c.submissions.filter(s => s.accepted).length < c.numWinners
+      )
+    : completedFilteredChallenges;
+  
   // Sort challenges based on selected option
   const sortedChallenges = sortOption === 'default' 
-    ? challenges 
-    : [...challenges].sort((a, b) => {
+    ? fullFilteredChallenges 
+    : [...fullFilteredChallenges].sort((a, b) => {
         switch (sortOption) {
           case 'points-high':
             return b.pts - a.pts;
@@ -103,6 +131,16 @@ export default function Page({
   return (
     <NavContainer title="Challenges">
       <VStack spacing={4}>
+        <Input
+          placeholder="Search challenges..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          width="100%"
+          bg="white"
+          borderRadius="md"
+          boxShadow="sm"
+          size="md"
+        />
         <Select 
           value={sortOption} 
           onChange={(e) => setSortOption(e.target.value as SortOption)}
@@ -115,6 +153,44 @@ export default function Page({
           <option value="points-high">Points: High to Low</option>
           <option value="points-low">Points: Low to High</option>
         </Select>
+        {team && (
+          <VStack width="100%" spacing={2}>
+            <HStack
+              width="100%"
+              bg="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="sm"
+              justifyContent="space-between"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                Hide challenges you've finished
+              </Text>
+              <Switch
+                isChecked={hideCompleted}
+                onChange={(e) => setHideCompleted(e.target.checked)}
+                colorScheme="blue"
+              />
+            </HStack>
+            <HStack
+              width="100%"
+              bg="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="sm"
+              justifyContent="space-between"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                Hide challenges at max capacity
+              </Text>
+              <Switch
+                isChecked={hideFullChallenges}
+                onChange={(e) => setHideFullChallenges(e.target.checked)}
+                colorScheme="blue"
+              />
+            </HStack>
+          </VStack>
+        )}
         {sortedChallenges.map((c) => (
           <Card
             ref={c._id === challengeSearchParam ? ref : null}
@@ -161,7 +237,7 @@ export default function Page({
                 pb={c._id === selectedChallenge ? 2 : 4}
               >
                 <Text fontSize="sm" color="gray.600">
-                  {c.submissions.filter(s => s.accepted).length} accepted, {c.submissions.filter(s => !s.accepted && !s.rejected).length} pending / {c.numWinners} submission{c.numWinners == 1 ? "" : "s"}
+                  {c.submissions.filter(s => s.accepted).length} of {c.numWinners} spot{c.numWinners === 1 ? "" : "s"} filled • {c.submissions.filter(s => !s.accepted && !s.rejected).length} pending approval
                 </Text>
               </Flex>
               {c._id === selectedChallenge && (

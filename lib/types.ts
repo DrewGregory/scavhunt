@@ -27,6 +27,7 @@ export const latestTeamLocationSchema = z.object({
         _id: mongooseIdSchema,
     }),
     emoji: z.string(),
+    name: z.string(),
 })
 
 export type LatestTeamLocation = z.infer<typeof latestTeamLocationSchema>;

@@ -8,15 +8,16 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
             position="relative"
             minHeight="100%"
             width="100%"
+            overflow="scroll"
         >
             {/* Background Image */}
             <Box
-                position="absolute"
+                position="fixed"
                 top={0}
                 left={0}
                 width="100%"
                 height="100%"
-                zIndex={0}
+                zIndex={-1}
                 overflow="hidden"
             >
                 <Image
@@ -203,6 +204,8 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                         This website is not SOC2 compliant.
                         <br />
                         For inquiries, please reach out to any housemate or Sevy.
+                        <br/>
+                        Photo credits: Aivant Goyal
                     </Text>
                     </Box>
                 </VStack>

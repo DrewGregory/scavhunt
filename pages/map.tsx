@@ -8,76 +8,110 @@ import { LocationModel } from "../models/Location";
 import { z } from "zod";
 import { LatestTeamLocation, latestTeamLocationSchema } from "../lib/types";
 import { getTeamFromCookie } from "../lib/team";
+import { serializedSubmissionSchema } from "../models/Submission";
+import { serializedTeamSchema } from "../models/Team";
 
 // https://nextjs.org/docs/pages/building-your-application/optimizing/lazy-loading#with-no-ssr
 const LeafletMap = dynamic(() => import("../components/leafletMap"), {
   ssr: false,
 });
 
+const challengeWithSubmissionsSchema = serializedChallengeSchema.merge(
+  z.object({
+    submissions: z.array(serializedSubmissionSchema)
+  })
+);
+
+type ChallengeWithSubmissions = z.infer<typeof challengeWithSubmissionsSchema>;
+
 export const getServerSideProps = async (context: GetServerSidePropsContext) => {
   await dbConnect();
 
+  const team = await getTeamFromCookie(context.req.cookies);
+
   const challenges = await (async () => {
-    const team = await getTeamFromCookie(context.req.cookies)
     if (team == null) {
       return [];
     }
-    return ChallengeModel.find({}).lean().exec();
+    return ChallengeModel.aggregate([
+      {
+        $lookup: {
+          from: "submissions",
+          localField: "_id",
+          foreignField: "challengeId",
+          as: "submissions"
+        }
+      }
+    ]);
   })();
 
-  const locationsRaw = await LocationModel.aggregate([
-    {
-      $sort: {
-        createdAt: -1
-      }
-    },
-    {
-      $group: {
-        _id: "$teamId",
-        latestLocation: { $first: "$loc" }
-      }
-    },
-    {
-      $lookup: {
-        from: "teams",
-        localField: "_id",
-        foreignField: "_id",
-        as: "team",
-      }
-    },
-    {
-      $set: {
-        "emoji": { $first: "$team.emoji" },
-      }
-    },
-    {
-      $project: {
-        _id: 1,
-        latestLocation: 1,
-        emoji: 1,
-      }
-    }
-  ]);
+  // Skip fetching locations if location tracking is disabled
+  const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
+  const locationsRaw = (disableTracking === 'true' || disableTracking === '1')
+    ? [] 
+    : await LocationModel.aggregate([
+        {
+          $sort: {
+            createdAt: -1
+          }
+        },
+        {
+          $group: {
+            _id: "$teamId",
+            latestLocation: { $first: "$loc" }
+          }
+        },
+        {
+          $lookup: {
+            from: "teams",
+            localField: "_id",
+            foreignField: "_id",
+            as: "team",
+          }
+        },
+        {
+          $set: {
+            "emoji": { $first: "$team.emoji" },
+            "name": { $first: "$team.name" },
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            latestLocation: 1,
+            emoji: 1,
+            name: 1,
+          }
+        }
+      ]);
 
   return {
     props: {
-      challenges: z.array(serializedChallengeSchema).parse(challenges),
+      challenges: z.array(challengeWithSubmissionsSchema).parse(challenges).map(c => {
+        return {
+          ...c,
+          submissions: c.submissions.filter(s => !s.rejected),
+        }
+      }),
       locations: z.array(latestTeamLocationSchema).parse(locationsRaw),
+      team: team ? serializedTeamSchema.parse(team) : null,
     }
   }
 }
 
 export default function Page({
   locations,
-  challenges
+  challenges,
+  team,
 }: {
   locations: Array<LatestTeamLocation>,
-  challenges: Array<SerializedChallenge>,
+  challenges: Array<ChallengeWithSubmissions>,
+  team: any,
 }) {
   return (
     <NavContainer title="Map" fullScreen>
       <Flex flex={1} w="100%" h="100%" p={0}>
-        <LeafletMap challenges={challenges} locations={locations} />
+        <LeafletMap challenges={challenges} locations={locations} team={team} />
       </Flex>
     </NavContainer>
   );
