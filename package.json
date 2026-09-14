@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "packageManager": "pnpm@10.18.3",
+  "packageManager": "pnpm@12.4.1",
   "author": "Jack Cable, Aivant Goyal, and Drew Gregory",
   "license": "GPLv3",
   "dependencies": {
