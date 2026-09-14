@@ -6,11 +6,13 @@
 
 # Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
 
-ARG NODE_VERSION=22.5.1
+ARG PNPM_VERSION=12@sha256:6233cc54f782bb3a25ff26be344432354811d31358f768186d90a384a8d4ca6c
 
-FROM node:${NODE_VERSION}-alpine
+FROM ghcr.io/pnpm/pnpm:${PNPM_VERSION}
 
-ENV NODE_ENV development
+RUN pnpm runtime set node 26 -g
+
+ENV NODE_ENV=development
 
 WORKDIR /usr/src/app
 
@@ -20,11 +22,12 @@ WORKDIR /usr/src/app
 # this layer.
 RUN --mount=type=bind,source=package.json,target=package.json \
     --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 # Copy the rest of the source files into the image.
 COPY . .
 
-CMD ["npx", "ts-node", "-T", "scripts/perform-migration.ts"]
+CMD ["pnpm", "exec", "ts-node", "-T", "scripts/perform-migration.ts"]

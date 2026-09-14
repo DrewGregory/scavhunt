@@ -1,4 +1,4 @@
-import { Spinner } from "@chakra-ui/spinner";
+import { Spinner } from "@chakra-ui/react";
 import { GetServerSideProps } from "next";
 import React from "react";
 import { dbConnect } from "../../lib/dbConnect";

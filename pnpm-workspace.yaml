@@ -5,14 +5,17 @@ packages:
 # This reduces the risk of installing compromised/defective packages by
 # delaying installation of newly published versions.
 # 1440 minutes = 24 hours.
-allowBuilds:
-  '@google/genai': false
-  esbuild: false
-  protobufjs: false
-  sharp: true
 
 minimumReleaseAge: 1440
 
 # Behave strictly: fail resolution rather than silently falling back to a
 # version that is too new, when none satisfies minimumReleaseAge.
 minimumReleaseAgeStrict: true
+
+# Build-script policies for pnpm 12+. `true` allows the package to run its
+# postinstall scripts; `false` silently skips them.
+allowBuilds:
+  '@google/genai': false
+  esbuild: false
+  protobufjs: false
+  sharp: true

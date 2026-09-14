@@ -1,44 +1,32 @@
 # syntax=docker/dockerfile:1
 
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Dockerfile reference guide at
-# https://docs.docker.com/go/dockerfile-reference/
+FROM node:22-slim
 
-# Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
-
-ARG NODE_VERSION=22.5.1
-
-FROM node:${NODE_VERSION}-alpine
-
-
-
+# Corepack reads the `packageManager` field in package.json and downloads the correct pnpm version.
+RUN corepack enable
 
 WORKDIR /usr/src/app
 
-# Download dependencies as a separate step to take advantage of Docker's caching.
-# Leverage a cache mount to pnpm's store to speed up subsequent builds.
-# Leverage a bind mount to package.json and pnpm-lock.yaml to avoid having to copy them into
-# this layer.
-RUN --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
-    --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+# Copy manifests first for better layer caching.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
+# Install dependencies.
+RUN pnpm install --frozen-lockfile
 
-# Copy the rest of the source files into the image.
+# Copy application source.
 COPY . .
 
-# build using non-production environment
+# Build the Next.js app.
 RUN pnpm build
 
-# Run the application as a non-root user.
-USER node
+# node:22-slim already has a `node` user — just fix ownership.
+RUN chown -R node:node /usr/src/app
 
-# Expose the port that the application listens on.
+USER node
+ENV HOME=/home/node
+
+ENV NODE_ENV=production
 EXPOSE 80
 
-# Use production node environment by default.
-ENV NODE_ENV production
-
-# Run the application.
-CMD pnpm start
+# Run Next.js directly with the real Node binary — no pnpm wrapper or shim at runtime.
+CMD ["node", "node_modules/next/dist/bin/next", "start", "-p", "80"]

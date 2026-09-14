@@ -6,13 +6,14 @@
 
 # Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
 
-ARG NODE_VERSION=22.5.1
+ARG PNPM_VERSION=12@sha256:6233cc54f782bb3a25ff26be344432354811d31358f768186d90a384a8d4ca6c
 
-FROM node:${NODE_VERSION}-alpine
+FROM ghcr.io/pnpm/pnpm:${PNPM_VERSION}
+
+RUN pnpm runtime set node 26 -g
 
 # Use production node environment by default.
-ENV NODE_ENV development
-
+ENV NODE_ENV=development
 
 WORKDIR /usr/src/app
 
@@ -22,6 +23,7 @@ WORKDIR /usr/src/app
 # this layer.
 RUN --mount=type=bind,source=package.json,target=package.json \
     --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
 
@@ -33,5 +35,4 @@ EXPOSE 80
 
 # Run the application in development mode
 
-CMD pnpm dev
-
+CMD ["pnpm", "dev"]
