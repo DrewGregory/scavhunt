@@ -2,14 +2,23 @@
 
 FROM node:22-slim AS deps
 WORKDIR /usr/src/app
-RUN corepack enable
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Schema must be present before install because postinstall runs `prisma generate`.
+COPY prisma ./prisma
 RUN pnpm install --frozen-lockfile
 
 FROM node:22-slim AS builder
 WORKDIR /usr/src/app
-RUN corepack enable
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable
 COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY --from=deps /usr/src/app/package.json ./package.json
 COPY . .
 RUN pnpm exec prisma generate && pnpm build
 

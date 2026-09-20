@@ -12,12 +12,9 @@ minimumReleaseAge: 1440
 # version that is too new, when none satisfies minimumReleaseAge.
 minimumReleaseAgeStrict: true
 
-# Build-script policies for pnpm 12+. `true` allows the package to run its
-# postinstall scripts; `false` silently skips them.
-allowBuilds:
-  '@prisma/client': true
-  '@prisma/engines': true
-  esbuild: false
-  prisma: true
-  protobufjs: false
-  sharp: true
+# pnpm 10+: only these packages may run install scripts (approve-builds).
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - sharp
