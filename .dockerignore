@@ -30,5 +30,11 @@
 **/values.dev.yaml
 **/build
 **/dist
+**/scripts
+**/*.md
+**/.env*
+**/.git*
+**/agent-transcripts
+**/.cursor
 LICENSE
 README.md

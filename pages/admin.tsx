@@ -102,6 +102,7 @@ export default function AdminPage({
   const [matchups, setMatchups] = useState<TournamentMatchup[]>([]);
   const [currentRound, setCurrentRound] = useState<number | null>(null);
   const [tournamentComplete, setTournamentComplete] = useState(false);
+  const [tournamentNotStarted, setTournamentNotStarted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -147,6 +148,7 @@ export default function AdminPage({
     setMatchups(data.matchups);
     setCurrentRound(data.currentRound);
     setTournamentComplete(Boolean(data.complete));
+    setTournamentNotStarted(Boolean(data.notStarted));
   };
 
   useEffect(() => {
@@ -323,6 +325,32 @@ export default function AdminPage({
       }
     } catch {
       alert("Failed to close round");
+    }
+  };
+
+  const handleInitializeTournament = async () => {
+    if (
+      !confirm(
+        "Create 16 neighborhoods (if needed) and open Round 1 matchups?",
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/tournament", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "initialize" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to initialize tournament");
+        return;
+      }
+      await loadTournament();
+      alert(`Bracket ready — ${data.created} Round 1 matchups created.`);
+    } catch {
+      alert("Failed to initialize tournament");
     }
   };
 
@@ -657,31 +685,43 @@ export default function AdminPage({
             >
               <Box>
                 <Heading size="md">
-                  {tournamentComplete
-                    ? "Tournament complete"
-                    : currentRound != null
-                      ? `Round ${currentRound}`
-                      : "No open matchups"}
+                  {tournamentNotStarted
+                    ? "Tournament not started"
+                    : tournamentComplete
+                      ? "Tournament complete"
+                      : currentRound != null
+                        ? `Round ${currentRound}`
+                        : "No open matchups"}
                 </Heading>
                 <Text fontSize="sm" color="gray.600">
-                  Vote tallies for current open matchups
+                  {tournamentNotStarted
+                    ? "Prod has no matchups yet — initialize Round 1 to show the bracket on the home page."
+                    : "Vote tallies for current open matchups"}
                 </Text>
               </Box>
-              <Button
-                colorScheme="orange"
-                onClick={handleCloseRound}
-                isDisabled={matchups.length === 0 || tournamentComplete}
-              >
-                Close round &amp; advance
-              </Button>
+              {tournamentNotStarted ? (
+                <Button colorScheme="green" onClick={handleInitializeTournament}>
+                  Initialize bracket
+                </Button>
+              ) : (
+                <Button
+                  colorScheme="orange"
+                  onClick={handleCloseRound}
+                  isDisabled={matchups.length === 0 || tournamentComplete}
+                >
+                  Close round &amp; advance
+                </Button>
+              )}
             </Flex>
 
             <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
               {matchups.length === 0 ? (
                 <Text color="gray.500">
-                  {tournamentComplete
-                    ? "No open matchups — tournament is finished."
-                    : "No open matchups yet."}
+                  {tournamentNotStarted
+                    ? "No matchups yet. Click “Initialize bracket” to seed 16 neighborhoods and Round 1."
+                    : tournamentComplete
+                      ? "No open matchups — tournament is finished."
+                      : "No open matchups yet."}
                 </Text>
               ) : (
                 <Table size="sm">

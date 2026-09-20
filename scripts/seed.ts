@@ -54,25 +54,34 @@ function shuffle<T>(items: T[]): T[] {
 }
 
 async function seedNeighborhoods() {
-  const existing = await prisma.neighborhood.count();
-  if (existing > 0) {
-    console.log(`Skipping neighborhoods (${existing} already exist)`);
+  let neighborhoods = await prisma.neighborhood.findMany({
+    orderBy: { name: "asc" },
+  });
+
+  if (neighborhoods.length === 0) {
+    const names = shuffle(PLACEHOLDER_NEIGHBORHOODS).slice(0, 16);
+    neighborhoods = await Promise.all(
+      names.map((name) => prisma.neighborhood.create({ data: { name } })),
+    );
+    console.log(`Created ${neighborhoods.length} neighborhoods`);
+  } else {
+    console.log(`Using ${neighborhoods.length} existing neighborhoods`);
+  }
+
+  const anyMatchups = await prisma.matchup.count();
+  if (anyMatchups > 0) {
+    console.log(`Skipping bracket (${anyMatchups} matchups already exist)`);
     return;
   }
 
-  const names = shuffle(PLACEHOLDER_NEIGHBORHOODS).slice(0, 16);
-  const neighborhoods = await Promise.all(
-    names.map((name) => prisma.neighborhood.create({ data: { name } })),
-  );
-  console.log(`Created ${neighborhoods.length} neighborhoods`);
-
-  const open = await prisma.matchup.count({ where: { isOpen: true } });
-  if (open > 0) {
-    console.log("Skipping bracket (open matchups already exist)");
+  if (neighborhoods.length < 16) {
+    console.log(
+      `Need 16 neighborhoods for a full bracket (have ${neighborhoods.length}) — skipping`,
+    );
     return;
   }
 
-  const shuffled = shuffle(neighborhoods);
+  const shuffled = shuffle(neighborhoods.slice(0, 16));
   for (let i = 0; i < shuffled.length; i += 2) {
     await prisma.matchup.create({
       data: {

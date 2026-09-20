@@ -139,9 +139,11 @@ export function AuthModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} isCentered size="md">
       <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(4px)" />
-      <ModalContent bg="whiteAlpha.950" backdropFilter="blur(12px)" mx={4}>
+      <ModalContent bg="white" color="gray.800" mx={4}>
         <ModalHeader>
-          <Heading size="md">{mode === "signup" ? "Sign up" : "Log in"}</Heading>
+          <Heading size="md" color="gray.900">
+            {mode === "signup" ? "Sign up" : "Log in"}
+          </Heading>
         </ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={6}>
@@ -156,12 +158,13 @@ export function AuthModal({
               <Stack as="form" spacing={3} onSubmit={sendCode}>
                 {mode === "signup" ? (
                   <FormControl isRequired>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel color="gray.700">Name</FormLabel>
                     <Input
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Your name"
                       bg="white"
+                      borderColor="gray.300"
                     />
                   </FormControl>
                 ) : null}
@@ -169,13 +172,14 @@ export function AuthModal({
                   <FormControl
                     isRequired={mode === "signup" || channel === "email"}
                   >
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel color="gray.700">Email</FormLabel>
                     <Input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@email.com"
                       bg="white"
+                      borderColor="gray.300"
                     />
                   </FormControl>
                 )}
@@ -183,7 +187,7 @@ export function AuthModal({
                   <FormControl
                     isRequired={mode === "signup" || channel === "sms"}
                   >
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel color="gray.700">Phone</FormLabel>
                     <Input
                       type="tel"
                       value={phone}
@@ -192,6 +196,7 @@ export function AuthModal({
                       }
                       placeholder="(415) 555-2671"
                       bg="white"
+                      borderColor="gray.300"
                     />
                   </FormControl>
                 )}
@@ -201,6 +206,7 @@ export function AuthModal({
                 <Button
                   type="button"
                   variant="link"
+                  colorScheme="yellow"
                   onClick={() => {
                     setChannel(channel === "email" ? "sms" : "email");
                     setError("");
@@ -222,7 +228,7 @@ export function AuthModal({
                       : `Code sent to ${phone}`}
                 </Text>
                 <FormControl isRequired>
-                  <FormLabel>Verification code</FormLabel>
+                  <FormLabel color="gray.700">Verification code</FormLabel>
                   <Input
                     inputMode="numeric"
                     autoComplete="one-time-code"
@@ -230,6 +236,7 @@ export function AuthModal({
                     onChange={(e) => setCode(e.target.value)}
                     placeholder="6-digit code"
                     bg="white"
+                    borderColor="gray.300"
                   />
                 </FormControl>
                 <Button type="submit" colorScheme="yellow" isLoading={busy}>
@@ -258,6 +265,7 @@ export function AuthModal({
               <Button
                 type="button"
                 variant="link"
+                colorScheme="yellow"
                 onClick={() => {
                   setChannel("email");
                   setStep("identify");

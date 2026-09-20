@@ -1,15 +1,40 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 import { prisma } from "../../../lib/prisma";
-import {
-  assertSameOrigin,
-  requireApiAdmin,
-} from "../../../lib/auth";
+import { assertSameOrigin, requireApiAdmin } from "../../../lib/auth";
 import { parseJsonBody } from "../../../lib/serialize";
 import { jsonError } from "../../../lib/http";
 
+const PLACEHOLDER_NEIGHBORHOODS = [
+  "Mission Dolores",
+  "Hayes Valley",
+  "North Beach",
+  "Outer Sunset",
+  "Castro Heights",
+  "SoMa Flats",
+  "Nob Hill",
+  "Inner Richmond",
+  "Potrero Hill",
+  "Bernal Heights",
+  "Marina Green",
+  "Haight Ashbury",
+  "Twin Peaks",
+  "Financial District",
+  "Pacific Heights",
+  "Excelsior",
+];
+
+function shuffle<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 const postSchema = z.object({
-  action: z.literal("closeRound"),
+  action: z.enum(["closeRound", "initialize"]),
 });
 
 export default async function handler(
@@ -20,16 +45,20 @@ export default async function handler(
   if (!admin) return;
 
   if (req.method === "GET") {
-    const openMatchups = await prisma.matchup.findMany({
-      where: { isOpen: true },
-      include: {
-        slotA: true,
-        slotB: true,
-        winner: true,
-        votes: true,
-      },
-      orderBy: [{ round: "asc" }, { id: "asc" }],
-    });
+    const [openMatchups, totalMatchups, neighborhoodCount] = await Promise.all([
+      prisma.matchup.findMany({
+        where: { isOpen: true },
+        include: {
+          slotA: true,
+          slotB: true,
+          winner: true,
+          votes: true,
+        },
+        orderBy: [{ round: "asc" }, { id: "asc" }],
+      }),
+      prisma.matchup.count(),
+      prisma.neighborhood.count(),
+    ]);
 
     const currentRound =
       openMatchups.length > 0
@@ -63,10 +92,17 @@ export default async function handler(
         };
       });
 
+    // Empty DB ≠ finished tournament (that was why prod looked "complete").
+    const notStarted = totalMatchups === 0;
+    const complete = !notStarted && openMatchups.length === 0;
+
     return res.status(200).json({
       currentRound,
       matchups,
-      complete: openMatchups.length === 0,
+      complete,
+      notStarted,
+      neighborhoodCount,
+      totalMatchups,
     });
   }
 
@@ -82,6 +118,60 @@ export default async function handler(
       return res.status(400).json({ error: "Invalid request body" });
     }
 
+    if (parsed.data.action === "initialize") {
+      const existingOpen = await prisma.matchup.count({
+        where: { isOpen: true },
+      });
+      if (existingOpen > 0) {
+        return res.status(400).json({
+          error: "Open matchups already exist — refuse to re-initialize",
+        });
+      }
+
+      const existingAny = await prisma.matchup.count();
+      if (existingAny > 0) {
+        return res.status(400).json({
+          error:
+            "Tournament already has matchups (possibly finished). Clear matchups in the DB before re-initializing.",
+        });
+      }
+
+      let neighborhoods = await prisma.neighborhood.findMany({
+        orderBy: { name: "asc" },
+      });
+      if (neighborhoods.length < 16) {
+        const have = new Set(neighborhoods.map((n) => n.name));
+        const toCreate = PLACEHOLDER_NEIGHBORHOODS.filter((n) => !have.has(n));
+        for (const name of toCreate) {
+          if (neighborhoods.length >= 16) break;
+          const created = await prisma.neighborhood.create({ data: { name } });
+          neighborhoods.push(created);
+        }
+      }
+      if (neighborhoods.length < 16) {
+        return res.status(400).json({
+          error: `Need 16 neighborhoods to start (have ${neighborhoods.length})`,
+        });
+      }
+
+      const shuffled = shuffle(neighborhoods.slice(0, 16));
+      for (let i = 0; i < shuffled.length; i += 2) {
+        await prisma.matchup.create({
+          data: {
+            round: 1,
+            slotAId: shuffled[i].id,
+            slotBId: shuffled[i + 1].id,
+            isOpen: true,
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        created: shuffled.length / 2,
+      });
+    }
+
     const openMatchups = await prisma.matchup.findMany({
       where: { isOpen: true },
       include: { votes: true },
@@ -89,9 +179,14 @@ export default async function handler(
     });
 
     if (openMatchups.length === 0) {
+      const total = await prisma.matchup.count();
       return res.status(400).json({
-        error: "No open matchups to close",
-        complete: true,
+        error:
+          total === 0
+            ? "Tournament not started — initialize the bracket first"
+            : "No open matchups to close",
+        complete: total > 0,
+        notStarted: total === 0,
       });
     }
 
