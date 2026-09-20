@@ -294,9 +294,9 @@ export default function HomePage({
                 color="whiteAlpha.800"
                 mb={2}
               >
-                {user ? "Tap to vote" : "Sign up to vote"}
+                {user ? "Tap a neighborhood to vote" : "Sign up to vote"}
                 {" · "}
-                switch List / Bracket above
+                scroll for later rounds
               </Text>
               <TournamentBracket
                 matchups={matchups}

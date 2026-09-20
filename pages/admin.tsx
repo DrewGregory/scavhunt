@@ -393,7 +393,7 @@ export default function AdminPage({
   const handleInitializeTournament = async () => {
     if (
       !confirm(
-        "Ensure SF neighborhoods exist and open Round 1 for all of them (any count; odd N gets a bye)?",
+        "Ensure the 16 common SF neighborhoods exist and open Round 1 for those 16?",
       )
     ) {
       return;
@@ -1138,7 +1138,7 @@ export default function AdminPage({
               {matchups.length === 0 ? (
                 <Text color="gray.500">
                   {tournamentNotStarted
-                    ? "No matchups yet. Click “Initialize bracket” to seed SF neighborhoods and Round 1."
+                    ? "No matchups yet. Click “Initialize bracket” to seed the 16 common neighborhoods and Round 1."
                     : tournamentComplete
                       ? "No open matchups — tournament is finished."
                       : "No open matchups yet."}

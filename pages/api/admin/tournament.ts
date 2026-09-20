@@ -161,12 +161,9 @@ export default async function handler(
         });
       }
 
-      // Upsert the full SF list, then include every neighborhood row in Round 1
-      // (supports any N — odd counts get a bye).
-      await ensureNeighborhoods(SF_NEIGHBORHOODS);
-      const neighborhoods = await prisma.neighborhood.findMany({
-        orderBy: { name: "asc" },
-      });
+      // Seed/ensure the default 16 neighborhoods, then open Round 1 for those only
+      // (extra neighborhoods in the catalog stay editable but aren't auto-entered).
+      const neighborhoods = await ensureNeighborhoods(SF_NEIGHBORHOODS);
       if (neighborhoods.length < 2) {
         return res.status(400).json({
           error: `Need at least 2 neighborhoods to start (have ${neighborhoods.length})`,
