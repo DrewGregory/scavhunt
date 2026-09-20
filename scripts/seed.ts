@@ -24,49 +24,15 @@ for (const file of [".env.local", ".env"]) {
 }
 
 import { prisma } from "../lib/prisma";
-
-const PLACEHOLDER_NEIGHBORHOODS = [
-  "Mission Dolores",
-  "Hayes Valley",
-  "North Beach",
-  "Outer Sunset",
-  "Castro Heights",
-  "SoMa Flats",
-  "Nob Hill",
-  "Inner Richmond",
-  "Potrero Hill",
-  "Bernal Heights",
-  "Marina Green",
-  "Haight Ashbury",
-  "Twin Peaks",
-  "Financial District",
-  "Pacific Heights",
-  "Excelsior",
-];
-
-function shuffle<T>(items: T[]): T[] {
-  const arr = [...items];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
+import { SF_NEIGHBORHOODS } from "../lib/neighborhoods";
+import {
+  createOpeningRound,
+  ensureNeighborhoods,
+} from "../lib/tournament";
 
 async function seedNeighborhoods() {
-  let neighborhoods = await prisma.neighborhood.findMany({
-    orderBy: { name: "asc" },
-  });
-
-  if (neighborhoods.length === 0) {
-    const names = shuffle(PLACEHOLDER_NEIGHBORHOODS).slice(0, 16);
-    neighborhoods = await Promise.all(
-      names.map((name) => prisma.neighborhood.create({ data: { name } })),
-    );
-    console.log(`Created ${neighborhoods.length} neighborhoods`);
-  } else {
-    console.log(`Using ${neighborhoods.length} existing neighborhoods`);
-  }
+  const neighborhoods = await ensureNeighborhoods(SF_NEIGHBORHOODS);
+  console.log(`Ensured ${neighborhoods.length} SF neighborhoods`);
 
   const anyMatchups = await prisma.matchup.count();
   if (anyMatchups > 0) {
@@ -74,25 +40,10 @@ async function seedNeighborhoods() {
     return;
   }
 
-  if (neighborhoods.length < 16) {
-    console.log(
-      `Need 16 neighborhoods for a full bracket (have ${neighborhoods.length}) — skipping`,
-    );
-    return;
-  }
-
-  const shuffled = shuffle(neighborhoods.slice(0, 16));
-  for (let i = 0; i < shuffled.length; i += 2) {
-    await prisma.matchup.create({
-      data: {
-        round: 1,
-        slotAId: shuffled[i].id,
-        slotBId: shuffled[i + 1].id,
-        isOpen: true,
-      },
-    });
-  }
-  console.log(`Created ${shuffled.length / 2} round-1 matchups`);
+  const result = await createOpeningRound(neighborhoods.map((n) => n.id));
+  console.log(
+    `Created Round 1: ${result.matchupsCreated} matchups, ${result.byes} bye(s), ${result.entrants} entrants`,
+  );
 }
 
 async function seedChallengesFromCsv() {
@@ -142,6 +93,9 @@ async function seedChallengesFromCsv() {
 async function main() {
   await seedNeighborhoods();
   await seedChallengesFromCsv();
+  const { ensureHuntSettings } = await import("../lib/time");
+  await ensureHuntSettings();
+  console.log("Hunt settings ensured");
 }
 
 main()

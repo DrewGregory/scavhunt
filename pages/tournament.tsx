@@ -12,11 +12,18 @@ import {
   useToast,
   VStack,
 } from "@chakra-ui/react";
-import type { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
-import { useState } from "react";
+import type {
+  GetServerSidePropsContext,
+  InferGetServerSidePropsType,
+} from "next";
+import { useRouter } from "next/router";
+import { useCallback, useState } from "react";
 import NavContainer from "../components/NavContainer";
+import { RegistrationSurveyModal } from "../components/RegistrationSurveyModal";
+import { RoundCountdownBanner } from "../components/RoundCountdownBanner";
 import { requireUserSSP, publicUser } from "../lib/auth";
 import { prisma } from "../lib/prisma";
+import { ensureRoundClosedIfExpired } from "../lib/tournament";
 
 type MatchupView = {
   id: string;
@@ -37,6 +44,7 @@ export const getServerSideProps = async (
   if (auth.redirect) return { redirect: auth.redirect };
 
   const user = auth.user!;
+  const roundInfo = await ensureRoundClosedIfExpired();
 
   const openRound = await prisma.matchup.aggregate({
     where: { isOpen: true },
@@ -76,7 +84,6 @@ export const getServerSideProps = async (
       };
     });
   } else {
-    // Show latest closed round if nothing is open
     const latest = await prisma.matchup.aggregate({ _max: { round: true } });
     if (latest._max.round != null) {
       const rows = await prisma.matchup.findMany({
@@ -109,11 +116,14 @@ export const getServerSideProps = async (
     }
   }
 
+  const currentRound = matchups[0]?.round ?? roundInfo.currentRound;
+
   return {
     props: {
       user: publicUser(user),
       matchups,
-      currentRound: matchups[0]?.round ?? null,
+      currentRound,
+      currentRoundEndsAt: roundInfo.endsAt,
     },
   };
 };
@@ -121,10 +131,21 @@ export const getServerSideProps = async (
 export default function TournamentPage({
   matchups: initial,
   currentRound,
+  currentRoundEndsAt,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const [matchups, setMatchups] = useState(initial);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [surveyOpen, setSurveyOpen] = useState(false);
+  const [surveyRequired, setSurveyRequired] = useState(false);
   const toast = useToast();
+  const router = useRouter();
+  const openRoundForBanner = matchups.some((m) => m.isOpen)
+    ? currentRound
+    : null;
+
+  const onExpired = useCallback(() => {
+    router.replace(router.asPath);
+  }, [router]);
 
   async function vote(matchupId: string, neighborhoodId: string) {
     setBusyId(matchupId);
@@ -136,6 +157,11 @@ export default function TournamentPage({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 403 && data.code === "SURVEY_REQUIRED") {
+          setSurveyRequired(true);
+          setSurveyOpen(true);
+          return;
+        }
         toast({
           title: data.error || "Could not vote",
           status: "error",
@@ -146,7 +172,6 @@ export default function TournamentPage({
         prev.map((m) => {
           if (m.id !== matchupId) return m;
           const next = { ...m, myVoteNeighborhoodId: neighborhoodId };
-          // Optimistic tally: move previous vote if any
           if (m.myVoteNeighborhoodId === m.slotA.id) next.votesA -= 1;
           if (m.myVoteNeighborhoodId === m.slotB.id) next.votesB -= 1;
           if (neighborhoodId === m.slotA.id) next.votesA += 1;
@@ -169,6 +194,14 @@ export default function TournamentPage({
               ? "No bracket yet — ask an admin to seed neighborhoods."
               : `Round ${currentRound}. Vote once per matchup.`}
           </Text>
+          <Box mt={3}>
+            <RoundCountdownBanner
+              round={openRoundForBanner}
+              endsAtISO={openRoundForBanner != null ? currentRoundEndsAt : null}
+              tone="light"
+              onExpired={onExpired}
+            />
+          </Box>
         </Box>
 
         {matchups.length === 0 ? (
@@ -176,8 +209,26 @@ export default function TournamentPage({
         ) : (
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
             {matchups.map((m) => {
+              const isBye = m.slotA.id === m.slotB.id;
+              if (isBye) {
+                return (
+                  <Card key={m.id}>
+                    <CardBody>
+                      <HStack justify="space-between" mb={3}>
+                        <Badge>Round {m.round}</Badge>
+                        <Badge colorScheme="purple">Bye</Badge>
+                      </HStack>
+                      <Text fontWeight="medium">{m.slotA.name}</Text>
+                      <Text fontSize="sm" color="gray.500" mt={1}>
+                        Advances automatically
+                      </Text>
+                    </CardBody>
+                  </Card>
+                );
+              }
               const total = m.votesA + m.votesB;
-              const pctA = total === 0 ? 50 : Math.round((m.votesA / total) * 100);
+              const pctA =
+                total === 0 ? 50 : Math.round((m.votesA / total) * 100);
               const voted = Boolean(m.myVoteNeighborhoodId);
               const showTallies = voted || !m.isOpen;
               return (
@@ -221,6 +272,15 @@ export default function TournamentPage({
           </SimpleGrid>
         )}
       </VStack>
+
+      <RegistrationSurveyModal
+        isOpen={surveyOpen}
+        onClose={() => {
+          setSurveyOpen(false);
+          setSurveyRequired(false);
+        }}
+        required={surveyRequired}
+      />
     </NavContainer>
   );
 }
@@ -258,7 +318,13 @@ function MatchupSide({
         {showTallies ? <Text fontSize="sm">{votes}</Text> : null}
       </Button>
       {showTallies ? (
-        <Progress value={pct} size="xs" mt={2} colorScheme="blue" borderRadius="full" />
+        <Progress
+          value={pct}
+          size="xs"
+          mt={2}
+          colorScheme="blue"
+          borderRadius="full"
+        />
       ) : null}
     </Box>
   );

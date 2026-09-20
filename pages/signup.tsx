@@ -77,7 +77,7 @@ export default function SignupPage() {
         setError(data.error || "Could not verify code");
         return;
       }
-      await router.push("/");
+      await router.push("/?survey=1");
     } finally {
       setBusy(false);
     }

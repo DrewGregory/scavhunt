@@ -153,6 +153,10 @@ export function publicUser(user: UserWithTeam) {
     team: user.team
       ? { id: user.team.id, name: user.team.name, emoji: user.team.emoji }
       : null,
+    intent: user.intent,
+    surveyCompletedAt: user.surveyCompletedAt
+      ? user.surveyCompletedAt.toISOString()
+      : null,
   };
 }
 

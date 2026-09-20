@@ -20,6 +20,12 @@ model User {
   lastSeenAt DateTime?
   updatedAt  DateTime  @updatedAt
 
+  /// playing | browsing — set by player survey
+  intent              String?
+  teamPreferences     String?
+  competitiveness     String?
+  surveyCompletedAt   DateTime?
+
   team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
   submissions  Submission[]
   favorites    Favorite[]
@@ -27,6 +33,22 @@ model User {
   votes        Vote[]
 
   @@index([teamId])
+}
+
+/// Singleton hunt window (id = "default"). Separate from tournament round deadlines.
+model HuntSettings {
+  id        String   @id @default("default")
+  startsAt  DateTime
+  endsAt    DateTime
+  updatedAt DateTime @updatedAt
+}
+
+/// When voting for a given tournament round closes (lazy auto-advance).
+model TournamentRoundSchedule {
+  id        String   @id @default(cuid())
+  round     Int      @unique
+  endsAt    DateTime
+  updatedAt DateTime @updatedAt
 }
 
 model Team {

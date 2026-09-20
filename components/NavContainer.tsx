@@ -1,4 +1,4 @@
-import React, { ReactNode } from "react";
+import React, { ReactNode, useState } from "react";
 import {
   IconButton,
   Box,
@@ -31,6 +31,7 @@ import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useSession } from "./useSession";
 import Image from "next/image";
+import { RegistrationSurveyModal } from "./RegistrationSurveyModal";
 
 interface LinkItemProps {
   name: string;
@@ -69,6 +70,13 @@ export default function NavContainer({
 }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const session = useSession();
+  const [surveyOpen, setSurveyOpen] = useState(false);
+  const [surveyDoneOverride, setSurveyDoneOverride] = useState<boolean | null>(
+    null,
+  );
+  const surveyDone =
+    surveyDoneOverride ?? Boolean(session?.user.surveyCompletedAt);
+  const surveyLabel = surveyDone ? "Edit survey" : "Player survey";
   return (
     <Box
       height="100dvh"
@@ -78,6 +86,8 @@ export default function NavContainer({
         title={"Scavhunt"}
         onClose={() => onClose}
         display={{ base: "none", md: "block" }}
+        onOpenSurvey={() => setSurveyOpen(true)}
+        surveyLabel={surveyLabel}
       />
       <Drawer
         isOpen={isOpen}
@@ -88,7 +98,12 @@ export default function NavContainer({
         size="full"
       >
         <DrawerContent>
-          <SidebarContent title={"Scavhunt"} onClose={onClose} />
+          <SidebarContent
+            title={"Scavhunt"}
+            onClose={onClose}
+            onOpenSurvey={() => setSurveyOpen(true)}
+            surveyLabel={surveyLabel}
+          />
         </DrawerContent>
       </Drawer>
       {!hideTopBar && (
@@ -97,6 +112,8 @@ export default function NavContainer({
           height="10dvh"
           title={title}
           onOpen={onOpen}
+          onOpenSurvey={() => setSurveyOpen(true)}
+          surveyLabel={surveyLabel}
         />
       )}
       {hideTopBar && (
@@ -125,10 +142,16 @@ export default function NavContainer({
           alignItems="center"
           flexDirection="row"
           backgroundColor={bgColor ? bgColor : "white"}
+          gap={3}
         >
           <Text flex={1} fontSize="2xl" fontFamily="monospace" fontWeight="bold">
             {title}
           </Text>
+          {session?.user ? (
+            <Button size="sm" variant="outline" onClick={() => setSurveyOpen(true)}>
+              {surveyLabel}
+            </Button>
+          ) : null}
           {session?.team && <Text>{session.team.emoji}</Text>}
         </Flex>
       )}
@@ -145,17 +168,28 @@ export default function NavContainer({
       >
         {children}
       </Box>
+      {session?.user ? (
+        <RegistrationSurveyModal
+          isOpen={surveyOpen}
+          onClose={() => setSurveyOpen(false)}
+          onCompleted={() => setSurveyDoneOverride(true)}
+        />
+      ) : null}
     </Box>
   );
 }
 
 interface SidebarProps extends BoxProps {
   onClose: () => void;
+  onOpenSurvey?: () => void;
+  surveyLabel?: string;
 }
 
 const SidebarContent = ({
   onClose,
   title,
+  onOpenSurvey,
+  surveyLabel = "Player survey",
   ...rest
 }: SidebarProps & { title: string }) => {
   const router = useRouter();
@@ -208,6 +242,17 @@ const SidebarContent = ({
               {session.team.emoji} {session.team.name}
             </Text>
           )}
+          {onOpenSurvey ? (
+            <Button
+              size="sm"
+              mt={2}
+              variant="outline"
+              onClick={onOpenSurvey}
+              width="fit-content"
+            >
+              {surveyLabel}
+            </Button>
+          ) : null}
           <Button
             size="sm"
             mt={2}
@@ -278,12 +323,20 @@ const NavItem = ({ icon, children, ...rest }: NavItemProps) => {
 
 interface MobileProps extends FlexProps {
   onOpen: () => void;
+  onOpenSurvey?: () => void;
+  surveyLabel?: string;
 }
-const MobileNav = ({ onOpen, title, ...rest }: MobileProps) => {
+const MobileNav = ({
+  onOpen,
+  title,
+  onOpenSurvey,
+  surveyLabel = "Player survey",
+  ...rest
+}: MobileProps) => {
   const session = useSession();
   return (
     <Flex
-      m={{ base: 0, md: "20vw" }}
+      ml={{ base: 0, md: "20vw" }}
       px={{ base: 4, md: 24 }}
       pr={4}
       height="20"
@@ -310,6 +363,11 @@ const MobileNav = ({ onOpen, title, ...rest }: MobileProps) => {
       >
         {title}
       </Text>
+      {session?.user && onOpenSurvey ? (
+        <Button size="sm" mr={2} variant="outline" onClick={onOpenSurvey}>
+          {surveyLabel}
+        </Button>
+      ) : null}
       {session?.team && <Text>{session.team.emoji}</Text>}
     </Flex>
   );

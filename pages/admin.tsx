@@ -43,6 +43,10 @@ type AdminUser = {
   teamId: string | null;
   createdAt: string;
   lastSeenAt: string | null;
+  intent: string | null;
+  teamPreferences: string | null;
+  competitiveness: string | null;
+  surveyCompletedAt: string | null;
   team: { id: string; name: string; emoji: string } | null;
   _count: { submissions: number; votes: number };
 };
@@ -72,7 +76,15 @@ type TournamentMatchup = {
   totalVotes: number;
 };
 
-type Tab = "users" | "teams" | "challenges" | "tournament";
+type Tab = "users" | "teams" | "challenges" | "tournament" | "settings";
+
+function toLocalInputValue(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -103,6 +115,18 @@ export default function AdminPage({
   const [currentRound, setCurrentRound] = useState<number | null>(null);
   const [tournamentComplete, setTournamentComplete] = useState(false);
   const [tournamentNotStarted, setTournamentNotStarted] = useState(false);
+  const [roundSchedule, setRoundSchedule] = useState<Record<number, string>>(
+    {},
+  );
+  const [currentRoundEndsAt, setCurrentRoundEndsAt] = useState<string | null>(
+    null,
+  );
+  const [scheduleDrafts, setScheduleDrafts] = useState<Record<number, string>>(
+    {},
+  );
+  const [huntStartsAt, setHuntStartsAt] = useState("");
+  const [huntEndsAt, setHuntEndsAt] = useState("");
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -149,6 +173,22 @@ export default function AdminPage({
     setCurrentRound(data.currentRound);
     setTournamentComplete(Boolean(data.complete));
     setTournamentNotStarted(Boolean(data.notStarted));
+    const schedule = (data.schedule || {}) as Record<number, string>;
+    setRoundSchedule(schedule);
+    setCurrentRoundEndsAt(data.currentRoundEndsAt ?? null);
+    const drafts: Record<number, string> = {};
+    for (const [k, v] of Object.entries(schedule)) {
+      drafts[Number(k)] = toLocalInputValue(v);
+    }
+    setScheduleDrafts(drafts);
+  };
+
+  const loadSettings = async () => {
+    const res = await fetch("/api/admin/settings");
+    if (!res.ok) throw new Error("Failed to load settings");
+    const data = await res.json();
+    setHuntStartsAt(toLocalInputValue(data.startsAt));
+    setHuntEndsAt(toLocalInputValue(data.endsAt));
   };
 
   useEffect(() => {
@@ -159,6 +199,7 @@ export default function AdminPage({
           loadTeams(),
           loadChallenges(),
           loadTournament(),
+          loadSettings(),
         ]);
       } catch {
         setError("Failed to load admin data");
@@ -331,7 +372,7 @@ export default function AdminPage({
   const handleInitializeTournament = async () => {
     if (
       !confirm(
-        "Create 16 neighborhoods (if needed) and open Round 1 matchups?",
+        "Ensure SF neighborhoods exist and open Round 1 for all of them (any count; odd N gets a bye)?",
       )
     ) {
       return;
@@ -348,9 +389,81 @@ export default function AdminPage({
         return;
       }
       await loadTournament();
-      alert(`Bracket ready — ${data.created} Round 1 matchups created.`);
+      alert(
+        `Bracket ready — ${data.entrants ?? "?"} entrants, ${data.created} matchups` +
+          (data.byes ? `, ${data.byes} bye(s)` : ""),
+      );
     } catch {
       alert("Failed to initialize tournament");
+    }
+  };
+
+  const handleSaveRoundSchedule = async (round: number) => {
+    const local = scheduleDrafts[round];
+    if (!local) {
+      alert("Pick an end date/time first");
+      return;
+    }
+    const endsAt = new Date(local);
+    if (Number.isNaN(endsAt.getTime())) {
+      alert("Invalid datetime");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/tournament", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "setRoundSchedule",
+          round,
+          endsAt: endsAt.toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to save schedule");
+        return;
+      }
+      await loadTournament();
+      alert(`Round ${round} will auto-close at ${endsAt.toLocaleString()}`);
+    } catch {
+      alert("Failed to save schedule");
+    }
+  };
+
+  const handleSaveHuntSettings = async () => {
+    if (!huntStartsAt || !huntEndsAt) {
+      alert("Both start and end times are required");
+      return;
+    }
+    const startsAt = new Date(huntStartsAt);
+    const endsAt = new Date(huntEndsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+      alert("Invalid datetime");
+      return;
+    }
+    setSettingsBusy(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to save settings");
+        return;
+      }
+      setHuntStartsAt(toLocalInputValue(data.startsAt));
+      setHuntEndsAt(toLocalInputValue(data.endsAt));
+      alert("Hunt window saved");
+    } catch {
+      alert("Failed to save settings");
+    } finally {
+      setSettingsBusy(false);
     }
   };
 
@@ -383,6 +496,7 @@ export default function AdminPage({
     { id: "teams", label: "Teams" },
     { id: "challenges", label: "Challenges" },
     { id: "tournament", label: "Tournament" },
+    { id: "settings", label: "Settings" },
   ];
 
   return (
@@ -419,6 +533,9 @@ export default function AdminPage({
                   <Th>Email</Th>
                   <Th>Phone</Th>
                   <Th>Team</Th>
+                  <Th>Intent</Th>
+                  <Th>Team prefs</Th>
+                  <Th>Compete</Th>
                   <Th>Active</Th>
                   <Th>Admin</Th>
                   <Th>Created</Th>
@@ -484,6 +601,19 @@ export default function AdminPage({
                           </option>
                         ))}
                       </Select>
+                    </Td>
+                    <Td whiteSpace="nowrap">
+                      {u.intent || (u.surveyCompletedAt ? "—" : "not done")}
+                    </Td>
+                    <Td maxW="180px">
+                      <Text fontSize="xs" noOfLines={2} title={u.teamPreferences || ""}>
+                        {u.teamPreferences || "—"}
+                      </Text>
+                    </Td>
+                    <Td maxW="120px">
+                      <Text fontSize="xs" noOfLines={2} title={u.competitiveness || ""}>
+                        {u.competitiveness || "—"}
+                      </Text>
                     </Td>
                     <Td>
                       <Switch
@@ -696,7 +826,9 @@ export default function AdminPage({
                 <Text fontSize="sm" color="gray.600">
                   {tournamentNotStarted
                     ? "Prod has no matchups yet — initialize Round 1 to show the bracket on the home page."
-                    : "Vote tallies for current open matchups"}
+                    : currentRoundEndsAt
+                      ? `Will auto-close at ${new Date(currentRoundEndsAt).toLocaleString()} (lazy on page load / vote).`
+                      : "Vote tallies for current open matchups. Set a round end time below for auto-close."}
                 </Text>
               </Box>
               {tournamentNotStarted ? (
@@ -715,10 +847,67 @@ export default function AdminPage({
             </Flex>
 
             <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="sm" mb={3}>
+                Round end schedule
+              </Heading>
+              <Text fontSize="sm" color="gray.600" mb={3}>
+                When a round&apos;s end time passes, the next page load or vote
+                closes it and opens the next round. Admin can still close early.
+              </Text>
+              <VStack align="stretch" spacing={3}>
+                {Array.from(
+                  {
+                    length: Math.max(
+                      4,
+                      currentRound ?? 1,
+                      ...Object.keys(roundSchedule).map(Number),
+                      0,
+                    ),
+                  },
+                  (_, i) => i + 1,
+                ).map((round) => (
+                  <HStack key={round} flexWrap="wrap" spacing={3}>
+                    <Text minW="80px" fontWeight="medium">
+                      Round {round}
+                    </Text>
+                    <Input
+                      type="datetime-local"
+                      size="sm"
+                      maxW="240px"
+                      value={scheduleDrafts[round] ?? ""}
+                      onChange={(e) =>
+                        setScheduleDrafts((prev) => ({
+                          ...prev,
+                          [round]: e.target.value,
+                        }))
+                      }
+                    />
+                    <Button
+                      size="sm"
+                      colorScheme="blue"
+                      onClick={() => handleSaveRoundSchedule(round)}
+                    >
+                      Save
+                    </Button>
+                    {roundSchedule[round] ? (
+                      <Text fontSize="xs" color="gray.500">
+                        Saved: {new Date(roundSchedule[round]).toLocaleString()}
+                      </Text>
+                    ) : (
+                      <Text fontSize="xs" color="gray.400">
+                        Not scheduled
+                      </Text>
+                    )}
+                  </HStack>
+                ))}
+              </VStack>
+            </Box>
+
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
               {matchups.length === 0 ? (
                 <Text color="gray.500">
                   {tournamentNotStarted
-                    ? "No matchups yet. Click “Initialize bracket” to seed 16 neighborhoods and Round 1."
+                    ? "No matchups yet. Click “Initialize bracket” to seed SF neighborhoods and Round 1."
                     : tournamentComplete
                       ? "No open matchups — tournament is finished."
                       : "No open matchups yet."}
@@ -755,6 +944,44 @@ export default function AdminPage({
               )}
             </Box>
           </VStack>
+        )}
+
+        {activeTab === "settings" && (
+          <Box bg="white" p={4} borderRadius="md" boxShadow="sm" maxW="520px">
+            <Heading size="md" mb={2}>
+              Hunt window
+            </Heading>
+            <Text fontSize="sm" color="gray.600" mb={4}>
+              Controls when the home page switches from pre-hunt (tournament)
+              to the live hunt. Separate from tournament round deadlines.
+            </Text>
+            <VStack align="stretch" spacing={4}>
+              <FormControl>
+                <FormLabel>Hunt starts at</FormLabel>
+                <Input
+                  type="datetime-local"
+                  value={huntStartsAt}
+                  onChange={(e) => setHuntStartsAt(e.target.value)}
+                />
+              </FormControl>
+              <FormControl>
+                <FormLabel>Hunt ends at</FormLabel>
+                <Input
+                  type="datetime-local"
+                  value={huntEndsAt}
+                  onChange={(e) => setHuntEndsAt(e.target.value)}
+                />
+              </FormControl>
+              <Button
+                colorScheme="blue"
+                onClick={handleSaveHuntSettings}
+                isLoading={settingsBusy}
+                alignSelf="flex-start"
+              >
+                Save hunt times
+              </Button>
+            </VStack>
+          </Box>
         )}
       </VStack>
 

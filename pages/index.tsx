@@ -14,12 +14,18 @@ import type {
 import Image from "next/image";
 import Link from "next/link";
 import { formatISO, parseISO } from "date-fns";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import { getUserFromReq, publicUser } from "../lib/auth";
 import { getStartTime } from "../lib/time";
 import { prisma } from "../lib/prisma";
+import {
+  ensureRoundClosedIfExpired,
+} from "../lib/tournament";
 import sfBg from "../public/sf_bg.webp";
 import { AuthModal } from "../components/AuthModal";
+import { RegistrationSurveyModal } from "../components/RegistrationSurveyModal";
+import { RoundCountdownBanner } from "../components/RoundCountdownBanner";
 import {
   TournamentBracket,
   type BracketMatchup,
@@ -64,10 +70,12 @@ export const getServerSideProps = async (
   context: GetServerSidePropsContext,
 ) => {
   const user = await getUserFromReq(context.req);
-  const startTime = getStartTime();
+  const startTime = await getStartTime();
   const scavengerHuntName =
     process.env.SCAVENGER_HUNT_NAME || "Scavenger Hunt";
   const huntStarted = Date.now() >= startTime.getTime();
+
+  const roundInfo = await ensureRoundClosedIfExpired();
 
   const rows = await prisma.matchup.findMany({
     include: {
@@ -78,6 +86,12 @@ export const getServerSideProps = async (
     orderBy: [{ round: "asc" }, { id: "asc" }],
   });
 
+  const currentRound =
+    roundInfo.currentRound ??
+    (rows.some((r) => r.isOpen)
+      ? Math.max(...rows.filter((r) => r.isOpen).map((r) => r.round))
+      : null);
+
   return {
     props: {
       user: user ? publicUser(user) : null,
@@ -85,6 +99,8 @@ export const getServerSideProps = async (
       scavengerHuntName,
       huntStarted,
       matchups: serializeBracket(rows, user?.id ?? null),
+      currentRound,
+      currentRoundEndsAt: roundInfo.endsAt,
     },
   };
 };
@@ -95,16 +111,50 @@ export default function HomePage({
   scavengerHuntName,
   huntStarted,
   matchups,
+  currentRound,
+  currentRoundEndsAt,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
+  const router = useRouter();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "signup">("signup");
+  const [surveyOpen, setSurveyOpen] = useState(false);
+  const [surveyRequired, setSurveyRequired] = useState(false);
+  const [surveyDone, setSurveyDone] = useState(
+    Boolean(user?.surveyCompletedAt),
+  );
+
+  useEffect(() => {
+    setSurveyDone(Boolean(user?.surveyCompletedAt));
+  }, [user?.surveyCompletedAt]);
+
+  useEffect(() => {
+    if (user && !user.surveyCompletedAt && router.query.survey === "1") {
+      openSurvey(false);
+    }
+  }, [user, router.query.survey]);
 
   function openAuth(mode: "login" | "signup") {
     setAuthMode(mode);
     setAuthOpen(true);
   }
 
-  // Pre-hunt (or "app closed"): splash + full visual bracket
+  function openSurvey(required = false) {
+    setSurveyRequired(required);
+    setSurveyOpen(true);
+  }
+
+  const surveyModal = user ? (
+    <RegistrationSurveyModal
+      isOpen={surveyOpen}
+      onClose={() => {
+        setSurveyOpen(false);
+        setSurveyRequired(false);
+      }}
+      required={surveyRequired}
+      onCompleted={() => setSurveyDone(true)}
+    />
+  ) : null;
+
   if (!huntStarted) {
     return (
       <Box position="relative" minH="100vh" color="white">
@@ -123,12 +173,14 @@ export default function HomePage({
 
         <Box position="relative" zIndex={1}>
           <Container maxW="container.xl" pt={{ base: 6, md: 8 }} pb={4}>
-            <HStack justify="space-between" align="flex-start" flexWrap="wrap" gap={3}>
+            <HStack
+              justify="space-between"
+              align="flex-start"
+              flexWrap="wrap"
+              gap={3}
+            >
               <VStack align="flex-start" spacing={1}>
-                <Heading
-                  size={{ base: "lg", md: "xl" }}
-                  letterSpacing="tight"
-                >
+                <Heading size={{ base: "lg", md: "xl" }} letterSpacing="tight">
                   {scavengerHuntName}
                 </Heading>
                 <Text color="whiteAlpha.800" fontSize="sm">
@@ -143,8 +195,22 @@ export default function HomePage({
                       {user.name}
                       {user.isAdmin ? " · admin" : ""}
                     </Text>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      color="white"
+                      borderColor="whiteAlpha.600"
+                      onClick={() => openSurvey(false)}
+                    >
+                      {surveyDone ? "Edit survey" : "Player survey"}
+                    </Button>
                     {user.isAdmin ? (
-                      <Button as={Link} href="/admin" size="sm" colorScheme="yellow">
+                      <Button
+                        as={Link}
+                        href="/admin"
+                        size="sm"
+                        colorScheme="yellow"
+                      >
                         Admin
                       </Button>
                     ) : null}
@@ -207,19 +273,27 @@ export default function HomePage({
               py={4}
               boxShadow="xl"
             >
+              <Box mb={3}>
+                <RoundCountdownBanner
+                  round={currentRound}
+                  endsAtISO={currentRoundEndsAt}
+                  onExpired={() => router.replace(router.asPath)}
+                />
+              </Box>
               <Text
                 textAlign="center"
                 fontSize="sm"
                 color="whiteAlpha.800"
                 mb={2}
               >
-                Hover an emoji for the neighborhood name
-                {user ? " · tap to cast your vote" : " · sign up to vote"}
+                Tap a neighborhood to vote — scroll for later rounds
+                {user ? "" : " · sign up to vote"}
               </Text>
               <TournamentBracket
                 matchups={matchups}
                 loggedIn={Boolean(user)}
                 onNeedAuth={() => openAuth("signup")}
+                onNeedSurvey={() => openSurvey(true)}
               />
             </Box>
           </Container>
@@ -229,12 +303,13 @@ export default function HomePage({
           isOpen={authOpen}
           onClose={() => setAuthOpen(false)}
           initialMode={authMode}
+          onSignupSuccess={() => openSurvey(false)}
         />
+        {surveyModal}
       </Box>
     );
   }
 
-  // Hunt has started
   return (
     <Box position="relative" minH="100vh" overflow="hidden">
       <Box position="fixed" inset={0} zIndex={0}>
@@ -293,10 +368,22 @@ export default function HomePage({
                   >
                     Challenges
                   </Button>
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    color="white"
+                    onClick={() => openSurvey(false)}
+                  >
+                    {surveyDone ? "Edit survey" : "Player survey"}
+                  </Button>
                 </>
               ) : (
                 <>
-                  <Button colorScheme="yellow" size="lg" onClick={() => openAuth("login")}>
+                  <Button
+                    colorScheme="yellow"
+                    size="lg"
+                    onClick={() => openAuth("login")}
+                  >
                     Log in
                   </Button>
                   <Button
@@ -319,7 +406,9 @@ export default function HomePage({
         isOpen={authOpen}
         onClose={() => setAuthOpen(false)}
         initialMode={authMode}
+        onSignupSuccess={() => openSurvey(false)}
       />
+      {surveyModal}
     </Box>
   );
 }

@@ -51,6 +51,10 @@ export default async function handler(
         teamId: u.teamId,
         createdAt: u.createdAt.toISOString(),
         lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
+        intent: u.intent,
+        teamPreferences: u.teamPreferences,
+        competitiveness: u.competitiveness,
+        surveyCompletedAt: u.surveyCompletedAt?.toISOString() ?? null,
         team: u.team
           ? { id: u.team.id, name: u.team.name, emoji: u.team.emoji }
           : null,
@@ -138,6 +142,10 @@ export default async function handler(
           teamId: updated.teamId,
           createdAt: updated.createdAt.toISOString(),
           lastSeenAt: updated.lastSeenAt?.toISOString() ?? null,
+          intent: updated.intent,
+          teamPreferences: updated.teamPreferences,
+          competitiveness: updated.competitiveness,
+          surveyCompletedAt: updated.surveyCompletedAt?.toISOString() ?? null,
           team: updated.team
             ? {
                 id: updated.team.id,

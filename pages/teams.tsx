@@ -59,11 +59,15 @@ export const getServerSideProps = async (
   });
 
   const teamsSortedbyPts = teamsWithPts.sort((t1, t2) => t2.pts - t1.pts);
+  const [startTime, endTime] = await Promise.all([
+    getStartTime(),
+    getEndTime(),
+  ]);
   return {
     props: {
       teamsSortedbyPts,
-      startTimeISO: formatISO(getStartTime()),
-      endTimeISO: formatISO(getEndTime()),
+      startTimeISO: formatISO(startTime),
+      endTimeISO: formatISO(endTime),
     },
   };
 };

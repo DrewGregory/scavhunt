@@ -30,10 +30,13 @@ export function AuthModal({
   isOpen,
   onClose,
   initialMode = "login",
+  onSignupSuccess,
 }: {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: Mode;
+  /** Fired after a successful signup (before navigation refresh). */
+  onSignupSuccess?: () => void;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -133,7 +136,9 @@ export function AuthModal({
         status: "success",
         duration: 2000,
       });
+      const wasSignup = mode === "signup";
       onClose();
+      if (wasSignup) onSignupSuccess?.();
       await router.replace(router.asPath);
     } finally {
       setBusy(false);
