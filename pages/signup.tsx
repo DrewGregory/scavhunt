@@ -29,27 +29,34 @@ export default function SignupPage() {
   const [step, setStep] = useState<"form" | "code">("form");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [offerEmail, setOfferEmail] = useState(false);
   const mock = isBirdMockClient();
 
-  async function sendCode(e: React.FormEvent) {
-    e.preventDefault();
+  async function sendCode(
+    e: React.FormEvent | null,
+    nextChannel: Channel = "sms",
+  ) {
+    if (e) e.preventDefault();
     setBusy(true);
     setError("");
     try {
       const res = await fetch("/api/auth/signup/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, phone, channel }),
+        body: JSON.stringify({
+          name,
+          email,
+          phone,
+          channel: nextChannel,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || "Could not send code");
-        if (channel === "sms" && data.emailFallback) setOfferEmail(true);
-        return;
+        return false;
       }
-      setOfferEmail(false);
+      setChannel(nextChannel);
       setStep("code");
+      return true;
     } finally {
       setBusy(false);
     }
@@ -89,12 +96,12 @@ export default function SignupPage() {
         >
           <Heading size="lg">Sign up</Heading>
           <Text color="gray.600">
-            Create an account with your name, email, and phone. We&apos;ll send
+            Create an account with your name, email, and phone. We&apos;ll text
             a one-time code to verify.
           </Text>
 
           {step === "form" ? (
-            <Stack as="form" spacing={4} onSubmit={sendCode}>
+            <Stack as="form" spacing={4} onSubmit={(e) => sendCode(e, "sms")}>
               <FormControl isRequired>
                 <FormLabel>Name</FormLabel>
                 <Input
@@ -124,19 +131,6 @@ export default function SignupPage() {
               <Button type="submit" colorScheme="blue" isLoading={busy}>
                 {mock ? "Continue" : "Send code"}
               </Button>
-              <Button
-                type="button"
-                variant="link"
-                onClick={() => {
-                  setChannel(channel === "email" ? "sms" : "email");
-                  setError("");
-                  setOfferEmail(false);
-                }}
-              >
-                {channel === "email"
-                  ? "Send code via text instead"
-                  : "Send code via email instead"}
-              </Button>
             </Stack>
           ) : (
             <Stack as="form" spacing={4} onSubmit={verifyCode}>
@@ -160,11 +154,26 @@ export default function SignupPage() {
               <Button type="submit" colorScheme="blue" isLoading={busy}>
                 Create account
               </Button>
+              {channel === "sms" ? (
+                <Button
+                  type="button"
+                  variant="link"
+                  isDisabled={busy}
+                  onClick={async () => {
+                    setCode("");
+                    setError("");
+                    await sendCode(null, "email");
+                  }}
+                >
+                  Didn&apos;t get a text? Use email instead
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="link"
                 onClick={() => {
                   setStep("form");
+                  setChannel("sms");
                   setCode("");
                   setError("");
                 }}
@@ -178,21 +187,6 @@ export default function SignupPage() {
             <Text color="red.500" fontSize="sm">
               {error}
             </Text>
-          ) : null}
-          {offerEmail ? (
-            <Button
-              type="button"
-              variant="link"
-              onClick={() => {
-                setChannel("email");
-                setStep("form");
-                setCode("");
-                setError("");
-                setOfferEmail(false);
-              }}
-            >
-              Text didn&apos;t work? Send a code to email instead
-            </Button>
           ) : null}
 
           <Text fontSize="sm" color="gray.600">

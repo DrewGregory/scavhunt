@@ -74,13 +74,16 @@ export function AuthModal({
     e.preventDefault();
     setBusy(true);
     setError("");
+    // Signup always texts first; email fallback is only on the code step.
+    const sendChannel: Channel =
+      mode === "signup" ? "sms" : channel;
     try {
       const url =
         mode === "signup" ? "/api/auth/signup/start" : "/api/auth/send";
       const body =
         mode === "signup"
-          ? { name, email, phone, channel }
-          : channel === "email"
+          ? { name, email, phone, channel: sendChannel }
+          : sendChannel === "email"
             ? { channel: "email", email }
             : { channel: "sms", phone };
       const res = await fetch(url, {
@@ -91,9 +94,10 @@ export function AuthModal({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || "Could not send code");
-        if (channel === "sms" && data.emailFallback) setOfferEmail(true);
+        if (sendChannel === "sms" && data.emailFallback) setOfferEmail(true);
         return;
       }
+      setChannel(sendChannel);
       setOfferEmail(false);
       setStep("code");
     } finally {
@@ -203,20 +207,23 @@ export function AuthModal({
                 <Button type="submit" colorScheme="yellow" isLoading={busy}>
                   {mock ? "Continue" : "Send code"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="link"
-                  colorScheme="yellow"
-                  onClick={() => {
-                    setChannel(channel === "email" ? "sms" : "email");
-                    setError("");
-                    setOfferEmail(false);
-                  }}
-                >
-                  {channel === "email"
-                    ? "Use phone instead"
-                    : "Use email instead"}
-                </Button>
+                {/* Login only: pick email up front. Signup always texts first. */}
+                {mode === "login" ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    colorScheme="yellow"
+                    onClick={() => {
+                      setChannel(channel === "email" ? "sms" : "email");
+                      setError("");
+                      setOfferEmail(false);
+                    }}
+                  >
+                    {channel === "email"
+                      ? "Use phone instead"
+                      : "Use email instead"}
+                  </Button>
+                ) : null}
               </Stack>
             ) : (
               <Stack as="form" spacing={3} onSubmit={verifyCode}>
@@ -242,6 +249,47 @@ export function AuthModal({
                 <Button type="submit" colorScheme="yellow" isLoading={busy}>
                   {mode === "signup" ? "Create account" : "Log in"}
                 </Button>
+                {channel === "sms" ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    colorScheme="yellow"
+                    isDisabled={busy}
+                    onClick={async () => {
+                      setChannel("email");
+                      setCode("");
+                      setError("");
+                      setOfferEmail(false);
+                      if (mode === "signup" && email.trim()) {
+                        setBusy(true);
+                        try {
+                          const res = await fetch("/api/auth/signup/start", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              name,
+                              email,
+                              phone,
+                              channel: "email",
+                            }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (!res.ok) {
+                            setError(data.error || "Could not send email code");
+                            setStep("identify");
+                            return;
+                          }
+                        } finally {
+                          setBusy(false);
+                        }
+                      } else {
+                        setStep("identify");
+                      }
+                    }}
+                  >
+                    Didn&apos;t get a text? Use email instead
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="link"
@@ -261,20 +309,19 @@ export function AuthModal({
                 {error}
               </Text>
             ) : null}
-            {offerEmail ? (
+            {offerEmail && step === "identify" ? (
               <Button
                 type="button"
                 variant="link"
                 colorScheme="yellow"
                 onClick={() => {
                   setChannel("email");
-                  setStep("identify");
                   setCode("");
                   setError("");
                   setOfferEmail(false);
                 }}
               >
-                Text didn&apos;t work? Use email instead
+                Text failed — try email instead
               </Button>
             ) : null}
 
