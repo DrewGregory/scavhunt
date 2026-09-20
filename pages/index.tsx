@@ -40,8 +40,8 @@ function serializeBracket(
     slotAId: string;
     slotBId: string;
     winnerId: string | null;
-    slotA: { id: string; name: string };
-    slotB: { id: string; name: string };
+    slotA: { id: string; name: string; emoji: string | null };
+    slotB: { id: string; name: string; emoji: string | null };
     votes: Array<{ userId: string; neighborhoodId: string }>;
   }>,
   userId: string | null,
@@ -56,8 +56,16 @@ function serializeBracket(
       id: m.id,
       round: m.round,
       isOpen: m.isOpen,
-      slotA: { id: m.slotA.id, name: m.slotA.name },
-      slotB: { id: m.slotB.id, name: m.slotB.name },
+      slotA: {
+        id: m.slotA.id,
+        name: m.slotA.name,
+        emoji: m.slotA.emoji,
+      },
+      slotB: {
+        id: m.slotB.id,
+        name: m.slotB.name,
+        emoji: m.slotB.emoji,
+      },
       winnerId: m.winnerId,
       votesA,
       votesB,
@@ -286,8 +294,9 @@ export default function HomePage({
                 color="whiteAlpha.800"
                 mb={2}
               >
-                Tap a neighborhood to vote — scroll for later rounds
-                {user ? "" : " · sign up to vote"}
+                {user ? "Tap to vote" : "Sign up to vote"}
+                {" · "}
+                switch List / Bracket above
               </Text>
               <TournamentBracket
                 matchups={matchups}

@@ -16,6 +16,7 @@ import { SF_NEIGHBORHOODS } from "../../../lib/neighborhoods";
 const postSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("closeRound") }),
   z.object({ action: z.literal("initialize") }),
+  z.object({ action: z.literal("reset") }),
   z.object({
     action: z.literal("setRoundSchedule"),
     round: z.number().int().min(1).max(16),
@@ -127,13 +128,28 @@ export default async function handler(
       });
     }
 
+    if (parsed.data.action === "reset") {
+      // Wipe bracket progress but keep neighborhood catalog (names/emojis).
+      const deletedVotes = await prisma.vote.deleteMany({});
+      const deletedMatchups = await prisma.matchup.deleteMany({});
+      const deletedSchedule = await prisma.tournamentRoundSchedule.deleteMany(
+        {},
+      );
+      return res.status(200).json({
+        success: true,
+        deletedVotes: deletedVotes.count,
+        deletedMatchups: deletedMatchups.count,
+        deletedSchedule: deletedSchedule.count,
+      });
+    }
+
     if (parsed.data.action === "initialize") {
       const existingOpen = await prisma.matchup.count({
         where: { isOpen: true },
       });
       if (existingOpen > 0) {
         return res.status(400).json({
-          error: "Open matchups already exist — refuse to re-initialize",
+          error: "Open matchups already exist — reset the bracket first",
         });
       }
 
@@ -141,7 +157,7 @@ export default async function handler(
       if (existingAny > 0) {
         return res.status(400).json({
           error:
-            "Tournament already has matchups (possibly finished). Clear matchups in the DB before re-initializing.",
+            "Tournament already has matchups. Use “Reset bracket” before re-initializing.",
         });
       }
 

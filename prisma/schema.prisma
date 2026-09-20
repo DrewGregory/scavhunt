@@ -144,6 +144,8 @@ model ChatMessage {
 model Neighborhood {
   id        String   @id @default(cuid())
   name      String   @unique
+  /// Optional display emoji; falls back to a hash of the name when null.
+  emoji     String?
   createdAt DateTime @default(now())
 
   matchupsAsA Matchup[] @relation("MatchupSlotA")

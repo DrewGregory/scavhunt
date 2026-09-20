@@ -208,7 +208,7 @@ export async function createOpeningRound(
 /** Ensure every name exists as a Neighborhood row; returns all matching rows. */
 export async function ensureNeighborhoods(
   names: readonly string[],
-): Promise<Array<{ id: string; name: string }>> {
+): Promise<Array<{ id: string; name: string; emoji: string | null }>> {
   for (const name of names) {
     await prisma.neighborhood.upsert({
       where: { name },

@@ -76,6 +76,16 @@ type TournamentMatchup = {
   totalVotes: number;
 };
 
+type AdminNeighborhood = {
+  id: string;
+  name: string;
+  emoji: string | null;
+  displayEmoji: string;
+  createdAt: string;
+  matchupCount: number;
+  voteCount: number;
+};
+
 type Tab = "users" | "teams" | "challenges" | "tournament" | "settings";
 
 function toLocalInputValue(iso: string | null | undefined) {
@@ -124,6 +134,9 @@ export default function AdminPage({
   const [scheduleDrafts, setScheduleDrafts] = useState<Record<number, string>>(
     {},
   );
+  const [neighborhoods, setNeighborhoods] = useState<AdminNeighborhood[]>([]);
+  const [newNeighborhoodName, setNewNeighborhoodName] = useState("");
+  const [newNeighborhoodEmoji, setNewNeighborhoodEmoji] = useState("");
   const [huntStartsAt, setHuntStartsAt] = useState("");
   const [huntEndsAt, setHuntEndsAt] = useState("");
   const [settingsBusy, setSettingsBusy] = useState(false);
@@ -183,6 +196,13 @@ export default function AdminPage({
     setScheduleDrafts(drafts);
   };
 
+  const loadNeighborhoods = async () => {
+    const res = await fetch("/api/admin/neighborhoods");
+    if (!res.ok) throw new Error("Failed to load neighborhoods");
+    const data = await res.json();
+    setNeighborhoods(data.neighborhoods);
+  };
+
   const loadSettings = async () => {
     const res = await fetch("/api/admin/settings");
     if (!res.ok) throw new Error("Failed to load settings");
@@ -199,6 +219,7 @@ export default function AdminPage({
           loadTeams(),
           loadChallenges(),
           loadTournament(),
+          loadNeighborhoods(),
           loadSettings(),
         ]);
       } catch {
@@ -395,6 +416,105 @@ export default function AdminPage({
       );
     } catch {
       alert("Failed to initialize tournament");
+    }
+  };
+
+
+  const handleResetTournament = async () => {
+    if (
+      !confirm(
+        "Reset the tournament? This deletes all matchups and votes but keeps neighborhood names/emojis. You can re-initialize afterward.",
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/tournament", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to reset tournament");
+        return;
+      }
+      await Promise.all([loadTournament(), loadNeighborhoods()]);
+      alert(
+        `Reset complete — removed ${data.deletedMatchups ?? 0} matchups and ${data.deletedVotes ?? 0} votes.`,
+      );
+    } catch {
+      alert("Failed to reset tournament");
+    }
+  };
+
+  const handleCreateNeighborhood = async () => {
+    const name = newNeighborhoodName.trim();
+    if (!name) {
+      alert("Name is required");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/neighborhoods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          emoji: newNeighborhoodEmoji.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to create neighborhood");
+        return;
+      }
+      setNewNeighborhoodName("");
+      setNewNeighborhoodEmoji("");
+      await loadNeighborhoods();
+    } catch {
+      alert("Failed to create neighborhood");
+    }
+  };
+
+  const handleUpdateNeighborhood = async (
+    id: string,
+    patch: { name?: string; emoji?: string | null },
+  ) => {
+    try {
+      const res = await fetch("/api/admin/neighborhoods", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to update neighborhood");
+        return false;
+      }
+      setNeighborhoods((prev) =>
+        prev.map((n) => (n.id === id ? data.neighborhood : n)),
+      );
+      return true;
+    } catch {
+      alert("Failed to update neighborhood");
+      return false;
+    }
+  };
+
+  const handleDeleteNeighborhood = async (id: string, name: string) => {
+    if (!confirm(`Delete neighborhood “${name}”?`)) return;
+    try {
+      const res = await fetch(`/api/admin/neighborhoods?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || "Failed to delete neighborhood");
+        return;
+      }
+      await loadNeighborhoods();
+    } catch {
+      alert("Failed to delete neighborhood");
     }
   };
 
@@ -831,20 +951,131 @@ export default function AdminPage({
                       : "Vote tallies for current open matchups. Set a round end time below for auto-close."}
                 </Text>
               </Box>
-              {tournamentNotStarted ? (
-                <Button colorScheme="green" onClick={handleInitializeTournament}>
-                  Initialize bracket
-                </Button>
-              ) : (
-                <Button
-                  colorScheme="orange"
-                  onClick={handleCloseRound}
-                  isDisabled={matchups.length === 0 || tournamentComplete}
-                >
-                  Close round &amp; advance
-                </Button>
-              )}
+              <HStack spacing={2} flexWrap="wrap">
+                {tournamentNotStarted ? (
+                  <Button colorScheme="green" onClick={handleInitializeTournament}>
+                    Initialize bracket
+                  </Button>
+                ) : (
+                  <Button
+                    colorScheme="orange"
+                    onClick={handleCloseRound}
+                    isDisabled={matchups.length === 0 || tournamentComplete}
+                  >
+                    Close round &amp; advance
+                  </Button>
+                )}
+                {!tournamentNotStarted ? (
+                  <Button
+                    colorScheme="red"
+                    variant="outline"
+                    onClick={handleResetTournament}
+                  >
+                    Reset bracket
+                  </Button>
+                ) : null}
+              </HStack>
             </Flex>
+
+
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="sm" mb={2}>
+                Neighborhoods ({neighborhoods.length})
+              </Heading>
+              <Text fontSize="sm" color="gray.600" mb={3}>
+                Edit names and emojis anytime — changes show up on the live
+                bracket. To include newly added neighborhoods in the bracket,
+                reset then re-initialize.
+              </Text>
+              <HStack mb={4} flexWrap="wrap" spacing={3} align="flex-end">
+                <FormControl maxW="220px">
+                  <FormLabel fontSize="xs">Name</FormLabel>
+                  <Input
+                    size="sm"
+                    value={newNeighborhoodName}
+                    onChange={(e) => setNewNeighborhoodName(e.target.value)}
+                    placeholder="e.g. Mission"
+                  />
+                </FormControl>
+                <FormControl maxW="100px">
+                  <FormLabel fontSize="xs">Emoji</FormLabel>
+                  <Input
+                    size="sm"
+                    value={newNeighborhoodEmoji}
+                    onChange={(e) => setNewNeighborhoodEmoji(e.target.value)}
+                    placeholder="🌉"
+                  />
+                </FormControl>
+                <Button size="sm" colorScheme="blue" onClick={handleCreateNeighborhood}>
+                  Add neighborhood
+                </Button>
+              </HStack>
+              <Box overflowX="auto">
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Emoji</Th>
+                      <Th>Name</Th>
+                      <Th>In bracket</Th>
+                      <Th></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {neighborhoods.map((n) => (
+                      <Tr key={n.id}>
+                        <Td width="90px">
+                          <Input
+                            size="sm"
+                            defaultValue={n.emoji ?? ""}
+                            placeholder={n.displayEmoji}
+                            onBlur={async (e) => {
+                              const next = e.target.value.trim() || null;
+                              if ((n.emoji || null) !== next) {
+                                await handleUpdateNeighborhood(n.id, {
+                                  emoji: next,
+                                });
+                              }
+                            }}
+                          />
+                        </Td>
+                        <Td minW="180px">
+                          <Input
+                            size="sm"
+                            defaultValue={n.name}
+                            onBlur={async (e) => {
+                              const next = e.target.value.trim();
+                              if (next && next !== n.name) {
+                                await handleUpdateNeighborhood(n.id, {
+                                  name: next,
+                                });
+                              }
+                            }}
+                          />
+                        </Td>
+                        <Td whiteSpace="nowrap">
+                          {n.matchupCount > 0
+                            ? `${n.matchupCount} matchup(s)`
+                            : "—"}
+                        </Td>
+                        <Td>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="red"
+                            isDisabled={n.matchupCount > 0}
+                            onClick={() =>
+                              handleDeleteNeighborhood(n.id, n.name)
+                            }
+                          >
+                            Delete
+                          </Button>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </Box>
+            </Box>
 
             <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
               <Heading size="sm" mb={3}>
