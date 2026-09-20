@@ -1,33 +1,65 @@
 import { z } from "zod";
-import { Types } from "mongoose";
 
-
-export const submissionResponseBodySchema = z.union([z.object({
+export const submissionResponseBodySchema = z.discriminatedUnion("status", [
+  z.object({
     status: z.literal("success"),
     submissionId: z.string(),
     message: z.string(),
-}), z.object({
+  }),
+  z.object({
     status: z.literal("error"),
     message: z.string(),
-})]);
+  }),
+]);
 
-export type SubmissionResponseBody = z.infer<typeof submissionResponseBodySchema>;
+export type SubmissionResponseBody = z.infer<
+  typeof submissionResponseBodySchema
+>;
 
-export const mongooseIdSchema = z.instanceof(Types.ObjectId).transform((x) => x.toHexString());
-export const baseMongooseSchema = z.object({
-    _id: mongooseIdSchema,
-});
+export type LatestTeamLocation = {
+  id: string;
+  latestLocation: {
+    lat: number;
+    lng: number;
+    id: string;
+  };
+  emoji: string;
+  name: string;
+};
 
+export type SerializedSubmission = {
+  id: string;
+  teamId: string;
+  userId: string;
+  challengeId: string;
+  accepted: boolean;
+  rejected: boolean;
+  mediaURL: string | null;
+  note: string;
+  createdAt: string;
+};
 
-export const latestTeamLocationSchema = z.object({
-    _id: mongooseIdSchema,
-    latestLocation: z.object({
-        lat: z.number(),
-        lng: z.number(),
-        _id: mongooseIdSchema,
-    }),
-    emoji: z.string(),
-    name: z.string(),
-})
+export type SerializedChallenge = {
+  id: string;
+  title: string;
+  prompt: string;
+  lat: number;
+  lng: number;
+  pts: number;
+  numWinners: number;
+};
 
-export type LatestTeamLocation = z.infer<typeof latestTeamLocationSchema>;
+export type SerializedTeam = {
+  id: string;
+  name: string;
+  emoji: string;
+};
+
+export type SerializedChatMessage = {
+  id: string;
+  teamId: string;
+  teamName: string;
+  message: string;
+  isAdmin: boolean;
+  createdAt: string;
+};

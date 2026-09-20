@@ -1,5 +1,4 @@
 import { GetServerSideProps } from "next";
-import { dbConnect } from "../lib/dbConnect";
 import {
   Box,
   Button,
@@ -13,39 +12,25 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { GiBubbles } from "react-icons/gi";
 import NavContainer from "../components/NavContainer";
-import { useTeam } from "../components/useTeam";
-import { getTeamFromCookie } from "../lib/team";
-import { ChatModel, serializedChatSchema, SerializedChat } from "../models/Chat";
-import { z } from "zod";
+import { useSession } from "../components/useSession";
+import { prisma } from "../lib/prisma";
+import { requireUserSSP } from "../lib/auth";
+import { serializeChatMessage } from "../lib/serialize";
+import type { SerializedChatMessage } from "../lib/types";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  await dbConnect();
-  const team = await getTeamFromCookie(context.req.cookies);
-  if (team == null) {
-    return {
-      props: {
-        initialMessages: [],
-      },
-    };
-  }
+  const auth = await requireUserSSP(context);
+  if (auth.redirect) return { redirect: auth.redirect };
 
-  const messages = await ChatModel.find({})
-    .sort({ createdAt: -1 })
-    .limit(100)
-    .lean()
-    .exec();
-
-  const serializedMessages = messages
-    .map((msg) => {
-      const parsed = serializedChatSchema.safeParse(msg);
-      return parsed.success ? parsed.data : null;
-    })
-    .filter((msg): msg is SerializedChat => msg !== null)
-    .reverse();
+  const messages = await prisma.chatMessage.findMany({
+    take: 100,
+    orderBy: { createdAt: "desc" },
+    include: { team: true },
+  });
 
   return {
     props: {
-      initialMessages: serializedMessages,
+      initialMessages: messages.map(serializeChatMessage).reverse(),
     },
   };
 };
@@ -53,10 +38,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 export default function Page({
   initialMessages,
 }: {
-  initialMessages: SerializedChat[];
+  initialMessages: SerializedChatMessage[];
 }) {
-  const team = useTeam();
-  const [messages, setMessages] = useState<SerializedChat[]>(initialMessages);
+  const session = useSession();
+  const [messages, setMessages] =
+    useState<SerializedChatMessage[]>(initialMessages);
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,7 +68,7 @@ export default function Page({
   };
 
   useEffect(() => {
-    if (team == null) {
+    if (session == null) {
       return;
     }
 
@@ -91,7 +77,7 @@ export default function Page({
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [team]);
+  }, [session]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || isSending) {
@@ -130,7 +116,7 @@ export default function Page({
     }
   };
 
-  if (team == null) {
+  if (session == null) {
     return (
       <NavContainer title="Chat">
         <Text>Please sign in to use the chat.</Text>
@@ -142,21 +128,23 @@ export default function Page({
     <NavContainer title="Chat">
       <VStack spacing={3} alignItems="stretch" pb="0">
         {messages.length === 0 ? (
-          <Flex 
-            direction="column" 
-            alignItems="center" 
-            justifyContent="center" 
-            py={16} 
+          <Flex
+            direction="column"
+            alignItems="center"
+            justifyContent="center"
+            py={16}
             color="gray.400"
           >
             <Icon as={GiBubbles} boxSize={20} mb={4} opacity={0.5} />
-            <Text fontSize="lg" fontWeight="medium">No messages yet. Start the conversation!</Text>
+            <Text fontSize="lg" fontWeight="medium">
+              No messages yet. Start the conversation!
+            </Text>
           </Flex>
         ) : (
           messages.map((msg, index) => (
-            <Card 
-              key={`${msg._id}-${index}`} 
-              p={4} 
+            <Card
+              key={`${msg.id}-${index}`}
+              p={4}
               width="100%"
               bg={msg.isAdmin ? "blue.50" : "white"}
               borderColor={msg.isAdmin ? "blue.200" : "gray.200"}
@@ -168,9 +156,9 @@ export default function Page({
             >
               <Flex direction="column" gap={2}>
                 <Flex justifyContent="space-between" alignItems="center">
-                  <Text 
-                    fontWeight="bold" 
-                    fontSize="sm" 
+                  <Text
+                    fontWeight="bold"
+                    fontSize="sm"
                     color={msg.isAdmin ? "blue.700" : "gray.800"}
                   >
                     {msg.teamName}
@@ -209,7 +197,10 @@ export default function Page({
             onKeyPress={handleKeyPress}
             disabled={isSending}
             borderRadius="md"
-            _focus={{ borderColor: "blue.400", boxShadow: "0 0 0 1px var(--chakra-colors-blue-400)" }}
+            _focus={{
+              borderColor: "blue.400",
+              boxShadow: "0 0 0 1px var(--chakra-colors-blue-400)",
+            }}
           />
           <Button
             onClick={handleSendMessage}

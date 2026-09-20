@@ -1,14 +1,12 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { dbConnect } from '../../lib/dbConnect';
+import type { NextApiRequest, NextApiResponse } from "next";
 
 type ResponseData = {
-  success: boolean
-}
- 
+  success: boolean;
+};
+
 export default async function handler(
   _req: NextApiRequest,
-  res: NextApiResponse<ResponseData>
+  res: NextApiResponse<ResponseData>,
 ) {
-  await dbConnect();
-  res.status(200).json({ success: true })
+  res.status(200).json({ success: true });
 }

@@ -4,17 +4,29 @@ services:
       context: .
       dockerfile: Dockerfile.development
     environment:
-      MONGO_URL: mongodb://db:27017/database
+      DATABASE_URL: postgresql://scavhunt:scavhunt@db:5432/scavhunt?schema=public
     ports:
       - 80:80
     depends_on: [db]
     volumes:
       - ./components:/usr/src/app/components:ro
       - ./lib:/usr/src/app/lib:ro
-      - ./models:/usr/src/app/models:ro
       - ./pages:/usr/src/app/pages:ro
+      - ./prisma:/usr/src/app/prisma:ro
+      - ./public:/usr/src/app/public:ro
+      - ./scripts:/usr/src/app/scripts:ro
 
   db:
-    image: mongodb/mongodb-community-server:6.0-ubi8
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scavhunt
+      POSTGRES_PASSWORD: scavhunt
+      POSTGRES_DB: scavhunt
     ports:
-      - 27017:27017
+      - "5434:5432"
+    volumes:
+      - scavhunt_pg:/var/lib/postgresql/data
+
+volumes:
+  scavhunt_pg:

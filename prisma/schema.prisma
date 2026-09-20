@@ -1,0 +1,162 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String    @id @default(cuid())
+  email      String    @unique
+  phoneE164  String    @unique
+  name       String
+  isAdmin    Boolean   @default(false)
+  isActive   Boolean   @default(true)
+  teamId     String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  submissions  Submission[]
+  favorites    Favorite[]
+  chatMessages ChatMessage[]
+  votes        Vote[]
+
+  @@index([teamId])
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  emoji     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  submissions  Submission[]
+  locations    Location[]
+  chatMessages ChatMessage[]
+}
+
+model Challenge {
+  id         String   @id @default(cuid())
+  title      String
+  prompt     String
+  lat        Float
+  lng        Float
+  pts        Int
+  numWinners Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  submissions Submission[]
+}
+
+model Submission {
+  id          String   @id @default(cuid())
+  teamId      String
+  userId      String
+  challengeId String
+  accepted    Boolean  @default(false)
+  rejected    Boolean  @default(false)
+  mediaURL    String?
+  note        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  favorites Favorite[]
+
+  @@index([teamId])
+  @@index([challengeId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Favorite {
+  id           String   @id @default(cuid())
+  submissionId String
+  userId       String
+  createdAt    DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, userId])
+  @@index([userId])
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  teamId    String
+  lat       Float
+  lng       Float
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, createdAt])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  message   String
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, createdAt])
+  @@index([createdAt])
+}
+
+model Neighborhood {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  matchupsAsA Matchup[] @relation("MatchupSlotA")
+  matchupsAsB Matchup[] @relation("MatchupSlotB")
+  wins        Matchup[] @relation("MatchupWinner")
+  votes       Vote[]
+}
+
+model Matchup {
+  id       String  @id @default(cuid())
+  round    Int
+  slotAId  String
+  slotBId  String
+  winnerId String?
+  isOpen   Boolean @default(true)
+
+  slotA  Neighborhood  @relation("MatchupSlotA", fields: [slotAId], references: [id])
+  slotB  Neighborhood  @relation("MatchupSlotB", fields: [slotBId], references: [id])
+  winner Neighborhood? @relation("MatchupWinner", fields: [winnerId], references: [id])
+  votes  Vote[]
+
+  @@index([round])
+}
+
+model Vote {
+  id             String   @id @default(cuid())
+  userId         String
+  matchupId      String
+  neighborhoodId String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchup      Matchup      @relation(fields: [matchupId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, matchupId])
+  @@index([matchupId])
+}

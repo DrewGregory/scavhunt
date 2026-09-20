@@ -1,252 +1,113 @@
 # Scavenger Hunt Web Application
 
-A self-hosted scavenger hunt web application via Dokku. Assign your friends into teams and have them complete challenges across your city of choice!
+A self-hosted scavenger hunt web app (Dokku-friendly). Players sign up with phone/email
+verification (Bird), get assigned to teams, submit challenge videos, vote in a
+neighborhood tournament, and compete on a points leaderboard.
+
 ![Screenshot of Map View](image.png)
 
-Features include:
-- Interactive map visualization of challenges and real-time team locations via emojis.
-- Challenges where teams submit video evidence of challenge completion.
-- A feed where teams can see all submissions and whether the submission is approved, pending review, or rejected.
-- A team points leaderboard with a CTF-style line graph visualization.
+Features:
+- User accounts with Bird SMS/email OTP (no team-code login)
+- Admin dashboard to manage users, teams, challenges, and the tournament
+- Interactive map of challenges and live team locations
+- Video challenge submissions + feed with favorites
+- Team points leaderboard with a CTF-style line graph
+- Neighborhood tournament bracket (collective voting)
 
 Created by @cablej, @aivantg, and @drewgregory.
 
-**Note**: Some of the visual elements are somewhat San Francisco-specific.
+**Note**: Some visual elements are San Francisco-specific.
 
-# Dev Setup
+## Dev setup
 
-## (Optional) Set up devcontainer
+### 1. Start Postgres
 
-Want an isolated development package install that doesn't affect your host namespace? Open this repo in a dev container!
-
-Create a DevContainer for VSCode via [this tutorial](https://code.visualstudio.com/docs/devcontainers/tutorial).
-
-1. Create a dev container 
-
-https://code.visualstudio.com/docs/devcontainers/containers#_quick-start-open-an-existing-folder-in-a-container
-
-CMD+SHIFT+P => "Reopen in container"
-
-## Run development server (from terminal in host, not in devcontainer)
-
-**Note**: These development servers are running on 0.0.0.0, so they may be accesible on your LAN.
-
-Run a development web server and mongo server locally in Docker containers. *Note*: these containers are run separately from the development container.
-
-```
-$ docker compose up --build
+```bash
+docker compose up -d db
 ```
 
-## Initialize .env.local
+Local compose maps host port **5434** → container 5432.
 
-Initialize a `.env.local`:
+### 2. Env file
 
-```
+```bash
 cp .env.example .env.local
 ```
 
-And fill out the environment variables accordingly:
+Fill in at least:
 
-### ADMIN_ID
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `SESSION_SECRET` | Long random string for signed cookies |
+| `ADMIN_EMAILS` | Comma-separated emails that become admins on login |
+| `APP_ORIGIN` | Public origin (e.g. `http://localhost:80`) for CSRF checks |
+| `START_TIME_ISO_STRING` / `END_TIME_ISO_STRING` | Hunt window |
+| `BIRD_API_KEY` / `BIRD_API_HOST` | Bird Verify (or leave `BIRD_MOCK=true` locally) |
+| `SPACES_*` | DigitalOcean Spaces / S3 uploads |
 
-The ObjectId(s) for the team(s) you want to be able to approve and reject submissions in the submission feed. You can specify multiple admin teams by separating them with commas (e.g., `ADMIN_ID=id1,id2,id3`). See **Load example data** for more information.
+With `BIRD_MOCK=true`, OTP codes are always `000000`.
 
-### END_TIME_ISO_STRING
+### 3. Install, migrate, seed
 
-The end time of the scavenger hunt in the form of an ISO string.
-
-### MONGO_URL
-
-The connection string to the mongo server. For local development, `mongodb://localhost:27017/database`
-
-### SPACES_BUCKET_NAME
-
-The [Digital Ocean Spaces Bucket name](https://www.digitalocean.com/products/spaces) that hosts the submission video files. Alternatively, the bucket name of an AWS S3-compliant object storage system (but you will have to make code changes to server the video files). Be careful to configure it so that it the bucket isn't [publicly listable](https://docs.digitalocean.com/products/spaces/how-to/set-file-listing-permissions/), as we set the objects to be publicly readable and rely on the object key not being guessable. Otherwise, the public internet could view your scavenger hunt video submissions.
-
-### SPACES_ENDPOINT
-
-The [Digital Ocean Spaces Endpoint](https://docs.digitalocean.com/reference/api/spaces-api/).
-
-### SPACES_KEY
-
-The [Digital Ocean Spaces Key Name](https://docs.digitalocean.com/products/spaces/how-to/manage-access/).
-
-### SPACES_REGION
-
-The [Digital Ocean Spaces Region](https://docs.digitalocean.com/products/spaces/details/availability/). Make sure it is consistent with `SPACES_ENDPOINT` by making sure that the matching region code is present in the endpoint.
-
-### SPACES_SECRET
-
-The [Digital Ocean Spaces Key Secret](https://docs.digitalocean.com/products/spaces/how-to/manage-access/) that corresponds to `SPACES_KEY`.
-
-### START_TIME_ISO_STRING
-
-The scavenger hunt start time in the form of an ISOString.
-
-### NEXT_PUBLIC_DISABLE_LOCATION_TRACKING (Optional)
-
-Set to `true` to disable location tracking entirely. When enabled:
-- The browser will not request location permissions from users
-- No location updates will be saved to the database
-- Team locations will not be displayed on the map
-- No location data will be sent from server to client
-
-This is useful if you want to run the scavenger hunt without real-time team tracking features.
-
-## Load example data
-
-Fill out a `challenges.csv` and `teams.csv` in `scripts`. Let's use the example for now:
-
-```
-cp scripts/example_challenges.csv scripts/challenges.csv
-cp scripts/example_teams.csv scripts/teams.csv
+```bash
+pnpm install
+pnpm db:migrate
+pnpm db:seed
 ```
 
-Note the team names and begin codes. You will need to distribute these team codes to allow users of that team to sign in via `http://localhost/begin/<team code here>` (of course, replace these team code)
+Seed creates 16 placeholder neighborhoods, a round-1 bracket, and optionally
+imports `scripts/example_challenges.csv` if present.
 
-In addition, pick the team(s) that you want to be the "admin team(s)" (which can approve or reject submissions), and take a note of the ID(s). You can specify multiple admin teams in the `ADMIN_ID` environment variable by separating them with commas
+### 4. Run the app
 
-Run this within the devcontainer:
+```bash
+# App only (DB already running via compose)
+pnpm dev
 
-```
-$ MONGO_URL=mongodb://localhost:27017/database npx ts-node -T scripts/perform-migration.ts
-```
-
-# Dokku Deployment
-
-## Register a hostname.
-
-Register a hostname. We recommend [Namecheap](https://www.namecheap.com/). Let's assume that the hostname is "myhostname.com".
-
-## Set up Dokku on a DigitalOcean Droplet
-
-Follow [these instructions](https://dokku.com/docs/getting-started/install/digitalocean/) to set up Dokku on a DigitalOcean droplet. Note the Dokku app name that hosts the web server. If using the [DigitalOcean marketplace droplet](https://marketplace.digitalocean.com/apps/dokku), the app will be `node-js-app`.
-
-## Written for DigitalOcean
-
-We used DigitalOcean for our Dokku deployment. This project could in theory run in another cloud provider, but the instructions may vary slightly.
-
-## Initial Setup
-
-1. Follow [instructions](https://dokku.com/docs/networking/proxies/nginx/#default-site) to turn off the default nginx site and instead have nginx route to our app. In particular, run from within the Dokku host:
-    ```
-    $ rm /etc/nginx/sites-enabled/default
-    dokku nginx:stop
-    dokku nginx:start
-    ```
-1. Add ssh key (.pub file) from local machine to Dokku host via scp to ~/.ssh
-    ```
-    $ scp -i ~/.ssh/<key to access Dokku host> ~/.ssh/<git SSH key> root@<dokku host>:~/.ssh/<git SSH key>.pub
-    ```
-1. Run `dokku ssh-keys:add <git SSH key> path/to/your/public_key.pub` from within the Dokku host
-1. Set up your SSH config on your lcaol machine with the following host entry
-```
-Host myhostname.com
-  Hostname myhostname.com
-  User root
-  IdentityFile ~/.ssh/id_<identity_file>
+# Or full stack
+docker compose up --build
 ```
 
-## Add dokku git remote
+Open `http://localhost` (dev server binds port 80).
 
-```
-$ git remote add dokku dokku@myhostname.com:node-js-app
-$ git push dokku main
-```
+### Optional: Devcontainer
 
-## Create a TLS Cert
-Follow [these instructions](https://dokku.com/docs/configuration/ssl/) to set up the TLS configuration on the dokku end. We'll use [the LetsEncrypt plugin](https://github.com/dokku/dokku-letsencrypt).
+CMD+SHIFT+P → "Reopen in Container" if you want an isolated install.
 
-```
-$ ssh myhostname.com
-$ dokku domains:remove node-js-app node-js-app.myhostname.com  # may need to use dokku domains:report to see all existing hostnames attached to your domain
-$ sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git
-$ dokku letsencrypt:set --global email <your email>
-$ dokku letsencrypt:enable node-js-app
-```
+## Auth flow
 
-Certs will be present at ls /home/dokku/node-js-app/letsencrypt/certs/. Be sure to save them for safekeeping off the droplet via `scp`!
+1. **Sign up** at `/signup` with name, email, phone → Bird OTP → account created
+2. **Log in** at `/login` with phone or email → Bird OTP → session cookie
+3. Admins listed in `ADMIN_EMAILS` get `isAdmin` on successful auth
+4. Admins assign users to teams from `/admin`
 
-## Creating the database
+## Tournament
 
-1. Install the dokku mongo plugin
-```
-$ ssh myhostname.com
-$ sudo dokku plugin:install https://github.com/dokku/dokku-mongo.git mongo
-```
-1. Create the db
-```
-$ ssh myhostname.com
-dokku mongo:create scavhuntdb
-dokku mongo:link scavhuntdb node-js-app
-```
+After login, `/` links into the neighborhood bracket. Everyone votes once per
+matchup. Admins close a round from the Admin → Tournament tab to advance winners.
 
-## Connect to the production database
-To test that the database is up and running, try connecting to it from your Dokku droplet.
-```
-$ ssh myhostname.com
-$ dokku mongo:connect scavhuntdb
+## Dokku deployment
+
+1. Create/link a Postgres service (Dokku postgres plugin) instead of Mongo
+2. Set the env vars from `.env.example` via `dokku config:set`
+3. Push the app; the Docker image runs `prisma migrate deploy` on start
+4. Seed once: `dokku run <app> pnpm db:seed`
+5. Keep nginx `client-max-body-size` high enough for video uploads
+
+```bash
+dokku postgres:create scavhuntdb
+dokku postgres:link scavhuntdb <app>
+dokku config:set <app> SESSION_SECRET=... ADMIN_EMAILS=... APP_ORIGIN=https://your.host ...
+git push dokku main
 ```
 
-You should see a `mongosh` session open.
+## Scripts
 
-## Resize the Droplet
-
-You may want to resize the droplet's storage, CPU, and/or RAM. For example, we recommend allocating at least 4GB of RAM so that the NextJS build has enough RAM to build the web app. Before resizing, you should try to safely shutdown the droplet.
-
-1. Shutdown the droplet
-```
-$ ssh myhostname.com
-$ sudo shutdown -h now
-```
-1. Follow [this process](https://docs.digitalocean.com/products/droplets/how-to/resize/)
-1. Start up dokku again
-```
-$ ssh myhostname.com
-$ dokku ps:restart node-js-app
-```
-
-## Create DB migration app
-
-To run database migrations (like initializing the teams and challenges) on the production database using our `perform-migration.ts` typescript script, create an app that only is used for running database migrations.
-
-```
-$ ssh myhostname.com
-$ dokku apps:create scavhuntdb-migrations
-$ dokku mongo:link scavhuntdb scavhuntdb-migrations
-$ dokku builder-dockerfile:set scavhuntdb-migrations dockerfile-path Dockerfile.migrations
-$ dokku config:set scavhuntdb-migrations DOKKU_SKIP_DEPLOY=true
-$ 
-$ exit
-$ git remote add dokku-migrations dokku@myhostname.com:scavhuntdb-migrations
-```
-
-## Run DB Migration
-
-```
-$ git push dokku-migrations main
-$ ssh myhostname.com "dokku run scavhuntdb-migrations npx ts-node -T scripts/perform-migration.ts"
-```
-
-## Set max body size
-
-When users upload video files to complete challenge, they will quickly exceed the default 1 MiB size limit and experience HTTP 413 status codes before the request hits our Dokku NextJS app. This is because Dokku configures a Nginx proxy with a default max body size of 1MiB. You should reset that variable accordingly:
-```
-$ ssh myhostname.com
-$ dokku nginx:set scavhunt client-max-body-size 200m
-$ dokku proxy:build-config --all
-```
-
-This example specifies a limit of 200MB, but you may want to further increase the limit. Note that this limit shouldn't affect our RAM usage since the file upload code uses NodeJS read streams.
-
-## Set environment variables
-
-You will have to specify environment variables in a similar way to how you specified them via `.env.local`. Instead of via `.env` files, however, we will be specifying them [via Dokku commands](https://dokku.com/docs/configuration/environment-variables/):
-
-**Note**: You do not have to specify the `MONGO_URL` environment variable since it is already set.
-
-```
-$ ssh myhostname.com
-$ dokku config:set node-js-app ENV_VAR_NAME=ENV_VAR_VALUE
-```
-
+| Script | What it does |
+|---|---|
+| `pnpm dev` | Next.js on port 80 |
+| `pnpm build` | `prisma generate` + Next build |
+| `pnpm db:migrate` | Prisma migrate (dev) |
+| `pnpm db:seed` | Neighborhoods + bracket (+ optional challenges CSV) |
+| `pnpm db:studio` | Prisma Studio |

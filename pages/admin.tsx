@@ -1,210 +1,212 @@
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-import { useTeam } from '../components/useTeam';
+import { useEffect, useState } from "react";
+import { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
+import {
+  Box,
+  Button,
+  Flex,
+  FormControl,
+  FormLabel,
+  Heading,
+  HStack,
+  Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
+  Select,
+  Switch,
+  Table,
+  Tbody,
+  Td,
+  Text,
+  Textarea,
+  Th,
+  Thead,
+  Tr,
+  useDisclosure,
+  VStack,
+} from "@chakra-ui/react";
+import NavContainer from "../components/NavContainer";
+import { publicUser, requireAdminSSP } from "../lib/auth";
+import type { SerializedChallenge, SerializedTeam } from "../lib/types";
 
-interface Member {
-  firstName: string;
-  familyName?: string;
-  _id?: string;
-}
-
-interface Team {
-  _id: string;
+type AdminUser = {
+  id: string;
   name: string;
-  emoji: string;
-  teamCode: string;
-  members: Member[];
-}
-
-interface Challenge {
-  _id: string;
-  title: string;
-  prompt: string;
-  pts: number;
-  loc: {
-    lat: number;
-    lng: number;
-  };
-  numWinners: number;
-}
-
-interface ScavAIMessage {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-}
-
-interface ScavAIConversation {
-  _id: string;
-  teamId: string;
-  teamName: string;
-  messageCount: number;
+  email: string;
+  phoneE164: string;
+  isAdmin: boolean;
+  isActive: boolean;
+  teamId: string | null;
   createdAt: string;
-  updatedAt: string;
-  firstMessage: string;
-  messages: ScavAIMessage[];
+  lastSeenAt: string | null;
+  team: { id: string; name: string; emoji: string } | null;
+  _count: { submissions: number; votes: number };
+};
+
+type AdminTeam = SerializedTeam & {
+  users?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    phoneE164: string;
+    isAdmin: boolean;
+    isActive: boolean;
+  }>;
+};
+
+type Challenge = SerializedChallenge;
+
+type TournamentMatchup = {
+  id: string;
+  round: number;
+  isOpen: boolean;
+  winnerId: string | null;
+  slotA: { id: string; name: string };
+  slotB: { id: string; name: string };
+  winner: { id: string; name: string } | null;
+  votes: Record<string, number>;
+  totalVotes: number;
+};
+
+type Tab = "users" | "teams" | "challenges" | "tournament";
+
+export const getServerSideProps = async (
+  context: GetServerSidePropsContext,
+) => {
+  const auth = await requireAdminSSP(context);
+  if (auth.redirect) return { redirect: auth.redirect };
+
+  return {
+    props: {
+      user: publicUser(auth.user!),
+    },
+  };
+};
+
+function formatDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString();
 }
 
-export default function AdminPage() {
-  const currentTeam = useTeam();
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'teams' | 'challenges' | 'scavai'>('teams');
-  const [teams, setTeams] = useState<Team[]>([]);
+export default function AdminPage({
+  user,
+}: InferGetServerSidePropsType<typeof getServerSideProps>) {
+  const [activeTab, setActiveTab] = useState<Tab>("users");
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [teams, setTeams] = useState<AdminTeam[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [scavaiConversations, setScavaiConversations] = useState<ScavAIConversation[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<ScavAIConversation | null>(null);
+  const [matchups, setMatchups] = useState<TournamentMatchup[]>([]);
+  const [currentRound, setCurrentRound] = useState<number | null>(null);
+  const [tournamentComplete, setTournamentComplete] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
-  // Form states
-  const [newTeamName, setNewTeamName] = useState('');
-  const [newTeamEmoji, setNewTeamEmoji] = useState('');
-  const [newTeamCode, setNewTeamCode] = useState('');
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamEmoji, setNewTeamEmoji] = useState("");
 
-  const [selectedTeamForPlayer, setSelectedTeamForPlayer] = useState('');
-  const [newPlayerFirstName, setNewPlayerFirstName] = useState('');
-  const [newPlayerFamilyName, setNewPlayerFamilyName] = useState('');
-
-  const [moveFromTeam, setMoveFromTeam] = useState('');
-  const [moveToTeam, setMoveToTeam] = useState('');
-  const [movePlayerIndex, setMovePlayerIndex] = useState('');
-
-  // Challenge form states
-  const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
+  const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(
+    null,
+  );
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [teamsCsvFile, setTeamsCsvFile] = useState<File | null>(null);
-  const [newTeamCodes, setNewTeamCodes] = useState<Array<{ name: string; emoji: string; teamCode: string }> | null>(null);
+
+  const [pendingAdminToggle, setPendingAdminToggle] = useState<{
+    user: AdminUser;
+    nextValue: boolean;
+  } | null>(null);
+  const adminConfirm = useDisclosure();
+
+  const loadUsers = async () => {
+    const res = await fetch("/api/admin/users");
+    if (!res.ok) throw new Error("Failed to load users");
+    const data = await res.json();
+    setUsers(data.users);
+  };
 
   const loadTeams = async () => {
-    try {
-      const res = await fetch('/api/admin/teams');
-      if (res.status === 403) {
-        router.push('/');
-        return;
-      }
-      const data = await res.json();
-      setTeams(data.teams);
-      setLoading(false);
-    } catch (err) {
-      setError('Failed to load teams');
-      setLoading(false);
-    }
+    const res = await fetch("/api/admin/teams");
+    if (!res.ok) throw new Error("Failed to load teams");
+    const data = await res.json();
+    setTeams(data.teams);
   };
 
   const loadChallenges = async () => {
-    try {
-      const res = await fetch('/api/admin/challenges');
-      if (res.status === 403) {
-        router.push('/');
-        return;
-      }
-      const data = await res.json();
-      setChallenges(data.challenges);
-    } catch (err) {
-      setError('Failed to load challenges');
-    }
+    const res = await fetch("/api/admin/challenges");
+    if (!res.ok) throw new Error("Failed to load challenges");
+    const data = await res.json();
+    setChallenges(data.challenges);
   };
 
-  const loadScavAIConversations = async () => {
-    try {
-      const res = await fetch('/api/admin/scavai-conversations');
-      if (res.status === 403) {
-        router.push('/');
-        return;
-      }
-      const data = await res.json();
-      setScavaiConversations(data.conversations);
-    } catch (err) {
-      setError('Failed to load ScavAI conversations');
-    }
+  const loadTournament = async () => {
+    const res = await fetch("/api/admin/tournament");
+    if (!res.ok) throw new Error("Failed to load tournament");
+    const data = await res.json();
+    setMatchups(data.matchups);
+    setCurrentRound(data.currentRound);
+    setTournamentComplete(Boolean(data.complete));
   };
 
   useEffect(() => {
-    if (currentTeam) {
-      loadTeams();
-      loadChallenges();
-      loadScavAIConversations();
+    (async () => {
+      try {
+        await Promise.all([
+          loadUsers(),
+          loadTeams(),
+          loadChallenges(),
+          loadTournament(),
+        ]);
+      } catch {
+        setError("Failed to load admin data");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const patchUser = async (
+    id: string,
+    patch: Record<string, unknown>,
+  ): Promise<boolean> => {
+    const res = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Failed to update user");
+      return false;
     }
-  }, [currentTeam]);
+    const data = await res.json();
+    setUsers((prev) => prev.map((u) => (u.id === id ? data.user : u)));
+    return true;
+  };
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/create-team', {
-        method: 'POST',
+      const res = await fetch("/api/admin/create-team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newTeamName,
           emoji: newTeamEmoji,
-          teamCode: newTeamCode,
         }),
       });
-
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Failed to create team');
+        alert(data.error || "Failed to create team");
         return;
       }
-
-      setNewTeamName('');
-      setNewTeamEmoji('');
-      setNewTeamCode('');
+      setNewTeamName("");
+      setNewTeamEmoji("");
       await loadTeams();
-      alert('Team created successfully!');
-    } catch (err) {
-      alert('Failed to create team');
-    }
-  };
-
-  const handleAddPlayer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch('/api/admin/add-player', {
-        method: 'POST',
-        body: JSON.stringify({
-          teamId: selectedTeamForPlayer,
-          firstName: newPlayerFirstName,
-          familyName: newPlayerFamilyName,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || 'Failed to add player');
-        return;
-      }
-
-      setNewPlayerFirstName('');
-      setNewPlayerFamilyName('');
-      await loadTeams();
-      alert('Player added successfully!');
-    } catch (err) {
-      alert('Failed to add player');
-    }
-  };
-
-  const handleMovePlayer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch('/api/admin/move-player', {
-        method: 'POST',
-        body: JSON.stringify({
-          fromTeamId: moveFromTeam,
-          toTeamId: moveToTeam,
-          playerIndex: parseInt(movePlayerIndex),
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || 'Failed to move player');
-        return;
-      }
-
-      setMovePlayerIndex('');
-      await loadTeams();
-      alert('Player moved successfully!');
-    } catch (err) {
-      alert('Failed to move player');
+      alert("Team created successfully!");
+    } catch {
+      alert("Failed to create team");
     }
   };
 
@@ -213,960 +215,663 @@ export default function AdminPage() {
     if (!editingChallenge) return;
 
     try {
-      const res = await fetch('/api/admin/update-challenge', {
-        method: 'PUT',
+      const res = await fetch("/api/admin/update-challenge", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          _id: editingChallenge._id,
+          id: editingChallenge.id,
           title: editingChallenge.title,
           prompt: editingChallenge.prompt,
           pts: editingChallenge.pts,
-          lat: editingChallenge.loc.lat,
-          lng: editingChallenge.loc.lng,
+          lat: editingChallenge.lat,
+          lng: editingChallenge.lng,
           numWinners: editingChallenge.numWinners,
         }),
       });
-
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Failed to update challenge');
+        alert(data.error || "Failed to update challenge");
         return;
       }
-
       setEditingChallenge(null);
       await loadChallenges();
-      alert('Challenge updated successfully!');
-    } catch (err) {
-      alert('Failed to update challenge');
+      alert("Challenge updated successfully!");
+    } catch {
+      alert("Failed to update challenge");
     }
   };
-
 
   const handleImportCSV = async () => {
     if (!csvFile) {
-      alert('Please select a CSV file');
+      alert("Please select a CSV file");
       return;
     }
-
     try {
       const csvContent = await csvFile.text();
-      const res = await fetch('/api/admin/import-challenges', {
-        method: 'POST',
+      const res = await fetch("/api/admin/import-challenges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csvContent }),
       });
-
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Failed to import challenges');
+        alert(data.error || "Failed to import challenges");
         return;
       }
-
       const data = await res.json();
       setCsvFile(null);
       await loadChallenges();
-      alert(data.message || 'Challenges imported successfully!');
-    } catch (err) {
-      alert('Failed to import challenges');
+      alert(data.message || "Challenges imported successfully!");
+    } catch {
+      alert("Failed to import challenges");
     }
   };
 
-  const handleImportTeamsCSV = async () => {
-    if (!teamsCsvFile) {
-      alert('Please select a CSV file');
+  const handleDeleteChallenge = async (
+    challengeId: string,
+    challengeTitle: string,
+  ) => {
+    if (
+      !confirm(
+        `Are you sure you want to delete "${challengeTitle}"? This can only be done if there are no submissions for this challenge.`,
+      )
+    ) {
       return;
     }
-
     try {
-      const csvContent = await teamsCsvFile.text();
-      const res = await fetch('/api/admin/import-teams', {
-        method: 'POST',
-        body: JSON.stringify({ csvContent }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || 'Failed to import teams');
-        return;
-      }
-
-      const data = await res.json();
-      setTeamsCsvFile(null);
-      await loadTeams();
-      
-      // Show team codes modal if any new teams were created
-      if (data.newTeamCodes && data.newTeamCodes.length > 0) {
-        setNewTeamCodes(data.newTeamCodes);
-      } else {
-        alert(data.message || 'Teams imported successfully!');
-      }
-    } catch (err) {
-      alert('Failed to import teams');
-    }
-  };
-
-  const copyTeamCodesToClipboard = () => {
-    if (!newTeamCodes) return;
-    
-    const text = newTeamCodes.map(tc => `${tc.emoji} ${tc.name}: ${tc.teamCode}`).join('\n');
-    navigator.clipboard.writeText(text);
-    alert('Team codes copied to clipboard!');
-  };
-
-  const handleDeleteChallenge = async (challengeId: string, challengeTitle: string) => {
-    if (!confirm(`Are you sure you want to delete "${challengeTitle}"? This can only be done if there are no submissions for this challenge.`)) {
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/admin/delete-challenge', {
-        method: 'DELETE',
+      const res = await fetch("/api/admin/delete-challenge", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challengeId }),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
-        alert(data.error || 'Failed to delete challenge');
+        alert(data.error || "Failed to delete challenge");
         return;
       }
-
       await loadChallenges();
-      alert('Challenge deleted successfully!');
-    } catch (err) {
-      alert('Failed to delete challenge');
+      alert("Challenge deleted successfully!");
+    } catch {
+      alert("Failed to delete challenge");
     }
   };
 
-  if (!currentTeam || loading) {
+  const handleCloseRound = async () => {
+    if (
+      !confirm(
+        "Close the current round and advance winners to the next round?",
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/tournament", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "closeRound" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to close round");
+        return;
+      }
+      await loadTournament();
+      if (data.complete) {
+        alert("Tournament complete!");
+      } else {
+        alert("Round closed. Next round matchups created.");
+      }
+    } catch {
+      alert("Failed to close round");
+    }
+  };
+
+  const confirmAdminToggle = async () => {
+    if (!pendingAdminToggle) return;
+    const { user: target, nextValue } = pendingAdminToggle;
+    await patchUser(target.id, { isAdmin: nextValue });
+    setPendingAdminToggle(null);
+    adminConfirm.onClose();
+  };
+
+  if (loading) {
     return (
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-        Loading...
-      </div>
+      <NavContainer title="Admin">
+        <Text>Loading...</Text>
+      </NavContainer>
     );
   }
 
   if (error) {
     return (
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-        {error}
-      </div>
+      <NavContainer title="Admin">
+        <Text color="red.600">{error}</Text>
+      </NavContainer>
     );
   }
 
-  const getTeamPlayers = (teamId: string) => {
-    const team = teams.find(t => t._id === teamId);
-    return team?.members || [];
-  };
+  const tabs: Array<{ id: Tab; label: string }> = [
+    { id: "users", label: "Users" },
+    { id: "teams", label: "Teams" },
+    { id: "challenges", label: "Challenges" },
+    { id: "tournament", label: "Tournament" },
+  ];
 
   return (
-    <>
-      <style jsx>{`
-        .admin-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 20px;
-          font-family: Arial, sans-serif;
-        }
-        .title {
-          font-size: 32px;
-          margin-bottom: 20px;
-          color: #333;
-        }
-        .tabs {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 30px;
-          border-bottom: 2px solid #ddd;
-        }
-        .tab {
-          padding: 12px 24px;
-          font-size: 16px;
-          background: none;
-          border: none;
-          border-bottom: 3px solid transparent;
-          cursor: pointer;
-          color: #666;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-        .tab:hover {
-          color: #0070f3;
-        }
-        .tab.active {
-          color: #0070f3;
-          border-bottom-color: #0070f3;
-        }
-        .section {
-          margin-bottom: 40px;
-          padding: 20px;
-          background-color: #f5f5f5;
-          border-radius: 8px;
-        }
-        .section-title {
-          font-size: 24px;
-          margin-bottom: 20px;
-          color: #555;
-        }
-        .form {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          max-width: 100%;
-        }
-        .input, .select, .textarea {
-          padding: 12px;
-          font-size: 16px;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          width: 100%;
-          box-sizing: border-box;
-        }
-        .textarea {
-          min-height: 100px;
-          font-family: Arial, sans-serif;
-          resize: vertical;
-        }
-        .select {
-          background-color: white;
-        }
-        .button {
-          padding: 14px;
-          font-size: 16px;
-          background-color: #0070f3;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-weight: bold;
-          width: 100%;
-        }
-        .button:hover {
-          background-color: #0051cc;
-        }
-        .button:active {
-          transform: scale(0.98);
-        }
-        .button-secondary {
-          background-color: #6c757d;
-        }
-        .button-secondary:hover {
-          background-color: #5a6268;
-        }
-        .table-container {
-          overflow-x: auto;
-          background-color: white;
-          border-radius: 8px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 600px;
-        }
-        .table th,
-        .table td {
-          padding: 12px;
-          text-align: left;
-          border-bottom: 1px solid #eee;
-        }
-        .table th {
-          background-color: #f8f9fa;
-          font-weight: bold;
-          color: #333;
-        }
-        .table tr:hover {
-          background-color: #f8f9fa;
-        }
-        .small-button {
-          padding: 6px 12px;
-          font-size: 14px;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-weight: 500;
-        }
-        .edit-button {
-          background-color: #0070f3;
-          color: white;
-        }
-        .edit-button:hover {
-          background-color: #0051cc;
-        }
-        .delete-button {
-          background-color: #dc3545;
-          color: white;
-        }
-        .delete-button:hover {
-          background-color: #c82333;
-        }
-        .action-buttons {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-        .modal {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 20px;
-        }
-        .modal-content {
-          background-color: white;
-          padding: 30px;
-          border-radius: 8px;
-          max-width: 600px;
-          width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
-        }
-        .modal-title {
-          font-size: 24px;
-          margin-bottom: 20px;
-          color: #333;
-        }
-        .modal-buttons {
-          display: flex;
-          gap: 10px;
-          margin-top: 20px;
-        }
-        .file-input-wrapper {
-          display: flex;
-          gap: 10px;
-          align-items: center;
-          flex-wrap: wrap;
-        }
-        .file-input {
-          flex: 1;
-          min-width: 200px;
-        }
+    <NavContainer title="Admin">
+      <VStack align="stretch" spacing={6} width="100%">
+        <Heading size="lg">Admin</Heading>
 
-        @media (min-width: 768px) {
-          .admin-container {
-            padding: 30px;
-          }
-          .form {
-            max-width: 400px;
-          }
-          .button {
-            width: auto;
-            min-width: 150px;
-          }
-        }
+        <HStack spacing={2} flexWrap="wrap">
+          {tabs.map((tab) => (
+            <Button
+              key={tab.id}
+              size="sm"
+              variant={activeTab === tab.id ? "solid" : "outline"}
+              colorScheme="blue"
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </HStack>
 
-        @media (max-width: 767px) {
-          .admin-container {
-            padding: 15px;
-          }
-          .title {
-            font-size: 24px;
-            margin-bottom: 15px;
-          }
-          .tabs {
-            margin-bottom: 20px;
-          }
-          .tab {
-            padding: 10px 16px;
-            font-size: 14px;
-          }
-          .section {
-            padding: 15px;
-            margin-bottom: 20px;
-          }
-          .section-title {
-            font-size: 20px;
-            margin-bottom: 15px;
-          }
-          .table th,
-          .table td {
-            padding: 8px;
-            font-size: 14px;
-          }
-          .modal-content {
-            padding: 20px;
-          }
-          .modal-title {
-            font-size: 20px;
-          }
-          .modal-buttons {
-            flex-direction: column;
-          }
-        }
-      `}</style>
-      <div className="admin-container">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-          <h1 className="title" style={{ margin: 0 }}>Admin Panel</h1>
-          <button
-            onClick={() => router.push('/')}
-            className="button"
-            style={{ width: 'auto', minWidth: '120px' }}
+        {activeTab === "users" && (
+          <Box
+            bg="white"
+            borderRadius="md"
+            boxShadow="sm"
+            overflowX="auto"
+            width="100%"
           >
-            Return to Home
-          </button>
-        </div>
-
-        <div className="tabs">
-          <button
-            className={`tab ${activeTab === 'teams' ? 'active' : ''}`}
-            onClick={() => setActiveTab('teams')}
-          >
-            Teams
-          </button>
-          <button
-            className={`tab ${activeTab === 'challenges' ? 'active' : ''}`}
-            onClick={() => setActiveTab('challenges')}
-          >
-            Challenges
-          </button>
-          <button
-            className={`tab ${activeTab === 'scavai' ? 'active' : ''}`}
-            onClick={() => setActiveTab('scavai')}
-          >
-            ScavAI Conversations
-          </button>
-        </div>
-
-        {activeTab === 'teams' && (
-          <>
-            {/* Teams List */}
-            <section className="section">
-              <h2 className="section-title">All Teams</h2>
-              <div className="table-container">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Team</th>
-                      <th>Members</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {teams.map((team) => (
-                      <tr key={team._id}>
-                        <td>
-                          <strong>{team.emoji} {team.name}</strong>
-                        </td>
-                        <td>
-                          {team.members.map((member, idx) => (
-                            <div key={idx}>
-                              {idx + 1}. {member.firstName}{member.familyName ? ` ${member.familyName}` : ''}
-                            </div>
-                          ))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            {/* Create Team */}
-            <section className="section">
-              <h2 className="section-title">Create New Team</h2>
-              <form onSubmit={handleCreateTeam} className="form">
-                <input
-                  type="text"
-                  placeholder="Team Name"
-                  value={newTeamName}
-                  onChange={(e) => setNewTeamName(e.target.value)}
-                  required
-                  className="input"
-                />
-                <input
-                  type="text"
-                  placeholder="Emoji (e.g., 🚀)"
-                  value={newTeamEmoji}
-                  onChange={(e) => setNewTeamEmoji(e.target.value)}
-                  required
-                  className="input"
-                />
-                <input
-                  type="text"
-                  placeholder="Team Code"
-                  value={newTeamCode}
-                  onChange={(e) => setNewTeamCode(e.target.value)}
-                  required
-                  className="input"
-                />
-                <button type="submit" className="button">Create Team</button>
-              </form>
-            </section>
-
-            {/* Add Player */}
-            <section className="section">
-              <h2 className="section-title">Add Player to Team</h2>
-              <form onSubmit={handleAddPlayer} className="form">
-                <select
-                  value={selectedTeamForPlayer}
-                  onChange={(e) => setSelectedTeamForPlayer(e.target.value)}
-                  required
-                  className="select"
-                >
-                  <option value="">Select Team</option>
-                  {teams.map((team) => (
-                    <option key={team._id} value={team._id}>
-                      {team.emoji} {team.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="First Name"
-                  value={newPlayerFirstName}
-                  onChange={(e) => setNewPlayerFirstName(e.target.value)}
-                  required
-                  className="input"
-                />
-                <input
-                  type="text"
-                  placeholder="Family Name"
-                  value={newPlayerFamilyName}
-                  onChange={(e) => setNewPlayerFamilyName(e.target.value)}
-                  required
-                  className="input"
-                />
-                <button type="submit" className="button">Add Player</button>
-              </form>
-            </section>
-
-            {/* Move Player */}
-            <section className="section">
-              <h2 className="section-title">Move Player Between Teams</h2>
-              <form onSubmit={handleMovePlayer} className="form">
-                <select
-                  value={moveFromTeam}
-                  onChange={(e) => setMoveFromTeam(e.target.value)}
-                  required
-                  className="select"
-                >
-                  <option value="">From Team</option>
-                  {teams.map((team) => (
-                    <option key={team._id} value={team._id}>
-                      {team.emoji} {team.name}
-                    </option>
-                  ))}
-                </select>
-                
-                {moveFromTeam && (
-                  <select
-                    value={movePlayerIndex}
-                    onChange={(e) => setMovePlayerIndex(e.target.value)}
-                    required
-                    className="select"
-                  >
-                    <option value="">Select Player</option>
-                    {getTeamPlayers(moveFromTeam).map((member, idx) => (
-                      <option key={idx} value={idx}>
-                        {member.firstName}{member.familyName ? ` ${member.familyName}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <select
-                  value={moveToTeam}
-                  onChange={(e) => setMoveToTeam(e.target.value)}
-                  required
-                  className="select"
-                >
-                  <option value="">To Team</option>
-                  {teams.map((team) => (
-                    <option key={team._id} value={team._id}>
-                      {team.emoji} {team.name}
-                    </option>
-                  ))}
-                </select>
-                
-                <button type="submit" className="button">Move Player</button>
-              </form>
-            </section>
-
-            {/* Import Teams from CSV */}
-            <section className="section">
-              <h2 className="section-title">Import Teams from CSV</h2>
-              <div className="file-input-wrapper">
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => setTeamsCsvFile(e.target.files?.[0] || null)}
-                  className="input file-input"
-                />
-                <button
-                  onClick={handleImportTeamsCSV}
-                  className="button"
-                  disabled={!teamsCsvFile}
-                >
-                  Import CSV
-                </button>
-              </div>
-              <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
-                CSV format: Emoji, Name, Size, names (comma-separated "FirstName LastName")
-              </p>
-            </section>
-          </>
+            <Table size="sm">
+              <Thead>
+                <Tr>
+                  <Th>Name</Th>
+                  <Th>Email</Th>
+                  <Th>Phone</Th>
+                  <Th>Team</Th>
+                  <Th>Active</Th>
+                  <Th>Admin</Th>
+                  <Th>Created</Th>
+                  <Th>Last seen</Th>
+                  <Th>Subs</Th>
+                  <Th>Votes</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {users.map((u) => (
+                  <Tr key={u.id}>
+                    <Td>
+                      <Input
+                        size="sm"
+                        defaultValue={u.name}
+                        onBlur={async (e) => {
+                          const next = e.target.value.trim();
+                          if (next && next !== u.name) {
+                            await patchUser(u.id, { name: next });
+                          }
+                        }}
+                      />
+                    </Td>
+                    <Td>
+                      <Input
+                        size="sm"
+                        defaultValue={u.email}
+                        onBlur={async (e) => {
+                          const next = e.target.value.trim();
+                          if (next && next !== u.email) {
+                            await patchUser(u.id, { email: next });
+                          }
+                        }}
+                      />
+                    </Td>
+                    <Td>
+                      <Input
+                        size="sm"
+                        defaultValue={u.phoneE164}
+                        onBlur={async (e) => {
+                          const next = e.target.value.trim();
+                          if (next && next !== u.phoneE164) {
+                            await patchUser(u.id, { phone: next });
+                          }
+                        }}
+                      />
+                    </Td>
+                    <Td minW="140px">
+                      <Select
+                        size="sm"
+                        value={u.teamId ?? ""}
+                        onChange={async (e) => {
+                          const value = e.target.value;
+                          await patchUser(u.id, {
+                            teamId: value === "" ? null : value,
+                          });
+                        }}
+                      >
+                        <option value="">No team</option>
+                        {teams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.emoji} {t.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Td>
+                    <Td>
+                      <Switch
+                        isChecked={u.isActive}
+                        colorScheme="green"
+                        onChange={async (e) => {
+                          await patchUser(u.id, {
+                            isActive: e.target.checked,
+                          });
+                        }}
+                      />
+                    </Td>
+                    <Td>
+                      <Switch
+                        isChecked={u.isAdmin}
+                        colorScheme="purple"
+                        isDisabled={u.id === user.id && u.isAdmin}
+                        onChange={(e) => {
+                          setPendingAdminToggle({
+                            user: u,
+                            nextValue: e.target.checked,
+                          });
+                          adminConfirm.onOpen();
+                        }}
+                      />
+                    </Td>
+                    <Td whiteSpace="nowrap">{formatDate(u.createdAt)}</Td>
+                    <Td whiteSpace="nowrap">{formatDate(u.lastSeenAt)}</Td>
+                    <Td>{u._count.submissions}</Td>
+                    <Td>{u._count.votes}</Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
         )}
 
-        {activeTab === 'challenges' && (
-          <>
-            {/* Challenges List */}
-            <section className="section">
-              <h2 className="section-title">All Challenges</h2>
-              <div className="table-container">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Points</th>
-                      <th>Lat</th>
-                      <th>Lng</th>
-                      <th>Winners</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+        {activeTab === "teams" && (
+          <VStack align="stretch" spacing={6}>
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="md" mb={4}>
+                All Teams
+              </Heading>
+              <Box overflowX="auto">
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Team</Th>
+                      <Th>Members</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {teams.map((team) => (
+                      <Tr key={team.id}>
+                        <Td>
+                          <Text fontWeight="semibold">
+                            {team.emoji} {team.name}
+                          </Text>
+                        </Td>
+                        <Td>
+                          {(team.users ?? []).length === 0 ? (
+                            <Text color="gray.500">No members</Text>
+                          ) : (
+                            (team.users ?? []).map((m) => (
+                              <Text key={m.id} fontSize="sm">
+                                {m.name} ({m.email})
+                              </Text>
+                            ))
+                          )}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </Box>
+            </Box>
+
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm" maxW="420px">
+              <Heading size="md" mb={4}>
+                Create Team
+              </Heading>
+              <form onSubmit={handleCreateTeam}>
+                <VStack align="stretch" spacing={3}>
+                  <FormControl isRequired>
+                    <FormLabel>Name</FormLabel>
+                    <Input
+                      value={newTeamName}
+                      onChange={(e) => setNewTeamName(e.target.value)}
+                      placeholder="Team name"
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Emoji</FormLabel>
+                    <Input
+                      value={newTeamEmoji}
+                      onChange={(e) => setNewTeamEmoji(e.target.value)}
+                      placeholder="🚀"
+                    />
+                  </FormControl>
+                  <Button type="submit" colorScheme="blue">
+                    Create Team
+                  </Button>
+                </VStack>
+              </form>
+            </Box>
+          </VStack>
+        )}
+
+        {activeTab === "challenges" && (
+          <VStack align="stretch" spacing={6}>
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="md" mb={4}>
+                All Challenges
+              </Heading>
+              <Box overflowX="auto">
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Title</Th>
+                      <Th>Points</Th>
+                      <Th>Lat</Th>
+                      <Th>Lng</Th>
+                      <Th>Winners</Th>
+                      <Th>Actions</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
                     {challenges.map((challenge) => (
-                      <tr key={challenge._id}>
-                        <td>{challenge.title}</td>
-                        <td>{challenge.pts}</td>
-                        <td>{challenge.loc.lat.toFixed(4)}</td>
-                        <td>{challenge.loc.lng.toFixed(4)}</td>
-                        <td>{challenge.numWinners}</td>
-                        <td>
-                          <div className="action-buttons">
-                            <button
-                              className="small-button edit-button"
+                      <Tr key={challenge.id}>
+                        <Td>{challenge.title}</Td>
+                        <Td>{challenge.pts}</Td>
+                        <Td>{challenge.lat.toFixed(4)}</Td>
+                        <Td>{challenge.lng.toFixed(4)}</Td>
+                        <Td>{challenge.numWinners}</Td>
+                        <Td>
+                          <HStack>
+                            <Button
+                              size="xs"
+                              colorScheme="blue"
                               onClick={() => setEditingChallenge(challenge)}
                             >
                               Edit
-                            </button>
-                            <button
-                              className="small-button delete-button"
-                              onClick={() => handleDeleteChallenge(challenge._id, challenge.title)}
+                            </Button>
+                            <Button
+                              size="xs"
+                              colorScheme="red"
+                              onClick={() =>
+                                handleDeleteChallenge(
+                                  challenge.id,
+                                  challenge.title,
+                                )
+                              }
                             >
                               Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                            </Button>
+                          </HStack>
+                        </Td>
+                      </Tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                  </Tbody>
+                </Table>
+              </Box>
+            </Box>
 
-            {/* Import CSV */}
-            <section className="section">
-              <h2 className="section-title">Import Challenges from CSV</h2>
-              <div className="file-input-wrapper">
-                <input
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="md" mb={4}>
+                Import Challenges from CSV
+              </Heading>
+              <HStack flexWrap="wrap" spacing={3}>
+                <Input
                   type="file"
                   accept=".csv"
                   onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-                  className="input file-input"
+                  maxW="320px"
+                  p={1}
                 />
-                <button
+                <Button
+                  colorScheme="blue"
                   onClick={handleImportCSV}
-                  className="button"
-                  disabled={!csvFile}
+                  isDisabled={!csvFile}
                 >
                   Import CSV
-                </button>
-              </div>
-              <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
+                </Button>
+              </HStack>
+              <Text mt={2} fontSize="sm" color="gray.600">
                 CSV format: title, prompt, pts, (ignored), lat, lng, numWinners
-              </p>
-            </section>
-          </>
+              </Text>
+            </Box>
+          </VStack>
         )}
 
-        {activeTab === 'scavai' && (
-          <>
-            {/* ScavAI Conversations List */}
-            <section className="section">
-              <h2 className="section-title">All ScavAI Conversations</h2>
-              <div className="table-container">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Team</th>
-                      <th>Messages</th>
-                      <th>First Message</th>
-                      <th>Started</th>
-                      <th>Last Updated</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scavaiConversations.map((conversation) => (
-                      <tr key={conversation._id}>
-                        <td><strong>{conversation.teamName}</strong></td>
-                        <td>{conversation.messageCount}</td>
-                        <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {conversation.firstMessage}
-                        </td>
-                        <td>{new Date(conversation.createdAt).toLocaleString()}</td>
-                        <td>{new Date(conversation.updatedAt).toLocaleString()}</td>
-                        <td>
-                          <button
-                            className="small-button edit-button"
-                            onClick={() => setSelectedConversation(conversation)}
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
+        {activeTab === "tournament" && (
+          <VStack align="stretch" spacing={4}>
+            <Flex
+              justify="space-between"
+              align="center"
+              flexWrap="wrap"
+              gap={3}
+            >
+              <Box>
+                <Heading size="md">
+                  {tournamentComplete
+                    ? "Tournament complete"
+                    : currentRound != null
+                      ? `Round ${currentRound}`
+                      : "No open matchups"}
+                </Heading>
+                <Text fontSize="sm" color="gray.600">
+                  Vote tallies for current open matchups
+                </Text>
+              </Box>
+              <Button
+                colorScheme="orange"
+                onClick={handleCloseRound}
+                isDisabled={matchups.length === 0 || tournamentComplete}
+              >
+                Close round &amp; advance
+              </Button>
+            </Flex>
+
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              {matchups.length === 0 ? (
+                <Text color="gray.500">
+                  {tournamentComplete
+                    ? "No open matchups — tournament is finished."
+                    : "No open matchups yet."}
+                </Text>
+              ) : (
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Matchup</Th>
+                      <Th>Votes A</Th>
+                      <Th>Votes B</Th>
+                      <Th>Total</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {matchups.map((m) => (
+                      <Tr key={m.id}>
+                        <Td>
+                          <Text fontWeight="medium">
+                            {m.slotA.name} vs {m.slotB.name}
+                          </Text>
+                        </Td>
+                        <Td>
+                          {m.slotA.name}: {m.votes[m.slotA.id] ?? 0}
+                        </Td>
+                        <Td>
+                          {m.slotB.name}: {m.votes[m.slotB.id] ?? 0}
+                        </Td>
+                        <Td>{m.totalVotes}</Td>
+                      </Tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              {scavaiConversations.length === 0 && (
-                <p style={{ textAlign: 'center', marginTop: '20px', color: '#666' }}>
-                  No ScavAI conversations yet.
-                </p>
+                  </Tbody>
+                </Table>
               )}
-            </section>
-          </>
+            </Box>
+          </VStack>
         )}
+      </VStack>
 
-        {/* Edit Challenge Modal */}
-        {editingChallenge && (
-          <div className="modal" onClick={() => setEditingChallenge(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2 className="modal-title">Edit Challenge</h2>
-              <form onSubmit={handleUpdateChallenge} className="form">
-                <div>
-                  <label htmlFor="challenge-title" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
-                    Title
-                  </label>
-                  <input
-                    id="challenge-title"
-                    type="text"
-                    placeholder="Title"
-                    value={editingChallenge.title}
-                    onChange={(e) => setEditingChallenge({ ...editingChallenge, title: e.target.value })}
-                    required
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="challenge-prompt" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
-                    Prompt
-                  </label>
-                  <textarea
-                    id="challenge-prompt"
-                    placeholder="Prompt"
-                    value={editingChallenge.prompt}
-                    onChange={(e) => setEditingChallenge({ ...editingChallenge, prompt: e.target.value })}
-                    required
-                    className="textarea"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="challenge-points" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
-                    Points
-                  </label>
-                  <input
-                    id="challenge-points"
-                    type="number"
-                    placeholder="Points"
-                    value={editingChallenge.pts}
-                    onChange={(e) => setEditingChallenge({ ...editingChallenge, pts: Number(e.target.value) })}
-                    required
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="challenge-latitude" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
-                    Latitude
-                  </label>
-                  <input
-                    id="challenge-latitude"
-                    type="number"
-                    step="any"
-                    placeholder="Latitude"
-                    value={editingChallenge.loc.lat}
-                    onChange={(e) => setEditingChallenge({ 
-                      ...editingChallenge, 
-                      loc: { ...editingChallenge.loc, lat: Number(e.target.value) }
-                    })}
-                    required
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="challenge-longitude" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
-                    Longitude
-                  </label>
-                  <input
-                    id="challenge-longitude"
-                    type="number"
-                    step="any"
-                    placeholder="Longitude"
-                    value={editingChallenge.loc.lng}
-                    onChange={(e) => setEditingChallenge({ 
-                      ...editingChallenge, 
-                      loc: { ...editingChallenge.loc, lng: Number(e.target.value) }
-                    })}
-                    required
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="challenge-winners" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#333' }}>
-                    Number of Winners
-                  </label>
-                  <input
-                    id="challenge-winners"
-                    type="number"
-                    placeholder="Number of Winners"
-                    value={editingChallenge.numWinners}
-                    onChange={(e) => setEditingChallenge({ ...editingChallenge, numWinners: Number(e.target.value) })}
-                    required
-                    className="input"
-                  />
-                </div>
-                <div className="modal-buttons">
-                  <button type="submit" className="button">Save Changes</button>
-                  <button
-                    type="button"
-                    className="button button-secondary"
-                    onClick={() => setEditingChallenge(null)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+      <Modal
+        isOpen={!!editingChallenge}
+        onClose={() => setEditingChallenge(null)}
+        size="lg"
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Edit Challenge</ModalHeader>
+          <ModalCloseButton />
+          {editingChallenge && (
+            <form onSubmit={handleUpdateChallenge}>
+              <ModalBody>
+                <VStack spacing={3} align="stretch">
+                  <FormControl isRequired>
+                    <FormLabel>Title</FormLabel>
+                    <Input
+                      value={editingChallenge.title}
+                      onChange={(e) =>
+                        setEditingChallenge({
+                          ...editingChallenge,
+                          title: e.target.value,
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Prompt</FormLabel>
+                    <Textarea
+                      value={editingChallenge.prompt}
+                      onChange={(e) =>
+                        setEditingChallenge({
+                          ...editingChallenge,
+                          prompt: e.target.value,
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Points</FormLabel>
+                    <Input
+                      type="number"
+                      value={editingChallenge.pts}
+                      onChange={(e) =>
+                        setEditingChallenge({
+                          ...editingChallenge,
+                          pts: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Latitude</FormLabel>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={editingChallenge.lat}
+                      onChange={(e) =>
+                        setEditingChallenge({
+                          ...editingChallenge,
+                          lat: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Longitude</FormLabel>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={editingChallenge.lng}
+                      onChange={(e) =>
+                        setEditingChallenge({
+                          ...editingChallenge,
+                          lng: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Number of Winners</FormLabel>
+                    <Input
+                      type="number"
+                      value={editingChallenge.numWinners}
+                      onChange={(e) =>
+                        setEditingChallenge({
+                          ...editingChallenge,
+                          numWinners: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                </VStack>
+              </ModalBody>
+              <ModalFooter>
+                <Button
+                  variant="ghost"
+                  mr={3}
+                  onClick={() => setEditingChallenge(null)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" colorScheme="blue">
+                  Save Changes
+                </Button>
+              </ModalFooter>
+            </form>
+          )}
+        </ModalContent>
+      </Modal>
 
-         {/* ScavAI Conversation Modal */}
-         {selectedConversation && (
-           <div className="modal" onClick={() => setSelectedConversation(null)}>
-             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-               <h2 className="modal-title">
-                 ScavAI Conversation - {selectedConversation.teamName}
-               </h2>
-               <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
-                 Started: {new Date(selectedConversation.createdAt).toLocaleString()}
-                 {' | '}
-                 Last Updated: {new Date(selectedConversation.updatedAt).toLocaleString()}
-               </p>
-               <div style={{
-                 maxHeight: '60vh',
-                 overflowY: 'auto',
-                 border: '1px solid #ddd',
-                 borderRadius: '8px',
-                 padding: '20px',
-                 backgroundColor: '#f9f9f9'
-               }}>
-                 {selectedConversation.messages.map((message, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      marginBottom: '16px',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      backgroundColor: message.role === 'user' ? '#e3f2fd' : '#f1f8e9',
-                      border: `1px solid ${message.role === 'user' ? '#90caf9' : '#c5e1a5'}`,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <strong style={{ color: message.role === 'user' ? '#1976d2' : '#689f38' }}>
-                        {message.role === 'user' ? `👤 ${selectedConversation.teamName}` : '🤖 ScavAI'}
-                      </strong>
-                      <span style={{ fontSize: '12px', color: '#666' }}>
-                        {new Date(message.timestamp).toLocaleString()}
-                      </span>
-                    </div>
-                    <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {message.content}
-                    </p>
-                  </div>
-                 ))}
-               </div>
-               <div style={{ marginTop: '20px' }}>
-                 <button
-                   type="button"
-                   className="button"
-                   onClick={() => setSelectedConversation(null)}
-                 >
-                   Close
-                 </button>
-               </div>
-             </div>
-           </div>
-         )}
-
-         {/* New Team Codes Modal */}
-         {newTeamCodes && (
-           <div className="modal" onClick={() => setNewTeamCodes(null)}>
-             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-               <h2 className="modal-title">
-                 🎉 New Team Codes Generated
-               </h2>
-               <p style={{ fontSize: '14px', color: '#d32f2f', marginBottom: '20px', fontWeight: 'bold' }}>
-                 ⚠️ IMPORTANT: Save these codes now! They cannot be retrieved later.
-               </p>
-               <div style={{
-                 maxHeight: '50vh',
-                 overflowY: 'auto',
-                 border: '1px solid #ddd',
-                 borderRadius: '8px',
-                 padding: '20px',
-                 backgroundColor: '#f9f9f9',
-                 marginBottom: '20px'
-               }}>
-                 {newTeamCodes.map((teamCode, index) => (
-                   <div
-                     key={index}
-                     style={{
-                       marginBottom: '12px',
-                       padding: '12px',
-                       borderRadius: '8px',
-                       backgroundColor: 'white',
-                       border: '1px solid #ddd',
-                     }}
-                   >
-                     <div style={{ marginBottom: '4px', fontWeight: 'bold', fontSize: '16px' }}>
-                       {teamCode.emoji} {teamCode.name}
-                     </div>
-                     <div style={{ 
-                       fontFamily: 'monospace', 
-                       fontSize: '14px', 
-                       color: '#0070f3',
-                       wordBreak: 'break-all'
-                     }}>
-                       {teamCode.teamCode}
-                     </div>
-                   </div>
-                 ))}
-               </div>
-               <div className="modal-buttons">
-                 <button
-                   type="button"
-                   className="button"
-                   onClick={copyTeamCodesToClipboard}
-                   style={{ backgroundColor: '#0070f3' }}
-                 >
-                   📋 Copy All to Clipboard
-                 </button>
-                 <button
-                   type="button"
-                   className="button button-secondary"
-                   onClick={() => setNewTeamCodes(null)}
-                 >
-                   Close
-                 </button>
-               </div>
-             </div>
-           </div>
-         )}
-       </div>
-     </>
-   );
- }
+      <Modal
+        isOpen={adminConfirm.isOpen}
+        onClose={() => {
+          setPendingAdminToggle(null);
+          adminConfirm.onClose();
+        }}
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            {pendingAdminToggle?.nextValue
+              ? "Grant admin access?"
+              : "Remove admin access?"}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text>
+              {pendingAdminToggle
+                ? pendingAdminToggle.nextValue
+                  ? `Make ${pendingAdminToggle.user.name} (${pendingAdminToggle.user.email}) an admin?`
+                  : `Remove admin privileges from ${pendingAdminToggle.user.name} (${pendingAdminToggle.user.email})?`
+                : null}
+            </Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="ghost"
+              mr={3}
+              onClick={() => {
+                setPendingAdminToggle(null);
+                adminConfirm.onClose();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              colorScheme={pendingAdminToggle?.nextValue ? "purple" : "red"}
+              onClick={confirmAdminToggle}
+            >
+              Confirm
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </NavContainer>
+  );
+}

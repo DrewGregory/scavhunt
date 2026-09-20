@@ -1,41 +1,36 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { dbConnect } from "../../../lib/dbConnect";
-import { ChallengeModel } from "../../../models/Challenge";
-import { SubmissionModel } from "../../../models/Submission";
-import { getTeamFromCookie, isAdminTeam } from "../../../lib/team";
+import { prisma } from "../../../lib/prisma";
+import { requireApiAdmin } from "../../../lib/auth";
+import { parseJsonBody } from "../../../lib/serialize";
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ) {
   if (req.method !== "DELETE") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  await dbConnect();
-
-  // Check admin authorization
-  const team = await getTeamFromCookie(req.cookies);
-  if (!team || !isAdminTeam(team._id.toString())) {
-    return res.status(403).json({ error: "Unauthorized" });
-  }
+  const user = await requireApiAdmin(req, res);
+  if (!user) return;
 
   try {
-    const { challengeId } = req.body;
+    const body = parseJsonBody(req.body) as { challengeId?: string };
+    const { challengeId } = body;
 
     if (!challengeId) {
       return res.status(400).json({ error: "Challenge ID is required" });
     }
 
-    // Check if the challenge exists
-    const challenge = await ChallengeModel.findById(challengeId);
+    const challenge = await prisma.challenge.findUnique({
+      where: { id: challengeId },
+    });
     if (!challenge) {
       return res.status(404).json({ error: "Challenge not found" });
     }
 
-    // Check if there are any submissions for this challenge
-    const submissionCount = await SubmissionModel.countDocuments({
-      challengeId: challengeId,
+    const submissionCount = await prisma.submission.count({
+      where: { challengeId },
     });
 
     if (submissionCount > 0) {
@@ -44,8 +39,7 @@ export default async function handler(
       });
     }
 
-    // Delete the challenge
-    await ChallengeModel.findByIdAndDelete(challengeId);
+    await prisma.challenge.delete({ where: { id: challengeId } });
 
     return res.status(200).json({
       message: "Challenge deleted successfully",
@@ -55,4 +49,3 @@ export default async function handler(
     return res.status(500).json({ error: "Failed to delete challenge" });
   }
 }
-

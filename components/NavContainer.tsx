@@ -12,8 +12,8 @@ import {
   useDisclosure,
   BoxProps,
   FlexProps,
-  Heading,
   Divider,
+  Button,
 } from "@chakra-ui/react";
 import { FiMenu } from "react-icons/fi";
 import {
@@ -23,28 +23,33 @@ import {
   GiNotebook,
   GiHouse,
   GiRuleBook,
+  GiScrollUnfurled,
 } from "react-icons/gi";
-import { FaVideo, FaMagic } from "react-icons/fa";
+import { FaVideo } from "react-icons/fa";
 import { IoChatbubbles } from "react-icons/io5";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
-import { useTeam } from "./useTeam";
+import { useSession } from "./useSession";
 import Image from "next/image";
 
 interface LinkItemProps {
   name: string;
   icon: IconType;
   url: string;
+  adminOnly?: boolean;
 }
+
 const LinkItems: Array<LinkItemProps> = [
   { name: "Home", icon: GiHouse, url: "/" },
+  { name: "Feed", icon: GiScrollUnfurled, url: "/feed" },
   { name: "ScavTok", icon: FaVideo, url: "/scavtok" },
   { name: "Challenges", icon: GiNotebook, url: "/challenges" },
   { name: "Leaderboard", icon: GiPodium, url: "/teams" },
   { name: "Map", icon: GiTreasureMap, url: "/map" },
-  { name: "ScavAI", icon: FaMagic, url: "/scavai" },
+  { name: "Tournament", icon: Gi3dMeeple, url: "/tournament" },
   { name: "Chat", icon: IoChatbubbles, url: "/chat" },
   { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" },
+  { name: "Admin", icon: GiNotebook, url: "/admin", adminOnly: true },
 ];
 
 export default function NavContainer({
@@ -63,7 +68,7 @@ export default function NavContainer({
   hideTopBar?: boolean;
 }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const team = useTeam();
+  const session = useSession();
   return (
     <Box
       height="100dvh"
@@ -124,7 +129,7 @@ export default function NavContainer({
           <Text flex={1} fontSize="2xl" fontFamily="monospace" fontWeight="bold">
             {title}
           </Text>
-          {team && <Text>{team.emoji}</Text>}
+          {session?.team && <Text>{session.team.emoji}</Text>}
         </Flex>
       )}
       <Box
@@ -154,7 +159,12 @@ const SidebarContent = ({
   ...rest
 }: SidebarProps & { title: string }) => {
   const router = useRouter();
-  const team = useTeam();
+  const session = useSession();
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
 
   return (
     <Box
@@ -188,18 +198,31 @@ const SidebarContent = ({
 
         <CloseButton display={{ base: "flex", md: "none" }} onClick={onClose} />
       </Flex>
-      {team && (
-        <Flex px={4} mx={4} mb={4} direction="row" alignContent="center">
-          <Text fontWeight="bold" mr={1}>
-            Playing as:
+      {session && (
+        <Flex px={4} mx={4} mb={4} direction="column" gap={1}>
+          <Text fontWeight="bold" fontSize="sm">
+            {session.user.name}
           </Text>
-          <Text>
-            {team.emoji} {team.name}
-          </Text>
+          {session.team && (
+            <Text fontSize="sm">
+              {session.team.emoji} {session.team.name}
+            </Text>
+          )}
+          <Button
+            size="sm"
+            mt={2}
+            variant="outline"
+            onClick={handleLogout}
+            width="fit-content"
+          >
+            Log out
+          </Button>
         </Flex>
       )}
       <Divider />
-      {LinkItems.map((link) => (
+      {LinkItems.filter(
+        (link) => !link.adminOnly || session?.user.isAdmin
+      ).map((link) => (
         <NavItem
           key={link.name}
           icon={link.icon}
@@ -257,7 +280,7 @@ interface MobileProps extends FlexProps {
   onOpen: () => void;
 }
 const MobileNav = ({ onOpen, title, ...rest }: MobileProps) => {
-  const team = useTeam();
+  const session = useSession();
   return (
     <Flex
       m={{ base: 0, md: "20vw" }}
@@ -287,7 +310,7 @@ const MobileNav = ({ onOpen, title, ...rest }: MobileProps) => {
       >
         {title}
       </Text>
-      {team && <Text>{team.emoji}</Text>}
+      {session?.team && <Text>{session.team.emoji}</Text>}
     </Flex>
   );
 };

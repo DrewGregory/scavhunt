@@ -1,26 +1,32 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { dbConnect } from '../../../lib/dbConnect';
-import { TeamModel } from '../../../models/Team';
-import { getTeamFromCookie, isAdminTeam } from '../../../lib/team';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { prisma } from "../../../lib/prisma";
+import { requireApiAdmin } from "../../../lib/auth";
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ) {
-  await dbConnect();
-  
-  // Check if user is admin
-  const team = await getTeamFromCookie(req.cookies);
-  if (team == null || !isAdminTeam(team._id.toString())) {
-    return res.status(403).json({ error: 'Unauthorized' });
-  }
+  const user = await requireApiAdmin(req, res);
+  if (!user) return;
 
-  if (req.method === 'GET') {
-    // Get all teams
-    const teams = await TeamModel.find({}).lean().exec();
+  if (req.method === "GET") {
+    const teams = await prisma.team.findMany({
+      include: {
+        users: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phoneE164: true,
+            isAdmin: true,
+            isActive: true,
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
     return res.status(200).json({ teams });
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  return res.status(405).json({ error: "Method not allowed" });
 }
-

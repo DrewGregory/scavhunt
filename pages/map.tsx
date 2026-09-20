@@ -1,112 +1,91 @@
 import dynamic from "next/dynamic";
-import { ChallengeModel, serializedChallengeSchema, SerializedChallenge } from "../models/Challenge";
 import { GetServerSidePropsContext } from "next";
-import { dbConnect } from "../lib/dbConnect";
 import { Flex } from "@chakra-ui/react";
 import NavContainer from "../components/NavContainer";
-import { LocationModel } from "../models/Location";
-import { z } from "zod";
-import { LatestTeamLocation, latestTeamLocationSchema } from "../lib/types";
-import { getTeamFromCookie } from "../lib/team";
-import { serializedSubmissionSchema } from "../models/Submission";
-import { serializedTeamSchema } from "../models/Team";
+import { prisma } from "../lib/prisma";
+import { requireUserSSP } from "../lib/auth";
+import {
+  serializeChallenge,
+  serializeSubmission,
+  serializeTeam,
+} from "../lib/serialize";
+import type {
+  LatestTeamLocation,
+  SerializedChallenge,
+  SerializedSubmission,
+  SerializedTeam,
+} from "../lib/types";
 
-// https://nextjs.org/docs/pages/building-your-application/optimizing/lazy-loading#with-no-ssr
 const LeafletMap = dynamic(() => import("../components/leafletMap"), {
   ssr: false,
 });
 
-const challengeWithSubmissionsSchema = serializedChallengeSchema.merge(
-  z.object({
-    submissions: z.array(serializedSubmissionSchema)
-  })
-);
+type ChallengeWithSubmissions = SerializedChallenge & {
+  submissions: SerializedSubmission[];
+};
 
-type ChallengeWithSubmissions = z.infer<typeof challengeWithSubmissionsSchema>;
+export const getServerSideProps = async (
+  context: GetServerSidePropsContext,
+) => {
+  const auth = await requireUserSSP(context);
+  if (auth.redirect) return { redirect: auth.redirect };
 
-export const getServerSideProps = async (context: GetServerSidePropsContext) => {
-  await dbConnect();
+  const challengesRaw = await prisma.challenge.findMany({
+    include: {
+      submissions: {
+        where: { rejected: false },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
 
-  const team = await getTeamFromCookie(context.req.cookies);
+  const challenges: ChallengeWithSubmissions[] = challengesRaw.map((c) => ({
+    ...serializeChallenge(c),
+    submissions: c.submissions.map(serializeSubmission),
+  }));
 
-  const challenges = await (async () => {
-    if (team == null) {
-      return [];
-    }
-    return ChallengeModel.aggregate([
-      {
-        $lookup: {
-          from: "submissions",
-          localField: "_id",
-          foreignField: "challengeId",
-          as: "submissions"
-        }
-      }
-    ]);
-  })();
-
-  // Skip fetching locations if location tracking is disabled
   const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
-  const locationsRaw = (disableTracking === 'true' || disableTracking === '1')
-    ? [] 
-    : await LocationModel.aggregate([
-        {
-          $sort: {
-            createdAt: -1
-          }
+  let locations: LatestTeamLocation[] = [];
+  if (disableTracking !== "true" && disableTracking !== "1") {
+    const teamsWithLocations = await prisma.team.findMany({
+      include: {
+        locations: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
         },
-        {
-          $group: {
-            _id: "$teamId",
-            latestLocation: { $first: "$loc" }
-          }
+      },
+    });
+    locations = teamsWithLocations
+      .filter((t) => t.locations.length > 0)
+      .map((t) => ({
+        id: t.id,
+        emoji: t.emoji,
+        name: t.name,
+        latestLocation: {
+          lat: t.locations[0].lat,
+          lng: t.locations[0].lng,
+          id: t.locations[0].id,
         },
-        {
-          $lookup: {
-            from: "teams",
-            localField: "_id",
-            foreignField: "_id",
-            as: "team",
-          }
-        },
-        {
-          $set: {
-            "emoji": { $first: "$team.emoji" },
-            "name": { $first: "$team.name" },
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            latestLocation: 1,
-            emoji: 1,
-            name: 1,
-          }
-        }
-      ]);
+      }));
+  }
 
   return {
     props: {
-      challenges: z.array(challengeWithSubmissionsSchema).parse(challenges).map(c => {
-        return {
-          ...c,
-          submissions: c.submissions.filter(s => !s.rejected),
-        }
-      }),
-      locations: z.array(latestTeamLocationSchema).parse(locationsRaw),
-      team: team ? serializedTeamSchema.parse(team) : null,
-    }
-  }
-}
+      challenges,
+      locations,
+      team: auth.user.team ? serializeTeam(auth.user.team) : null,
+    },
+  };
+};
 
 export default function Page({
   locations,
   challenges,
   team,
 }: {
-  locations: Array<LatestTeamLocation>,
-  challenges: Array<ChallengeWithSubmissions>,
-  team: any,
+  locations: Array<LatestTeamLocation>;
+  challenges: Array<ChallengeWithSubmissions>;
+  team: SerializedTeam | null;
 }) {
   return (
     <NavContainer title="Map" fullScreen>

@@ -1,88 +1,45 @@
-import { serializedTeamSchema } from "../models/Team";
 import { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
-import { dbConnect } from "../lib/dbConnect";
-import {
-  serializedSubmissionSchema,
-  SubmissionModel
-} from "../models/Submission";
-import { z } from "zod";
-import { serializedChallengeSchema } from "../models/Challenge";
-import { getTeamFromCookie } from "../lib/team";
 import { useEffect, useRef } from "react";
+import { prisma } from "../lib/prisma";
+import { requireUserSSP } from "../lib/auth";
+import {
+  serializeChallenge,
+  serializeSubmission,
+  serializeTeam,
+} from "../lib/serialize";
 import VideoCard from "./components/VideoCard";
 import BottomNavbar from "./components/BottomNavbar";
 import TopNavbar from "./components/TopNavbar";
 
-const submissionWithLookupsSchema = serializedSubmissionSchema.merge(
-  z.object({
-    team: serializedTeamSchema,
-    challenge: serializedChallengeSchema
-  })
-);
-
 export const getServerSideProps = async (
-  context: GetServerSidePropsContext
+  context: GetServerSidePropsContext,
 ) => {
-  await dbConnect();
-  const teamRaw = await getTeamFromCookie(context.req.cookies);
+  const auth = await requireUserSSP(context);
+  if (auth.redirect) return { redirect: auth.redirect };
 
-  if (teamRaw == null) {
-    return {
-      props: {
-        team: null,
-        submissions: []
-      }
-    };
-  }
+  const submissionsRaw = await prisma.submission.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      team: true,
+      challenge: true,
+    },
+  });
 
-  const submissionsRaw = await SubmissionModel.aggregate([
-    {
-      $sort: {
-        createdAt: -1
-      }
-    },
-    {
-      $lookup: {
-        from: "teams",
-        localField: "teamId",
-        foreignField: "_id",
-        as: "team"
-      }
-    },
-    {
-      $lookup: {
-        from: "challenges",
-        localField: "challengeId",
-        foreignField: "_id",
-        as: "challenge"
-      }
-    },
-    {
-      $unwind: {
-        path: "$challenge",
-        preserveNullAndEmptyArrays: true
-      }
-    },
-    {
-      $unwind: {
-        path: "$team",
-        preserveNullAndEmptyArrays: true
-      }
-    }
-  ]);
-  const submissions = z
-    .array(submissionWithLookupsSchema)
-    .parse(submissionsRaw);
+  const submissions = submissionsRaw.map((s) => ({
+    ...serializeSubmission(s),
+    team: serializeTeam(s.team),
+    challenge: serializeChallenge(s.challenge),
+  }));
 
   return {
     props: {
-      submissions
-    }
+      submissions,
+    },
   };
 };
 
 export default function Page({
-  submissions
+  submissions,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const videoRefs = useRef<any>([]);
 
@@ -90,39 +47,33 @@ export default function Page({
     const observerOptions = {
       root: null,
       rootMargin: "0px",
-      threshold: 0.8 // Adjust this value to change the scroll trigger point
+      threshold: 0.8,
     };
 
-    // This function handles the intersection of videos
     const handleIntersection = (entries: any) => {
       entries.forEach((entry: any) => {
         if (entry.isIntersecting) {
-          const videoElement = entry.target;
-          videoElement.play();
+          entry.target.play();
         } else {
-          const videoElement = entry.target;
-          videoElement.pause();
+          entry.target.pause();
         }
       });
     };
 
     const observer = new IntersectionObserver(
       handleIntersection,
-      observerOptions
+      observerOptions,
     );
 
-    // We observe each video reference to trigger play/pause
     videoRefs.current.forEach((videoRef: any) => {
-      observer.observe(videoRef);
+      if (videoRef) observer.observe(videoRef);
     });
 
-    // We disconnect the observer when the component is unmounted
     return () => {
       observer.disconnect();
     };
   }, [submissions]);
 
-  // This function handles the reference of each video
   const handleVideoRef = (index: any) => (ref: any) => {
     videoRefs.current[index] = ref;
   };
@@ -132,7 +83,7 @@ export default function Page({
       submission.mediaURL &&
       submission.mediaURL
         .toLowerCase()
-        .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i)
+        .match(/\.(mpg|mp2|mpeg|mpe|mpv|mov|mp4|webm)$/i),
   );
 
   const randomIntFromInterval = (min: number, max: number) => {
@@ -144,10 +95,9 @@ export default function Page({
       <div className="app">
         <div className="container">
           <TopNavbar />
-          {/* Here we map over the videos array and create VideoCard components */}
           {submissionsWithVideos.map((submission, index) => (
             <VideoCard
-              key={index}
+              key={submission.id}
               username={submission.team.emoji + " " + submission.team.name}
               description={submission.note}
               song={""}

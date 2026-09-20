@@ -7,93 +7,75 @@ import {
 } from "@chakra-ui/react";
 import { useRouter } from "next/router";
 import { GetServerSideProps, InferGetServerSidePropsType } from "next";
-import { dbConnect } from "../../lib/dbConnect";
-import { SubmissionModel } from "../../models/Submission";
-import { ChallengeModel } from "../../models/Challenge";
-import { isAdminTeam, TEAM_COOKIE_NAME, getTeamFromCookie } from "../../lib/team";
 import NavContainer from "../../components/NavContainer";
 import MediaUploadForm from "../../components/MediaUploadForm";
+import { prisma } from "../../lib/prisma";
+import { requireUserSSP } from "../../lib/auth";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  await dbConnect();
-  const teamCode = context.req.cookies[TEAM_COOKIE_NAME];
-  if (!teamCode) {
-    return {
-      redirect: {
-        destination: "/",
-        permanent: false
-      }
-    };
-  }
+  const auth = await requireUserSSP(context);
+  if (auth.redirect) return { redirect: auth.redirect };
 
-  const team = await getTeamFromCookie(context.req.cookies);
-  if (team == null) {
-    return {
-      redirect: {
-        destination: "/",
-        permanent: false
-      }
-    };
-  }
+  const user = auth.user;
 
   const submissionId = context.query.submissionId;
   if (!submissionId || typeof submissionId !== "string") {
     return {
       redirect: {
         destination: "/",
-        permanent: false
-      }
+        permanent: false,
+      },
     };
   }
 
-  const submission = await SubmissionModel.findById(submissionId).lean().exec();
-  if (submission == null || Array.isArray(submission)) {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+  });
+  if (submission == null) {
     return {
       redirect: {
         destination: "/",
-        permanent: false
-      }
+        permanent: false,
+      },
     };
   }
 
-  // Check if the user is admin OR the original submitter
-  const teamId = team._id.toHexString();
-  const isAdmin = isAdminTeam(teamId);
-  const isOriginalSubmitter = submission.teamId.toString() === teamId;
-  
-  if (!isAdmin && !isOriginalSubmitter) {
+  const isOriginalTeam =
+    user.teamId != null && submission.teamId === user.teamId;
+  if (!user.isAdmin && !isOriginalTeam) {
     return {
       redirect: {
         destination: "/",
-        permanent: false
-      }
+        permanent: false,
+      },
     };
   }
 
-  const challenge = await ChallengeModel.findById(submission.challengeId).lean().exec();
-  if (challenge == null || Array.isArray(challenge)) {
+  const challenge = await prisma.challenge.findUnique({
+    where: { id: submission.challengeId },
+  });
+  if (challenge == null) {
     return {
       redirect: {
         destination: "/",
-        permanent: false
-      }
+        permanent: false,
+      },
     };
   }
 
   return {
     props: {
-      teamCode,
       submission: {
-        _id: submissionId,
+        id: submission.id,
         mediaURL: submission.mediaURL ?? null,
         note: submission.note,
-        challengeId: submission.challengeId.toString(),
+        challengeId: submission.challengeId,
       },
       challenge: {
-        _id: challenge._id.toString(),
-        title: challenge.title
-      }
-    }
+        id: challenge.id,
+        title: challenge.title,
+      },
+    },
   };
 };
 
@@ -105,22 +87,22 @@ export default function UpdateSubmission({
 
   return (
     <NavContainer title={`Update Submission - ${challenge.title}`}>
-      <Card 
-        p={6}
-        boxShadow="sm"
-        borderRadius="lg"
-        bg="white"
-      >
+      <Card p={6} boxShadow="sm" borderRadius="lg" bg="white">
         <VStack spacing={5}>
-          <Text fontSize="xl" fontWeight="semibold" color="gray.800" alignSelf="flex-start">
+          <Text
+            fontSize="xl"
+            fontWeight="semibold"
+            color="gray.800"
+            alignSelf="flex-start"
+          >
             Update Video for: {challenge.title}
           </Text>
-          
+
           {submission.mediaURL && (
-            <Box 
-              width="100%" 
-              p={4} 
-              bg="gray.50" 
+            <Box
+              width="100%"
+              p={4}
+              bg="gray.50"
               borderRadius="md"
               borderLeft="3px solid"
               borderColor="gray.300"
@@ -155,14 +137,16 @@ export default function UpdateSubmission({
                     sx={{
                       aspectRatio: "16/9",
                       width: "100%",
-                      maxWidth: "600px"
+                      maxWidth: "600px",
                     }}
                   />
                 )}
                 {!submission.mediaURL.match(/\.(jpg|jpeg|png|gif)$/i) &&
-                  !submission.mediaURL.match(/\.(mpg|mp2|mpeg|mpe|mpv|mp4)$/i) && (
-                    <Text 
-                      as="a" 
+                  !submission.mediaURL.match(
+                    /\.(mpg|mp2|mpeg|mpe|mpv|mp4)$/i,
+                  ) && (
+                    <Text
+                      as="a"
                       href={submission.mediaURL}
                       color="blue.600"
                       fontWeight="medium"
@@ -176,10 +160,10 @@ export default function UpdateSubmission({
           )}
 
           {!submission.mediaURL && (
-            <Box 
-              width="100%" 
-              p={4} 
-              bg="gray.50" 
+            <Box
+              width="100%"
+              p={4}
+              bg="gray.50"
               borderRadius="md"
               textAlign="center"
             >
@@ -195,7 +179,10 @@ export default function UpdateSubmission({
             </Text>
             <MediaUploadForm
               apiEndpoint="/api/update-submission-media"
-              formData={{ submissionId: submission._id, challengeId: submission.challengeId }}
+              formData={{
+                submissionId: submission.id,
+                challengeId: submission.challengeId,
+              }}
               onSuccess={() => {
                 setTimeout(() => {
                   router.push("/");
@@ -213,4 +200,3 @@ export default function UpdateSubmission({
     </NavContainer>
   );
 }
-

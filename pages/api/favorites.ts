@@ -1,52 +1,41 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { dbConnect } from "../../lib/dbConnect";
-import { FavoriteModel } from "../../models/Favorite";
-import { z } from "zod";
-
-const querySchema = z.object({
-  userId: z.string().optional(),
-});
+import { prisma } from "../../lib/prisma";
+import { requireApiUser } from "../../lib/auth";
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    await dbConnect();
+    const user = await requireApiUser(req, res);
+    if (!user) return;
 
-    const { userId } = querySchema.parse(req.query);
+    const favoriteCounts = await prisma.favorite.groupBy({
+      by: ["submissionId"],
+      _count: { submissionId: true },
+    });
 
-    // Get all favorites with counts
-    const favoriteCounts = await FavoriteModel.aggregate([
-      {
-        $group: {
-          _id: "$submissionId",
-          count: { $sum: 1 },
-        },
-      },
-    ]);
-
-    // Get user's favorites if userId provided
-    let userFavorites: string[] = [];
-    if (userId) {
-      const favorites = await FavoriteModel.find({ userId }).select("submissionId");
-      userFavorites = favorites.map((f) => f.submissionId.toString());
-    }
+    const userFavoriteRows = await prisma.favorite.findMany({
+      where: { userId: user.id },
+      select: { submissionId: true },
+    });
 
     return res.status(200).json({
-      counts: favoriteCounts.reduce((acc, item) => {
-        acc[item._id.toString()] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      userFavorites,
+      counts: favoriteCounts.reduce(
+        (acc, item) => {
+          acc[item.submissionId] = item._count.submissionId;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+      userFavorites: userFavoriteRows.map((f) => f.submissionId),
     });
   } catch (error) {
     console.error("Error fetching favorites:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
-

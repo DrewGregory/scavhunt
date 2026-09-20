@@ -1,64 +1,48 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { dbConnect } from '../../../lib/dbConnect';
-import { TeamModel } from '../../../models/Team';
-import { getTeamFromCookie, isAdminTeam } from '../../../lib/team';
-import { z } from 'zod';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { z } from "zod";
+import { prisma } from "../../../lib/prisma";
+import { requireApiAdmin } from "../../../lib/auth";
+import { parseJsonBody } from "../../../lib/serialize";
 
 const RequestBody = z.object({
-  fromTeamId: z.string(),
+  userId: z.string(),
   toTeamId: z.string(),
-  playerIndex: z.number(), // Index of the player in the members array
 });
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ) {
-  await dbConnect();
-  
-  // Check if user is admin
-  const team = await getTeamFromCookie(req.cookies);
-  if (team == null || !isAdminTeam(team._id.toString())) {
-    return res.status(403).json({ error: 'Unauthorized' });
-  }
+  const admin = await requireApiAdmin(req, res);
+  if (!admin) return;
 
-  if (req.method === 'POST') {
-    const parsed = RequestBody.safeParse(JSON.parse(req.body));
+  if (req.method === "POST") {
+    const parsed = RequestBody.safeParse(parseJsonBody(req.body));
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Invalid request body' });
+      return res.status(400).json({ error: "Invalid request body" });
     }
 
-    const { fromTeamId, toTeamId, playerIndex } = parsed.data;
+    const { userId, toTeamId } = parsed.data;
 
-    // Get the source team
-    const fromTeam = await TeamModel.findById(fromTeamId);
-    if (!fromTeam) {
-      return res.status(404).json({ error: 'Source team not found' });
+    const toTeam = await prisma.team.findUnique({ where: { id: toTeamId } });
+    if (!toTeam) {
+      return res.status(404).json({ error: "Destination team not found" });
     }
 
-    if (playerIndex < 0 || playerIndex >= fromTeam.members.length) {
-      return res.status(400).json({ error: 'Invalid player index' });
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!existingUser) {
+      return res.status(404).json({ error: "User not found" });
     }
 
-    // Get the player
-    const player = fromTeam.members[playerIndex];
-
-    // Add player to destination team
-    await TeamModel.findByIdAndUpdate(
-      toTeamId,
-      { $push: { members: player } }
-    );
-
-    // Remove player from source team by rebuilding the members array without the removed player
-    const updatedMembers = fromTeam.members.filter((_, idx) => idx !== playerIndex);
-    await TeamModel.findByIdAndUpdate(
-      fromTeamId,
-      { $set: { members: updatedMembers } }
-    );
+    await prisma.user.update({
+      where: { id: userId },
+      data: { teamId: toTeamId },
+    });
 
     return res.status(200).json({ success: true });
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  return res.status(405).json({ error: "Method not allowed" });
 }
-

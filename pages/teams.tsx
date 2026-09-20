@@ -1,87 +1,71 @@
-import {
-  GetServerSidePropsContext,
-} from "next";
-import { TeamModel, serializedTeamSchema } from "../models/Team";
-import { dbConnect } from "../lib/dbConnect";
+import { GetServerSidePropsContext } from "next";
 import NavContainer from "../components/NavContainer";
 import { Card, Flex, Heading, ListItem, UnorderedList } from "@chakra-ui/react";
 import { useState } from "react";
 import { Text } from "@chakra-ui/react";
 import { ChevronDownIcon } from "@chakra-ui/icons";
-import { z } from "zod";
-import { ChallengeModel, serializedChallengeSchema } from "../models/Challenge";
 import { useSearchParams } from "next/navigation";
-import { serializedSubmissionSchema } from "../models/Submission";
-import { getTeamFromCookie } from "../lib/team";
 import dynamic from "next/dynamic";
 import { formatISO, parseISO } from "date-fns";
 import { getEndTime, getStartTime } from "../lib/time";
+import { prisma } from "../lib/prisma";
+import { requireUserSSP } from "../lib/auth";
+import {
+  serializeSubmission,
+  serializeTeam,
+} from "../lib/serialize";
+import type { SerializedSubmission, SerializedTeam } from "../lib/types";
 
 const ResponsiveLine = dynamic(
   () => import("@nivo/line").then((m) => m.ResponsiveLine),
-  { ssr: false }
+  { ssr: false },
 );
 
-const teamWithSubmissionSchema = serializedTeamSchema.merge(
-  z.object({
-    submissions: z.array(serializedSubmissionSchema)
-  })
-);
-type TeamWithSubmission = z.infer<typeof teamWithSubmissionSchema>;
-type TeamWithPts = TeamWithSubmission & { pts: number; ptsArray: number[] };
+type TeamMember = { id: string; name: string };
+
+type TeamWithPts = SerializedTeam & {
+  submissions: SerializedSubmission[];
+  members: TeamMember[];
+  pts: number;
+  ptsArray: number[];
+};
 
 export const getServerSideProps = async (
-  context: GetServerSidePropsContext
+  context: GetServerSidePropsContext,
 ) => {
-  await dbConnect();
-  const teamsWithSubmissions = z.array(teamWithSubmissionSchema).parse(
-    await (async () => {
-      const team = await getTeamFromCookie(context.req.cookies);
-      if (team == null) {
-        return [];
-      }
-      return TeamModel.aggregate([
-        {
-          $lookup: {
-            from: "submissions",
-            localField: "_id",
-            foreignField: "teamId",
-            as: "submissions"
-          }
-        }
-      ]);
-    })()
-  );
+  const auth = await requireUserSSP(context);
+  if (auth.redirect) return { redirect: auth.redirect };
 
-  const teamsWithPts = (
-    await Promise.allSettled(
-      teamsWithSubmissions.map((t) =>
-        (async () => {
-          const relevantChallengesRaw = await ChallengeModel.find({
-            _id: {
-              $in: t.submissions
-                .filter((s) => s.accepted)
-                .map((s) => s.challengeId)
-            }
-          })
-            .lean()
-            .exec();
-          const relevantChallenges = z
-            .array(serializedChallengeSchema)
-            .parse(relevantChallengesRaw);
-          return {
-            ...t,
-            pts: relevantChallenges.reduce((sum, c) => sum + c.pts, 0),
-            ptsArray: relevantChallenges.map((c) => c.pts)
-          };
-        })()
-      )
-    )
-  )
-    .filter((p) => p.status === "fulfilled")
-    .map((p) => p.value);
+  const teamsRaw = await prisma.team.findMany({
+    include: {
+      users: { select: { id: true, name: true } },
+      submissions: {
+        orderBy: { createdAt: "asc" },
+        include: { challenge: true },
+      },
+    },
+  });
+
+  const teamsWithPts: TeamWithPts[] = teamsRaw.map((t) => {
+    const accepted = t.submissions.filter((s) => s.accepted);
+    const ptsArray = accepted.map((s) => s.challenge.pts);
+    return {
+      ...serializeTeam(t),
+      members: t.users.map((u) => ({ id: u.id, name: u.name })),
+      submissions: t.submissions.map(serializeSubmission),
+      pts: ptsArray.reduce((sum, p) => sum + p, 0),
+      ptsArray,
+    };
+  });
+
   const teamsSortedbyPts = teamsWithPts.sort((t1, t2) => t2.pts - t1.pts);
-  return { props: { teamsSortedbyPts, startTimeISO: formatISO(getStartTime()), endTimeISO: formatISO(getEndTime()) } };
+  return {
+    props: {
+      teamsSortedbyPts,
+      startTimeISO: formatISO(getStartTime()),
+      endTimeISO: formatISO(getEndTime()),
+    },
+  };
 };
 
 export default function Page({
@@ -110,35 +94,29 @@ export default function Page({
       totalPts += t.ptsArray[index];
       data.push({
         x: new Date(submission.createdAt),
-        y: totalPts
+        y: totalPts,
       });
       index += 1;
     }
     return {
       id: t.emoji + " " + t.name,
-      data: data
+      data: data,
     };
   });
   const maxScore = teamsSortedbyPts.reduce((max, t) => Math.max(max, t.pts), 0);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(
-    teamSearchParam
+    teamSearchParam,
   );
 
   const maxDate =
     new Date() < startTime
       ? startTime
       : new Date() > endTime
-      ? endTime
-      : new Date();
+        ? endTime
+        : new Date();
   return (
     <NavContainer title="Leaderboard">
-      <Card 
-        height={450} 
-        p={4} 
-        mb={4}
-        boxShadow="sm"
-        borderRadius="lg"
-      >
+      <Card height={450} p={4} mb={4} boxShadow="sm" borderRadius="lg">
         <ResponsiveLine
           data={pointData}
           margin={{ top: 50, right: 100, bottom: 75, left: 60 }}
@@ -148,7 +126,7 @@ export default function Page({
             precision: "minute",
             min: startTime,
             max: maxDate,
-            useUTC: true
+            useUTC: true,
           }}
           xFormat="time:%Y-%m-%d %H:%M:%S"
           yScale={{
@@ -156,7 +134,7 @@ export default function Page({
             min: 0,
             max: Math.max(50, maxScore + 10),
             stacked: false,
-            reverse: false
+            reverse: false,
           }}
           yFormat=" >-.2f"
           axisTop={null}
@@ -168,7 +146,7 @@ export default function Page({
             format: "%H:%M",
             legend: "Time",
             legendOffset: 50,
-            legendPosition: "middle"
+            legendPosition: "middle",
           }}
           axisLeft={{
             tickSize: 5,
@@ -177,7 +155,7 @@ export default function Page({
             legend: "Points",
             legendOffset: -40,
             legendPosition: "middle",
-            truncateTickAt: 0
+            truncateTickAt: 0,
           }}
           pointSize={0}
           colors={{ scheme: "set3" }}
@@ -206,40 +184,40 @@ export default function Page({
                   on: "hover",
                   style: {
                     itemBackground: "rgba(0, 0, 0, .03)",
-                    itemOpacity: 1
-                  }
-                }
-              ]
-            }
+                    itemOpacity: 1,
+                  },
+                },
+              ],
+            },
           ]}
         />
       </Card>
       <Flex direction="column" gap={4}>
         {teamsSortedbyPts.map((t, index) => (
           <Card
-            key={t._id}
+            key={t.id}
             cursor="pointer"
             onClick={() => {
-              setSelectedTeam(t._id === selectedTeam ? null : t._id);
+              setSelectedTeam(t.id === selectedTeam ? null : t.id);
             }}
-            className={t._id === selectedTeam ? "card open" : "card"}
+            className={t.id === selectedTeam ? "card open" : "card"}
             boxShadow="sm"
             _hover={{ boxShadow: "md" }}
             transition="all 0.2s"
             borderRadius="lg"
           >
             <Flex direction="column">
-              <Flex 
-                direction="row" 
-                justifyContent="space-between" 
+              <Flex
+                direction="row"
+                justifyContent="space-between"
                 alignItems="center"
                 p={4}
                 gap={3}
               >
                 <Flex alignItems="center" gap={3} flex={1}>
-                  <Text 
-                    fontSize="lg" 
-                    fontWeight="bold" 
+                  <Text
+                    fontSize="lg"
+                    fontWeight="bold"
                     color="gray.500"
                     minWidth="30px"
                   >
@@ -258,13 +236,13 @@ export default function Page({
                     h={5}
                     color="gray.500"
                     className={
-                      t._id === selectedTeam ? "chevron rotate" : "chevron"
+                      t.id === selectedTeam ? "chevron rotate" : "chevron"
                     }
                   />
                 </Flex>
               </Flex>
-              {selectedTeam === t._id && (
-                <Flex 
+              {selectedTeam === t.id && (
+                <Flex
                   direction="column"
                   px={4}
                   pb={4}
@@ -277,12 +255,9 @@ export default function Page({
                     Team Members
                   </Heading>
                   <UnorderedList spacing={1} ml={4}>
-                    {t.members.map((m, idx) => (
-                      <ListItem 
-                        key={`${m.firstName}${m.familyName || idx}`}
-                        color="gray.600"
-                      >
-                        {m.firstName}{m.familyName ? ` ${m.familyName}` : ''}
+                    {t.members.map((m) => (
+                      <ListItem key={m.id} color="gray.600">
+                        {m.name}
                       </ListItem>
                     ))}
                   </UnorderedList>

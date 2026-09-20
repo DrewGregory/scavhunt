@@ -1,9 +1,4 @@
-import {
-  ChallengeModel,
-  serializedChallengeSchema,
-} from "../models/Challenge";
 import { GetServerSideProps } from "next";
-import { dbConnect } from "../lib/dbConnect";
 import {
   Button,
   Card,
@@ -20,53 +15,47 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon } from "@chakra-ui/icons";
 import { useRouter, useSearchParams } from "next/navigation";
 import NavContainer from "../components/NavContainer";
-import { useTeam } from "../components/useTeam";
-import { z } from "zod";
-import { getTeamFromCookie } from "../lib/team";
-import { serializedSubmissionSchema } from "../models/Submission";
+import { useSession } from "../components/useSession";
+import { prisma } from "../lib/prisma";
+import { requireUserSSP } from "../lib/auth";
+import {
+  serializeChallenge,
+  serializeSubmission,
+} from "../lib/serialize";
+import type {
+  SerializedChallenge,
+  SerializedSubmission,
+} from "../lib/types";
 
-const challengeWithSubmissionsSchema = serializedChallengeSchema.merge(
-  z.object({
-    submissions: z.array(serializedSubmissionSchema)
-  })
-);
-
-type ChallengeWithSubmissions = z.infer<typeof challengeWithSubmissionsSchema>;
-
-export const getServerSideProps: GetServerSideProps = async (context) => {
-  await dbConnect();
-  const challenges = await (async () => {
-    const team = await getTeamFromCookie(context.req.cookies);
-    if (team == null) {
-      return [];
-    }
-    return ChallengeModel.aggregate([
-      {
-        $lookup: {
-          from: "submissions",
-          localField: "_id",
-          foreignField: "challengeId",
-          as: "submissions"
-        }
-      }
-    ]);
-  })();
-  return {
-    props: {
-      challenges: z.array(challengeWithSubmissionsSchema).parse(challenges).map(c => {
-        return {
-          ...c,
-          submissions: c.submissions.filter(s => !s.rejected),
-        }
-      })
-    }
-  };
+type ChallengeWithSubmissions = SerializedChallenge & {
+  submissions: SerializedSubmission[];
 };
 
-type SortOption = 'default' | 'points-high' | 'points-low';
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  const auth = await requireUserSSP(context);
+  if (auth.redirect) return { redirect: auth.redirect };
+
+  const challengesRaw = await prisma.challenge.findMany({
+    include: {
+      submissions: {
+        where: { rejected: false },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const challenges: ChallengeWithSubmissions[] = challengesRaw.map((c) => ({
+    ...serializeChallenge(c),
+    submissions: c.submissions.map(serializeSubmission),
+  }));
+
+  return { props: { challenges } };
+};
+
+type SortOption = "default" | "points-high" | "points-low";
 
 export default function Page({
-  challenges
+  challenges,
 }: {
   challenges: Array<ChallengeWithSubmissions>;
 }) {
@@ -74,10 +63,10 @@ export default function Page({
   const searchParams = useSearchParams();
   const challengeSearchParam = searchParams.get("challenge");
   const [selectedChallenge, setSelectedChallenge] = useState<string | null>(
-    challengeSearchParam
+    challengeSearchParam,
   );
-  const [sortOption, setSortOption] = useState<SortOption>('default');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortOption, setSortOption] = useState<SortOption>("default");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [hideCompleted, setHideCompleted] = useState<boolean>(false);
   const [hideFullChallenges, setHideFullChallenges] = useState<boolean>(false);
 
@@ -90,44 +79,46 @@ export default function Page({
     }
   }, [ref.current, challengeSearchParam]);
 
-  const team = useTeam();
-  
-  // Filter challenges based on search query (case-insensitive)
-  const searchFilteredChallenges = searchQuery.trim() === '' 
-    ? challenges 
-    : challenges.filter(c => 
-        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.prompt.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-  
-  // Filter out completed challenges if hideCompleted is true
-  const completedFilteredChallenges = hideCompleted && team
-    ? searchFilteredChallenges.filter(c => 
-        !c.submissions.some(s => s.teamId === (team as any)._id && s.accepted)
-      )
-    : searchFilteredChallenges;
-  
-  // Filter out full challenges if hideFullChallenges is true
+  const session = useSession();
+  const team = session?.team;
+
+  const searchFilteredChallenges =
+    searchQuery.trim() === ""
+      ? challenges
+      : challenges.filter(
+          (c) =>
+            c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.prompt.toLowerCase().includes(searchQuery.toLowerCase()),
+        );
+
+  const completedFilteredChallenges =
+    hideCompleted && team
+      ? searchFilteredChallenges.filter(
+          (c) =>
+            !c.submissions.some((s) => s.teamId === team.id && s.accepted),
+        )
+      : searchFilteredChallenges;
+
   const fullFilteredChallenges = hideFullChallenges
-    ? completedFilteredChallenges.filter(c => 
-        c.submissions.filter(s => s.accepted).length < c.numWinners
+    ? completedFilteredChallenges.filter(
+        (c) => c.submissions.filter((s) => s.accepted).length < c.numWinners,
       )
     : completedFilteredChallenges;
-  
-  // Sort challenges based on selected option
-  const sortedChallenges = sortOption === 'default' 
-    ? fullFilteredChallenges 
-    : [...fullFilteredChallenges].sort((a, b) => {
-        switch (sortOption) {
-          case 'points-high':
-            return b.pts - a.pts;
-          case 'points-low':
-            return a.pts - b.pts;
-          default:
-            return 0;
-        }
-      });
-  
+
+  const sortedChallenges =
+    sortOption === "default"
+      ? fullFilteredChallenges
+      : [...fullFilteredChallenges].sort((a, b) => {
+          switch (sortOption) {
+            case "points-high":
+              return b.pts - a.pts;
+            case "points-low":
+              return a.pts - b.pts;
+            default:
+              return 0;
+          }
+        });
+
   return (
     <NavContainer title="Challenges">
       <VStack spacing={4}>
@@ -141,8 +132,8 @@ export default function Page({
           boxShadow="sm"
           size="md"
         />
-        <Select 
-          value={sortOption} 
+        <Select
+          value={sortOption}
           onChange={(e) => setSortOption(e.target.value as SortOption)}
           width="100%"
           bg="white"
@@ -164,7 +155,7 @@ export default function Page({
               justifyContent="space-between"
             >
               <Text fontSize="sm" fontWeight="medium" color="gray.700">
-                Hide challenges you've finished
+                Hide challenges you&apos;ve finished
               </Text>
               <Switch
                 isChecked={hideCompleted}
@@ -193,10 +184,10 @@ export default function Page({
         )}
         {sortedChallenges.map((c) => (
           <Card
-            ref={c._id === challengeSearchParam ? ref : null}
-            key={c._id}
+            ref={c.id === challengeSearchParam ? ref : null}
+            key={c.id}
             width="100%"
-            className={c._id === selectedChallenge ? "card open" : "card"}
+            className={c.id === selectedChallenge ? "card open" : "card"}
             boxShadow="sm"
             _hover={{ boxShadow: "md" }}
             transition="all 0.2s"
@@ -211,7 +202,9 @@ export default function Page({
                 gap={3}
                 cursor="pointer"
                 onClick={() => {
-                  setSelectedChallenge(c._id === selectedChallenge ? null : c._id);
+                  setSelectedChallenge(
+                    c.id === selectedChallenge ? null : c.id,
+                  );
                 }}
               >
                 <Heading size="md" flex={1} color="gray.800">
@@ -226,7 +219,7 @@ export default function Page({
                     h={5}
                     color="gray.500"
                     className={
-                      c._id === selectedChallenge ? "chevron rotate" : "chevron"
+                      c.id === selectedChallenge ? "chevron rotate" : "chevron"
                     }
                   />
                 </Flex>
@@ -234,41 +227,47 @@ export default function Page({
               <Flex
                 direction="row"
                 px={4}
-                pb={c._id === selectedChallenge ? 2 : 4}
+                pb={c.id === selectedChallenge ? 2 : 4}
               >
                 <Text fontSize="sm" color="gray.600">
-                  {c.submissions.filter(s => s.accepted).length} of {c.numWinners} spot{c.numWinners === 1 ? "" : "s"} filled • {c.submissions.filter(s => !s.accepted && !s.rejected).length} pending approval
+                  {c.submissions.filter((s) => s.accepted).length} of{" "}
+                  {c.numWinners} spot{c.numWinners === 1 ? "" : "s"} filled •{" "}
+                  {
+                    c.submissions.filter((s) => !s.accepted && !s.rejected)
+                      .length
+                  }{" "}
+                  pending approval
                 </Text>
               </Flex>
-              {c._id === selectedChallenge && (
-                <VStack 
-                  px={4} 
-                  pb={4} 
-                  spacing={3} 
+              {c.id === selectedChallenge && (
+                <VStack
+                  px={4}
+                  pb={4}
+                  spacing={3}
                   alignItems="left"
                   borderTop="1px"
                   borderColor="gray.100"
                   pt={3}
                   className="expandable-content"
                 >
-                  <Text 
-                    fontSize="sm" 
-                    color="gray.700" 
+                  <Text
+                    fontSize="sm"
+                    color="gray.700"
                     lineHeight="tall"
                     sx={{
                       "& a": {
                         color: "blue.600",
                         textDecoration: "underline",
                         _hover: {
-                          color: "blue.700"
-                        }
-                      }
+                          color: "blue.700",
+                        },
+                      },
                     }}
-                    dangerouslySetInnerHTML={{ 
+                    dangerouslySetInnerHTML={{
                       __html: c.prompt.replace(
-                        /(https?:\/\/[^\s]+)/g, 
-                        '<a href="$1" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">$1</a>'
-                      )
+                        /(https?:\/\/[^\s]+)/g,
+                        '<a href="$1" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">$1</a>',
+                      ),
                     }}
                   />
                   {team != null && (
@@ -276,7 +275,7 @@ export default function Page({
                       colorScheme="blue"
                       size="md"
                       onClick={(e) => {
-                        router.push(`/submit/${c._id}`);
+                        router.push(`/submit/${c.id}`);
                         e.stopPropagation();
                       }}
                       width="fit-content"
