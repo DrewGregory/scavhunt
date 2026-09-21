@@ -24,6 +24,8 @@ model User {
   intent              String?
   teamPreferences     String?
   competitiveness     String?
+  /// Full-day availability notes from player survey
+  timeCommitment      String?
   surveyCompletedAt   DateTime?
 
   team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
@@ -31,6 +33,7 @@ model User {
   favorites    Favorite[]
   chatMessages ChatMessage[]
   votes        Vote[]
+  deposits     NeighborhoodDeposit[]
 
   @@index([teamId])
 }
@@ -40,6 +43,8 @@ model HuntSettings {
   id        String   @id @default("default")
   startsAt  DateTime
   endsAt    DateTime
+  /// Master switch for the whole territory feature. Off = players see no trace of it.
+  territoryEnabled Boolean @default(false)
   updatedAt DateTime @updatedAt
 }
 
@@ -55,6 +60,8 @@ model Team {
   id        String   @id @default(cuid())
   name      String
   emoji     String
+  /// Hex color used for territory map fill / labels.
+  color     String   @default("#3182CE")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -62,6 +69,7 @@ model Team {
   submissions  Submission[]
   locations    Location[]
   chatMessages ChatMessage[]
+  deposits     NeighborhoodDeposit[]
 }
 
 model Challenge {
@@ -146,12 +154,60 @@ model Neighborhood {
   name      String   @unique
   /// Optional display emoji; falls back to a hash of the name when null.
   emoji     String?
+  /// GeoJSON Polygon | MultiPolygon, WGS84 [lng, lat]. Null = no boundary yet.
+  /// Derived from MapTopology arcs when topology is imported — do not freehand-edit.
+  boundary  Json?
+  /// Participates in the territory map (tournament-only entries stay false).
+  onMap     Boolean  @default(false)
+  /// True only for Treasure Island (Yerba Buena). Mainland zones must be a single ring.
+  isIsland  Boolean  @default(false)
+  centerLat Float?
+  centerLng Float?
   createdAt DateTime @default(now())
 
   matchupsAsA Matchup[] @relation("MatchupSlotA")
   matchupsAsB Matchup[] @relation("MatchupSlotB")
   wins        Matchup[] @relation("MatchupWinner")
   votes       Vote[]
+  deposits    NeighborhoodDeposit[]
+}
+
+/// Singleton shared-edge topology for gap-free SF territory boundaries.
+model MapTopology {
+  id         String   @id @default("default")
+  /// Quantization scale/translate from topojson (optional).
+  transform  Json?
+  /// Absolute arc coordinates: arcIndex -> [[lng, lat], ...]
+  arcs       Json
+  /// neighborhoodId -> rings of signed arc indices (topojson-style)
+  objects    Json
+  /// Arc indices that form shoreline / city outline — not editable.
+  lockedArcs Json
+  version    Int      @default(1)
+  updatedAt  DateTime @updatedAt
+}
+
+model NeighborhoodDeposit {
+  id             String   @id @default(cuid())
+  teamId         String
+  neighborhoodId String
+  userId         String
+  points         Int
+  lat            Float
+  lng            Float
+  accuracy       Float?
+  /// Soft-delete / admin void. Voided deposits do not count toward standings or score.
+  voidedAt       DateTime?
+  createdAt      DateTime @default(now())
+
+  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([neighborhoodId])
+  @@index([teamId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Matchup {

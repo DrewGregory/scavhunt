@@ -13,12 +13,17 @@ function parseEnvDate(value: string | undefined, label: string): Date {
 export async function getHuntSettings(): Promise<{
   startsAt: Date;
   endsAt: Date;
+  territoryEnabled: boolean;
 }> {
   const row = await prisma.huntSettings.findUnique({
     where: { id: "default" },
   });
   if (row) {
-    return { startsAt: row.startsAt, endsAt: row.endsAt };
+    return {
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      territoryEnabled: row.territoryEnabled,
+    };
   }
 
   return {
@@ -30,6 +35,7 @@ export async function getHuntSettings(): Promise<{
       process.env.END_TIME_ISO_STRING,
       "END_TIME_ISO_STRING",
     ),
+    territoryEnabled: false,
   };
 }
 

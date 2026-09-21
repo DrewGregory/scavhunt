@@ -54,6 +54,7 @@ export default async function handler(
         intent: u.intent,
         teamPreferences: u.teamPreferences,
         competitiveness: u.competitiveness,
+        timeCommitment: u.timeCommitment,
         surveyCompletedAt: u.surveyCompletedAt?.toISOString() ?? null,
         team: u.team
           ? { id: u.team.id, name: u.team.name, emoji: u.team.emoji }
@@ -145,6 +146,7 @@ export default async function handler(
           intent: updated.intent,
           teamPreferences: updated.teamPreferences,
           competitiveness: updated.competitiveness,
+          timeCommitment: updated.timeCommitment,
           surveyCompletedAt: updated.surveyCompletedAt?.toISOString() ?? null,
           team: updated.team
             ? {

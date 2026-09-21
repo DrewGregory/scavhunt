@@ -4,9 +4,26 @@ import { prisma } from "../../../lib/prisma";
 import { requireApiAdmin } from "../../../lib/auth";
 import { parseJsonBody, serializeTeam } from "../../../lib/serialize";
 
+const TEAM_COLORS = [
+  "#E53E3E",
+  "#DD6B20",
+  "#D69E2E",
+  "#38A169",
+  "#319795",
+  "#3182CE",
+  "#5A67D8",
+  "#805AD5",
+  "#D53F8C",
+  "#718096",
+] as const;
+
 const RequestBody = z.object({
   name: z.string().min(1),
   emoji: z.string().min(1),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .optional(),
 });
 
 export default async function handler(
@@ -23,9 +40,12 @@ export default async function handler(
     }
 
     const { name, emoji } = parsed.data;
+    const teamCount = await prisma.team.count();
+    const color =
+      parsed.data.color ?? TEAM_COLORS[teamCount % TEAM_COLORS.length];
 
     const newTeam = await prisma.team.create({
-      data: { name, emoji },
+      data: { name, emoji, color },
     });
 
     return res.status(200).json({ team: serializeTeam(newTeam) });

@@ -151,7 +151,12 @@ export function publicUser(user: UserWithTeam) {
     isAdmin: user.isAdmin,
     teamId: user.teamId,
     team: user.team
-      ? { id: user.team.id, name: user.team.name, emoji: user.team.emoji }
+      ? {
+          id: user.team.id,
+          name: user.team.name,
+          emoji: user.team.emoji,
+          color: user.team.color,
+        }
       : null,
     intent: user.intent,
     surveyCompletedAt: user.surveyCompletedAt

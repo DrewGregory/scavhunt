@@ -53,6 +53,7 @@ export type SerializedTeam = {
   id: string;
   name: string;
   emoji: string;
+  color: string;
 };
 
 export type SerializedChatMessage = {

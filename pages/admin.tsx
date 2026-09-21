@@ -32,6 +32,7 @@ import {
 import NavContainer from "../components/NavContainer";
 import { publicUser, requireAdminSSP } from "../lib/auth";
 import type { SerializedChallenge, SerializedTeam } from "../lib/types";
+import AdminMapPanel from "../components/AdminMapPanel";
 
 type AdminUser = {
   id: string;
@@ -46,6 +47,7 @@ type AdminUser = {
   intent: string | null;
   teamPreferences: string | null;
   competitiveness: string | null;
+  timeCommitment: string | null;
   surveyCompletedAt: string | null;
   team: { id: string; name: string; emoji: string } | null;
   _count: { submissions: number; votes: number };
@@ -84,9 +86,14 @@ type AdminNeighborhood = {
   createdAt: string;
   matchupCount: number;
   voteCount: number;
+  onMap?: boolean;
+  hasBoundary?: boolean;
+  boundary?: unknown;
+  centerLat?: number | null;
+  centerLng?: number | null;
 };
 
-type Tab = "users" | "teams" | "challenges" | "tournament" | "settings";
+type Tab = "users" | "teams" | "challenges" | "tournament" | "map" | "settings";
 
 function toLocalInputValue(iso: string | null | undefined) {
   if (!iso) return "";
@@ -139,7 +146,9 @@ export default function AdminPage({
   const [newNeighborhoodEmoji, setNewNeighborhoodEmoji] = useState("");
   const [huntStartsAt, setHuntStartsAt] = useState("");
   const [huntEndsAt, setHuntEndsAt] = useState("");
+  const [territoryEnabled, setTerritoryEnabled] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [seedBusy, setSeedBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -209,6 +218,7 @@ export default function AdminPage({
     const data = await res.json();
     setHuntStartsAt(toLocalInputValue(data.startsAt));
     setHuntEndsAt(toLocalInputValue(data.endsAt));
+    setTerritoryEnabled(Boolean(data.territoryEnabled));
   };
 
   useEffect(() => {
@@ -551,6 +561,37 @@ export default function AdminPage({
     }
   };
 
+  const handleSeedDemoData = async () => {
+    if (
+      !confirm(
+        "Create/update 4 demo teams with 8 fake players (idempotent). Continue?",
+      )
+    ) {
+      return;
+    }
+    setSeedBusy(true);
+    try {
+      const res = await fetch("/api/admin/seed-demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Seed failed");
+        return;
+      }
+      await Promise.all([loadUsers(), loadTeams()]);
+      alert(
+        `Demo data ready.\nTeams created ${data.teamsCreated}, updated ${data.teamsUpdated}.\nUsers created ${data.usersCreated}, updated ${data.usersUpdated}.`,
+      );
+    } catch {
+      alert("Seed failed");
+    } finally {
+      setSeedBusy(false);
+    }
+  };
+
   const handleSaveHuntSettings = async () => {
     if (!huntStartsAt || !huntEndsAt) {
       alert("Both start and end times are required");
@@ -570,6 +611,7 @@ export default function AdminPage({
         body: JSON.stringify({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
+          territoryEnabled,
         }),
       });
       const data = await res.json();
@@ -579,11 +621,32 @@ export default function AdminPage({
       }
       setHuntStartsAt(toLocalInputValue(data.startsAt));
       setHuntEndsAt(toLocalInputValue(data.endsAt));
-      alert("Hunt window saved");
+      setTerritoryEnabled(Boolean(data.territoryEnabled));
+      alert("Settings saved");
     } catch {
       alert("Failed to save settings");
     } finally {
       setSettingsBusy(false);
+    }
+  };
+
+  const handleTeamColorChange = async (teamId: string, color: string) => {
+    try {
+      const res = await fetch("/api/admin/teams", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: teamId, color }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to update color");
+        return;
+      }
+      setTeams((prev) =>
+        prev.map((t) => (t.id === teamId ? { ...t, color } : t)),
+      );
+    } catch {
+      alert("Failed to update color");
     }
   };
 
@@ -616,6 +679,7 @@ export default function AdminPage({
     { id: "teams", label: "Teams" },
     { id: "challenges", label: "Challenges" },
     { id: "tournament", label: "Tournament" },
+    { id: "map", label: "Map" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -656,6 +720,7 @@ export default function AdminPage({
                   <Th>Intent</Th>
                   <Th>Team prefs</Th>
                   <Th>Compete</Th>
+                  <Th>Time</Th>
                   <Th>Active</Th>
                   <Th>Admin</Th>
                   <Th>Created</Th>
@@ -735,6 +800,11 @@ export default function AdminPage({
                         {u.competitiveness || "—"}
                       </Text>
                     </Td>
+                    <Td maxW="160px">
+                      <Text fontSize="xs" noOfLines={2} title={u.timeCommitment || ""}>
+                        {u.timeCommitment || "—"}
+                      </Text>
+                    </Td>
                     <Td>
                       <Switch
                         isChecked={u.isActive}
@@ -782,6 +852,7 @@ export default function AdminPage({
                   <Thead>
                     <Tr>
                       <Th>Team</Th>
+                      <Th>Color</Th>
                       <Th>Members</Th>
                     </Tr>
                   </Thead>
@@ -792,6 +863,31 @@ export default function AdminPage({
                           <Text fontWeight="semibold">
                             {team.emoji} {team.name}
                           </Text>
+                        </Td>
+                        <Td>
+                          <HStack>
+                            <input
+                              type="color"
+                              value={team.color || "#3182CE"}
+                              onChange={(e) =>
+                                void handleTeamColorChange(
+                                  team.id,
+                                  e.target.value,
+                                )
+                              }
+                              style={{
+                                width: 36,
+                                height: 28,
+                                border: "none",
+                                background: "transparent",
+                                cursor: "pointer",
+                              }}
+                              aria-label={`Color for ${team.name}`}
+                            />
+                            <Text fontSize="xs" color="gray.500">
+                              {team.color || "#3182CE"}
+                            </Text>
+                          </HStack>
                         </Td>
                         <Td>
                           {(team.users ?? []).length === 0 ? (
@@ -1177,42 +1273,105 @@ export default function AdminPage({
           </VStack>
         )}
 
+        {activeTab === "map" && (
+          <AdminMapPanel
+            neighborhoods={neighborhoods.map((n) => ({
+              id: n.id,
+              name: n.name,
+              emoji: n.emoji,
+              displayEmoji: n.displayEmoji,
+              onMap: n.onMap ?? false,
+              hasBoundary: n.hasBoundary ?? false,
+              boundary: n.boundary ?? null,
+              centerLat: n.centerLat ?? null,
+              centerLng: n.centerLng ?? null,
+            }))}
+            onReload={loadNeighborhoods}
+          />
+        )}
+
         {activeTab === "settings" && (
-          <Box bg="white" p={4} borderRadius="md" boxShadow="sm" maxW="520px">
-            <Heading size="md" mb={2}>
-              Hunt window
-            </Heading>
-            <Text fontSize="sm" color="gray.600" mb={4}>
-              Controls when the home page switches from pre-hunt (tournament)
-              to the live hunt. Separate from tournament round deadlines.
-            </Text>
-            <VStack align="stretch" spacing={4}>
-              <FormControl>
-                <FormLabel>Hunt starts at</FormLabel>
-                <Input
-                  type="datetime-local"
-                  value={huntStartsAt}
-                  onChange={(e) => setHuntStartsAt(e.target.value)}
+          <VStack align="stretch" spacing={6} maxW="520px">
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="md" mb={2}>
+                Hunt window
+              </Heading>
+              <Text fontSize="sm" color="gray.600" mb={4}>
+                Controls when the home page switches from pre-hunt (tournament)
+                to the live hunt. Separate from tournament round deadlines.
+              </Text>
+              <VStack align="stretch" spacing={4}>
+                <FormControl>
+                  <FormLabel>Hunt starts at</FormLabel>
+                  <Input
+                    type="datetime-local"
+                    value={huntStartsAt}
+                    onChange={(e) => setHuntStartsAt(e.target.value)}
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel>Hunt ends at</FormLabel>
+                  <Input
+                    type="datetime-local"
+                    value={huntEndsAt}
+                    onChange={(e) => setHuntEndsAt(e.target.value)}
+                  />
+                </FormControl>
+              </VStack>
+            </Box>
+
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="md" mb={2}>
+                Territory mode
+              </Heading>
+              <Text fontSize="sm" color="gray.600" mb={4}>
+                When enabled, players immediately see neighborhood polygons on
+                the map, can deposit points into them, and get a territory
+                leaderboard. Leave this off until you&apos;re ready for the
+                mid-hunt switch — admins can still prep boundaries on the Map
+                tab.
+              </Text>
+              <FormControl display="flex" alignItems="center">
+                <FormLabel htmlFor="territory-enabled" mb="0">
+                  Territory enabled for players
+                </FormLabel>
+                <Switch
+                  id="territory-enabled"
+                  isChecked={territoryEnabled}
+                  onChange={(e) => setTerritoryEnabled(e.target.checked)}
+                  colorScheme="blue"
                 />
               </FormControl>
-              <FormControl>
-                <FormLabel>Hunt ends at</FormLabel>
-                <Input
-                  type="datetime-local"
-                  value={huntEndsAt}
-                  onChange={(e) => setHuntEndsAt(e.target.value)}
-                />
-              </FormControl>
+            </Box>
+
+            <Button
+              colorScheme="blue"
+              onClick={handleSaveHuntSettings}
+              isLoading={settingsBusy}
+              alignSelf="flex-start"
+            >
+              Save settings
+            </Button>
+
+            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
+              <Heading size="md" mb={2}>
+                Demo data
+              </Heading>
+              <Text fontSize="sm" color="gray.600" mb={4}>
+                Upserts 4 fake teams and 8 players with disposable emails /
+                phone numbers so you can simulate territory deposits. Safe to
+                click again — existing demo rows are updated, not duplicated.
+              </Text>
               <Button
-                colorScheme="blue"
-                onClick={handleSaveHuntSettings}
-                isLoading={settingsBusy}
-                alignSelf="flex-start"
+                colorScheme="purple"
+                variant="outline"
+                onClick={handleSeedDemoData}
+                isLoading={seedBusy}
               >
-                Save hunt times
+                Seed demo teams &amp; users
               </Button>
-            </VStack>
-          </Box>
+            </Box>
+          </VStack>
         )}
       </VStack>
 

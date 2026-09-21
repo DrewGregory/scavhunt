@@ -17,6 +17,7 @@ export function serializeTeam(team: Team): SerializedTeam {
     id: team.id,
     name: team.name,
     emoji: team.emoji,
+    color: team.color,
   };
 }
 

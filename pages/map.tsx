@@ -15,6 +15,10 @@ import type {
   SerializedSubmission,
   SerializedTeam,
 } from "../lib/types";
+import { isTerritoryEnabled } from "../lib/territoryGate";
+import { getStandings } from "../lib/territory";
+import { getTeamScore } from "../lib/scoring";
+import type { TerritoryNeighborhood } from "../components/leafletMap";
 
 const LeafletMap = dynamic(() => import("../components/leafletMap"), {
   ssr: false,
@@ -23,6 +27,8 @@ const LeafletMap = dynamic(() => import("../components/leafletMap"), {
 type ChallengeWithSubmissions = SerializedChallenge & {
   submissions: SerializedSubmission[];
 };
+
+type Bank = { earned: number; deposited: number; score: number };
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -69,11 +75,40 @@ export const getServerSideProps = async (
       }));
   }
 
+  const territoryEnabled = await isTerritoryEnabled();
+  let neighborhoods: TerritoryNeighborhood[] = [];
+  let bank: Bank | null = null;
+
+  if (territoryEnabled) {
+    const standings = await getStandings({
+      onMapOnly: true,
+      includeBoundary: true,
+    });
+    neighborhoods = standings.map((s) => ({
+      id: s.neighborhoodId,
+      name: s.name,
+      emoji: s.emoji,
+      centerLat: s.centerLat,
+      centerLng: s.centerLng,
+      boundary: s.boundary as TerritoryNeighborhood["boundary"],
+      totals: s.totals,
+      claimedBy: s.claimedBy,
+      contested: s.contested,
+      totalDeposited: s.totalDeposited,
+    }));
+    if (auth.user.teamId) {
+      bank = await getTeamScore(auth.user.teamId);
+    }
+  }
+
   return {
     props: {
       challenges,
       locations,
       team: auth.user.team ? serializeTeam(auth.user.team) : null,
+      territoryEnabled,
+      neighborhoods: territoryEnabled ? neighborhoods : [],
+      bank: territoryEnabled ? bank : null,
     },
   };
 };
@@ -82,15 +117,28 @@ export default function Page({
   locations,
   challenges,
   team,
+  territoryEnabled,
+  neighborhoods,
+  bank,
 }: {
   locations: Array<LatestTeamLocation>;
   challenges: Array<ChallengeWithSubmissions>;
   team: SerializedTeam | null;
+  territoryEnabled: boolean;
+  neighborhoods: TerritoryNeighborhood[];
+  bank: Bank | null;
 }) {
   return (
     <NavContainer title="Map" fullScreen>
       <Flex flex={1} w="100%" h="100%" p={0}>
-        <LeafletMap challenges={challenges} locations={locations} team={team} />
+        <LeafletMap
+          challenges={challenges}
+          locations={locations}
+          team={team}
+          territoryEnabled={territoryEnabled}
+          initialNeighborhoods={neighborhoods}
+          initialBank={bank}
+        />
       </Flex>
     </NavContainer>
   );

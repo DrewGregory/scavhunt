@@ -36,6 +36,8 @@ RUN npm install -g prisma@6.16.2
 
 COPY --from=builder --chown=node:node /usr/src/app/public ./public
 COPY --from=builder --chown=node:node /usr/src/app/prisma ./prisma
+# Gap-free SF topology seed (also bundled via import in the API route).
+COPY --from=builder --chown=node:node /usr/src/app/data ./data
 COPY --from=builder --chown=node:node /usr/src/app/.next/standalone ./
 COPY --from=builder --chown=node:node /usr/src/app/.next/static ./.next/static
 

@@ -1,8 +1,15 @@
 import { GetServerSidePropsContext } from "next";
 import NavContainer from "../components/NavContainer";
-import { Card, Flex, Heading, ListItem, UnorderedList } from "@chakra-ui/react";
+import {
+  Box,
+  Card,
+  Flex,
+  Heading,
+  ListItem,
+  Text,
+  UnorderedList,
+} from "@chakra-ui/react";
 import { useState } from "react";
-import { Text } from "@chakra-ui/react";
 import { ChevronDownIcon } from "@chakra-ui/icons";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -10,11 +17,11 @@ import { formatISO, parseISO } from "date-fns";
 import { getEndTime, getStartTime } from "../lib/time";
 import { prisma } from "../lib/prisma";
 import { requireUserSSP } from "../lib/auth";
-import {
-  serializeSubmission,
-  serializeTeam,
-} from "../lib/serialize";
+import { serializeSubmission, serializeTeam } from "../lib/serialize";
 import type { SerializedSubmission, SerializedTeam } from "../lib/types";
+import { isTerritoryEnabled } from "../lib/territoryGate";
+import { getStandings, territoryLeaderboard } from "../lib/territory";
+import { scoreFromParts } from "../lib/scoring";
 
 const ResponsiveLine = dynamic(
   () => import("@nivo/line").then((m) => m.ResponsiveLine),
@@ -26,8 +33,29 @@ type TeamMember = { id: string; name: string };
 type TeamWithPts = SerializedTeam & {
   submissions: SerializedSubmission[];
   members: TeamMember[];
+  /** Leaderboard score = earned - deposited */
   pts: number;
+  earned: number;
+  deposited: number;
   ptsArray: number[];
+};
+
+type TerritoryRow = {
+  teamId: string;
+  teamName: string;
+  teamEmoji: string;
+  teamColor: string;
+  neighborhoodsHeld: number;
+  totalDeposited: number;
+};
+
+type HeldNeighborhood = {
+  id: string;
+  name: string;
+  emoji: string | null;
+  claimedByTeamId: string | null;
+  contested: boolean;
+  totalDeposited: number;
 };
 
 export const getServerSideProps = async (
@@ -43,31 +71,79 @@ export const getServerSideProps = async (
         orderBy: { createdAt: "asc" },
         include: { challenge: true },
       },
+      deposits: {
+        where: { voidedAt: null },
+        select: { points: true },
+      },
     },
   });
 
   const teamsWithPts: TeamWithPts[] = teamsRaw.map((t) => {
     const accepted = t.submissions.filter((s) => s.accepted);
     const ptsArray = accepted.map((s) => s.challenge.pts);
+    const earned = ptsArray.reduce((sum, p) => sum + p, 0);
+    const deposited = t.deposits.reduce((sum, d) => sum + d.points, 0);
     return {
       ...serializeTeam(t),
       members: t.users.map((u) => ({ id: u.id, name: u.name })),
       submissions: t.submissions.map(serializeSubmission),
-      pts: ptsArray.reduce((sum, p) => sum + p, 0),
+      earned,
+      deposited,
+      pts: scoreFromParts(earned, deposited),
       ptsArray,
     };
   });
 
   const teamsSortedbyPts = teamsWithPts.sort((t1, t2) => t2.pts - t1.pts);
-  const [startTime, endTime] = await Promise.all([
+  const [startTime, endTime, territoryEnabled] = await Promise.all([
     getStartTime(),
     getEndTime(),
+    isTerritoryEnabled(),
   ]);
+
+  let territoryRows: TerritoryRow[] = [];
+  let heldNeighborhoods: HeldNeighborhood[] = [];
+
+  if (territoryEnabled) {
+    const standings = await getStandings({
+      onMapOnly: true,
+      includeBoundary: false,
+    });
+    const rows = territoryLeaderboard(
+      standings,
+      teamsRaw.map((t) => ({
+        id: t.id,
+        name: t.name,
+        emoji: t.emoji,
+        color: t.color,
+      })),
+    );
+    territoryRows = rows.map((r) => ({
+      teamId: r.teamId,
+      teamName: r.teamName,
+      teamEmoji: r.teamEmoji,
+      teamColor: r.teamColor,
+      neighborhoodsHeld: r.neighborhoodsHeld,
+      totalDeposited: r.totalDeposited,
+    }));
+    heldNeighborhoods = standings.map((s) => ({
+      id: s.neighborhoodId,
+      name: s.name,
+      emoji: s.emoji,
+      claimedByTeamId: s.claimedBy?.teamId ?? null,
+      contested: s.contested,
+      totalDeposited: s.totalDeposited,
+    }));
+  }
+
   return {
     props: {
       teamsSortedbyPts,
       startTimeISO: formatISO(startTime),
       endTimeISO: formatISO(endTime),
+      territoryEnabled,
+      territoryRows: territoryEnabled ? territoryRows : [],
+      heldNeighborhoods: territoryEnabled ? heldNeighborhoods : [],
     },
   };
 };
@@ -76,38 +152,44 @@ export default function Page({
   teamsSortedbyPts,
   endTimeISO,
   startTimeISO,
+  territoryEnabled,
+  territoryRows,
+  heldNeighborhoods,
 }: {
   teamsSortedbyPts: Array<TeamWithPts>;
   startTimeISO: string;
   endTimeISO: string;
+  territoryEnabled: boolean;
+  territoryRows: TerritoryRow[];
+  heldNeighborhoods: HeldNeighborhood[];
 }) {
   const searchParams = useSearchParams();
   const teamSearchParam = searchParams.get("team");
 
   const startTime = parseISO(startTimeISO);
   const endTime = parseISO(endTimeISO);
+
+  // Chart tracks earned over time (unaffected by deposits).
   const pointData = teamsSortedbyPts.map((t) => {
-    let data: any = [{ x: startTime, y: 0 }];
+    const data: Array<{ x: Date; y: number }> = [{ x: startTime, y: 0 }];
     let totalPts = 0;
     let index = 0;
     for (let i = 0; i < t.submissions.length; i++) {
-      if (!t.submissions[i].accepted) {
-        continue;
-      }
-      const submission = t.submissions[i];
+      if (!t.submissions[i].accepted) continue;
       totalPts += t.ptsArray[index];
       data.push({
-        x: new Date(submission.createdAt),
+        x: new Date(t.submissions[i].createdAt),
         y: totalPts,
       });
       index += 1;
     }
-    return {
-      id: t.emoji + " " + t.name,
-      data: data,
-    };
+    return { id: `${t.emoji} ${t.name}`, data };
   });
-  const maxScore = teamsSortedbyPts.reduce((max, t) => Math.max(max, t.pts), 0);
+
+  const maxEarned = teamsSortedbyPts.reduce(
+    (max, t) => Math.max(max, t.earned),
+    0,
+  );
   const [selectedTeam, setSelectedTeam] = useState<string | null>(
     teamSearchParam,
   );
@@ -118,6 +200,7 @@ export default function Page({
       : new Date() > endTime
         ? endTime
         : new Date();
+
   return (
     <NavContainer title="Leaderboard">
       <Card height={450} p={4} mb={4} boxShadow="sm" borderRadius="lg">
@@ -136,7 +219,7 @@ export default function Page({
           yScale={{
             type: "linear",
             min: 0,
-            max: Math.max(50, maxScore + 10),
+            max: Math.max(50, maxEarned + 10),
             stacked: false,
             reverse: false,
           }}
@@ -156,7 +239,7 @@ export default function Page({
             tickSize: 5,
             tickPadding: 5,
             tickRotation: 0,
-            legend: "Points",
+            legend: "Points earned",
             legendOffset: -40,
             legendPosition: "middle",
             truncateTickAt: 0,
@@ -196,19 +279,27 @@ export default function Page({
           ]}
         />
       </Card>
-      <Flex direction="column" gap={4}>
+
+      <Heading size="md" mb={2} color="gray.700">
+        Points
+      </Heading>
+      <Text fontSize="sm" color="gray.600" mb={3}>
+        Score = points earned − points deposited into neighborhoods.
+      </Text>
+      <Flex direction="column" gap={4} mb={8}>
         {teamsSortedbyPts.map((t, index) => (
           <Card
             key={t.id}
             cursor="pointer"
-            onClick={() => {
-              setSelectedTeam(t.id === selectedTeam ? null : t.id);
-            }}
-            className={t.id === selectedTeam ? "card open" : "card"}
+            onClick={() =>
+              setSelectedTeam(t.id === selectedTeam ? null : t.id)
+            }
             boxShadow="sm"
             _hover={{ boxShadow: "md" }}
             transition="all 0.2s"
             borderRadius="lg"
+            borderLeftWidth="4px"
+            borderLeftColor={t.color || "gray.300"}
           >
             <Flex direction="column">
               <Flex
@@ -232,15 +323,22 @@ export default function Page({
                   </Text>
                 </Flex>
                 <Flex alignItems="center" gap={2}>
-                  <Text fontWeight="bold" color="gray.700" fontSize="md">
-                    {t.pts} pts
-                  </Text>
+                  <Box textAlign="right">
+                    <Text fontWeight="bold" color="gray.700" fontSize="md">
+                      {t.pts} pts
+                    </Text>
+                    {t.deposited > 0 && (
+                      <Text fontSize="xs" color="gray.500">
+                        earned {t.earned} · spent {t.deposited}
+                      </Text>
+                    )}
+                  </Box>
                   <ChevronDownIcon
                     w={5}
                     h={5}
                     color="gray.500"
-                    className={
-                      t.id === selectedTeam ? "chevron rotate" : "chevron"
+                    transform={
+                      t.id === selectedTeam ? "rotate(180deg)" : undefined
                     }
                   />
                 </Flex>
@@ -253,7 +351,6 @@ export default function Page({
                   pt={2}
                   borderTop="1px"
                   borderColor="gray.100"
-                  className="expandable-content"
                 >
                   <Heading size="sm" mb={3} color="gray.700">
                     Team Members
@@ -271,6 +368,84 @@ export default function Page({
           </Card>
         ))}
       </Flex>
+
+      {territoryEnabled && (
+        <>
+          <Heading size="md" mb={2} color="gray.700">
+            Territory
+          </Heading>
+          <Text fontSize="sm" color="gray.600" mb={3}>
+            Neighborhoods held (strict lead; ties stay contested). Separate from
+            the points board.
+          </Text>
+          <Flex direction="column" gap={3} mb={6}>
+            {territoryRows.map((row, index) => (
+              <Card
+                key={row.teamId}
+                p={4}
+                boxShadow="sm"
+                borderRadius="lg"
+                borderLeftWidth="4px"
+                borderLeftColor={row.teamColor}
+              >
+                <Flex justify="space-between" align="center">
+                  <Flex align="center" gap={3}>
+                    <Text fontWeight="bold" color="gray.500" minW="30px">
+                      #{index + 1}
+                    </Text>
+                    <Text fontWeight="semibold">
+                      {row.teamEmoji} {row.teamName}
+                    </Text>
+                  </Flex>
+                  <Box textAlign="right">
+                    <Text fontWeight="bold">
+                      {row.neighborhoodsHeld} neighborhood
+                      {row.neighborhoodsHeld === 1 ? "" : "s"}
+                    </Text>
+                    <Text fontSize="xs" color="gray.500">
+                      {row.totalDeposited} pts deposited
+                    </Text>
+                  </Box>
+                </Flex>
+              </Card>
+            ))}
+          </Flex>
+
+          <Heading size="sm" mb={2} color="gray.700">
+            Neighborhood control
+          </Heading>
+          <Flex direction="column" gap={2} mb={8}>
+            {heldNeighborhoods.map((n) => {
+              const holder = territoryRows.find(
+                (r) => r.teamId === n.claimedByTeamId,
+              );
+              return (
+                <Flex
+                  key={n.id}
+                  justify="space-between"
+                  align="center"
+                  bg="white"
+                  p={3}
+                  borderRadius="md"
+                  boxShadow="sm"
+                >
+                  <Text fontWeight="medium">
+                    {n.emoji ?? ""} {n.name}
+                  </Text>
+                  <Text fontSize="sm" color="gray.600">
+                    {n.contested
+                      ? "Contested"
+                      : holder
+                        ? `${holder.teamEmoji} ${holder.teamName}`
+                        : "Unclaimed"}
+                    {n.totalDeposited > 0 ? ` · ${n.totalDeposited} pts` : ""}
+                  </Text>
+                </Flex>
+              );
+            })}
+          </Flex>
+        </>
+      )}
     </NavContainer>
   );
 }

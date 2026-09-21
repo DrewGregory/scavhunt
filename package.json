@@ -18,6 +18,7 @@
     "@fortawesome/fontawesome-svg-core": "6.6.0",
     "@fortawesome/free-solid-svg-icons": "6.6.0",
     "@fortawesome/react-fontawesome": "0.2.2",
+    "@geoman-io/leaflet-geoman-free": "2.18.3",
     "@nivo/core": "0.87.0",
     "@nivo/line": "0.87.0",
     "@prisma/client": "6.16.2",
@@ -35,6 +36,7 @@
     "leaflet": "1.9.4",
     "libphonenumber-js": "1.12.15",
     "next": "15.5.25",
+    "polygon-clipping": "^0.15.7",
     "react": "18.3.1",
     "react-countdown": "2.3.6",
     "react-dom": "18.3.1",
@@ -43,6 +45,8 @@
     "react-leaflet": "4.2.1",
     "react-markdown": "^10.1.0",
     "sharp": "0.35.4",
+    "topojson-client": "^3.1.0",
+    "topojson-server": "^3.0.1",
     "typescript": "5.5.4",
     "zod": "3.23.8"
   },
@@ -55,18 +59,24 @@
     "db:push": "prisma db push",
     "db:seed": "tsx scripts/seed.ts",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "topology:build": "tsx scripts/build-sf-topology.ts",
+    "topology:verify": "tsx scripts/verify-sf-topology.ts",
+    "datasf:build": "tsx scripts/build-datasf-117.ts"
   },
   "devDependencies": {
     "@types/cookie": "0.6.0",
     "@types/formidable": "3.4.5",
     "@types/leaflet": "1.9.12",
     "@types/react": "18.3.3",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-server": "^3.0.4",
+    "@types/topojson-specification": "^1.0.5",
     "csv-parse": "5.5.6",
     "csv-parser": "3.0.0",
     "prisma": "6.16.2",
-    "tsx": "4.20.5",
-    "ts-node": "10.9.2"
+    "ts-node": "10.9.2",
+    "tsx": "4.20.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

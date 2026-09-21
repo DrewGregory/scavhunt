@@ -9,6 +9,7 @@ const putSchema = z
     intent: z.enum(["playing", "browsing"]),
     teamPreferences: z.string().optional(),
     competitiveness: z.string().optional(),
+    timeCommitment: z.string().optional(),
   })
   .superRefine((val, ctx) => {
     if (val.intent === "playing") {
@@ -26,6 +27,13 @@ const putSchema = z
           path: ["competitiveness"],
         });
       }
+      if (!val.timeCommitment?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Time commitment is required if you plan to play",
+          path: ["timeCommitment"],
+        });
+      }
     }
   });
 
@@ -41,6 +49,7 @@ export default async function handler(
       intent: user.intent,
       teamPreferences: user.teamPreferences,
       competitiveness: user.competitiveness,
+      timeCommitment: user.timeCommitment,
       surveyCompletedAt: user.surveyCompletedAt?.toISOString() ?? null,
     });
   }
@@ -59,7 +68,8 @@ export default async function handler(
       });
     }
 
-    const { intent, teamPreferences, competitiveness } = parsed.data;
+    const { intent, teamPreferences, competitiveness, timeCommitment } =
+      parsed.data;
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -68,6 +78,8 @@ export default async function handler(
           intent === "playing" ? teamPreferences!.trim() : null,
         competitiveness:
           intent === "playing" ? competitiveness!.trim() : null,
+        timeCommitment:
+          intent === "playing" ? timeCommitment!.trim() : null,
         surveyCompletedAt: new Date(),
       },
     });
@@ -77,6 +89,7 @@ export default async function handler(
       intent: updated.intent,
       teamPreferences: updated.teamPreferences,
       competitiveness: updated.competitiveness,
+      timeCommitment: updated.timeCommitment,
       surveyCompletedAt: updated.surveyCompletedAt!.toISOString(),
     });
   }

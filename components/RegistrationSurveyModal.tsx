@@ -38,6 +38,7 @@ export function RegistrationSurveyModal({
   const [intent, setIntent] = useState<SurveyIntent>("playing");
   const [teamPreferences, setTeamPreferences] = useState("");
   const [competitiveness, setCompetitiveness] = useState("");
+  const [timeCommitment, setTimeCommitment] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -56,6 +57,7 @@ export function RegistrationSurveyModal({
           }
           setTeamPreferences(data.teamPreferences || "");
           setCompetitiveness(data.competitiveness || "");
+          setTimeCommitment(data.timeCommitment || "");
         }
       } finally {
         setLoaded(true);
@@ -75,6 +77,7 @@ export function RegistrationSurveyModal({
           intent,
           teamPreferences,
           competitiveness,
+          timeCommitment,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -154,6 +157,24 @@ export function RegistrationSurveyModal({
                     value={competitiveness}
                     onChange={(e) => setCompetitiveness(e.target.value)}
                     placeholder="e.g. 3 — fun but trying to win a few challenges"
+                    bg="white"
+                    borderColor="gray.300"
+                    rows={2}
+                  />
+                </FormControl>
+                <FormControl isRequired isDisabled={!loaded}>
+                  <FormLabel color="gray.700">
+                    Can you commit to the full day? Let us know about your time
+                    constraints here.
+                  </FormLabel>
+                  <Text fontSize="xs" color="gray.500" mb={2}>
+                    Please come for the full day if you can. It&apos;s the most
+                    fun that way!
+                  </Text>
+                  <Textarea
+                    value={timeCommitment}
+                    onChange={(e) => setTimeCommitment(e.target.value)}
+                    placeholder="I’m in for the whole day!"
                     bg="white"
                     borderColor="gray.300"
                     rows={2}

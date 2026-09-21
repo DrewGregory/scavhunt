@@ -6,8 +6,9 @@ import { ensureHuntSettings, getHuntSettings } from "../../../lib/time";
 import { jsonError } from "../../../lib/http";
 
 const patchSchema = z.object({
-  startsAt: z.string().min(1),
-  endsAt: z.string().min(1),
+  startsAt: z.string().min(1).optional(),
+  endsAt: z.string().min(1).optional(),
+  territoryEnabled: z.boolean().optional(),
 });
 
 export default async function handler(
@@ -23,6 +24,7 @@ export default async function handler(
     return res.status(200).json({
       startsAt: settings.startsAt.toISOString(),
       endsAt: settings.endsAt.toISOString(),
+      territoryEnabled: settings.territoryEnabled,
     });
   }
 
@@ -40,8 +42,19 @@ export default async function handler(
       return res.status(400).json({ error: "Invalid body" });
     }
 
-    const startsAt = new Date(parsed.data.startsAt);
-    const endsAt = new Date(parsed.data.endsAt);
+    await ensureHuntSettings();
+    const existing = await prisma.huntSettings.findUniqueOrThrow({
+      where: { id: "default" },
+    });
+
+    let startsAt = existing.startsAt;
+    let endsAt = existing.endsAt;
+    if (parsed.data.startsAt != null) {
+      startsAt = new Date(parsed.data.startsAt);
+    }
+    if (parsed.data.endsAt != null) {
+      endsAt = new Date(parsed.data.endsAt);
+    }
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
       return res.status(400).json({ error: "Invalid datetime" });
     }
@@ -49,15 +62,21 @@ export default async function handler(
       return res.status(400).json({ error: "startsAt must be before endsAt" });
     }
 
-    const row = await prisma.huntSettings.upsert({
+    const row = await prisma.huntSettings.update({
       where: { id: "default" },
-      create: { id: "default", startsAt, endsAt },
-      update: { startsAt, endsAt },
+      data: {
+        startsAt,
+        endsAt,
+        ...(parsed.data.territoryEnabled !== undefined
+          ? { territoryEnabled: parsed.data.territoryEnabled }
+          : {}),
+      },
     });
 
     return res.status(200).json({
       startsAt: row.startsAt.toISOString(),
       endsAt: row.endsAt.toISOString(),
+      territoryEnabled: row.territoryEnabled,
     });
   }
 
