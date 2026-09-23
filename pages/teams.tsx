@@ -83,13 +83,14 @@ export const getServerSideProps = async (
     const ptsArray = accepted.map((s) => s.challenge.pts);
     const earned = ptsArray.reduce((sum, p) => sum + p, 0);
     const deposited = t.deposits.reduce((sum, d) => sum + d.points, 0);
+    const bonus = t.bonusPoints;
     return {
       ...serializeTeam(t),
       members: t.users.map((u) => ({ id: u.id, name: u.name })),
       submissions: t.submissions.map(serializeSubmission),
       earned,
       deposited,
-      pts: scoreFromParts(earned, deposited),
+      pts: scoreFromParts(earned, deposited, bonus),
       ptsArray,
     };
   });

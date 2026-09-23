@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Team" ADD COLUMN "bonusPoints" INTEGER NOT NULL DEFAULT 0;

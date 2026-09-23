@@ -54,6 +54,10 @@ type AdminUser = {
 };
 
 type AdminTeam = SerializedTeam & {
+  bonusPoints?: number;
+  earned?: number;
+  deposited?: number;
+  score?: number;
   users?: Array<{
     id: string;
     name: string;
@@ -154,6 +158,8 @@ export default function AdminPage({
 
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamEmoji, setNewTeamEmoji] = useState("");
+  const [pointDrafts, setPointDrafts] = useState<Record<string, string>>({});
+  const [pointsBusyId, setPointsBusyId] = useState<string | null>(null);
 
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(
     null,
@@ -650,6 +656,47 @@ export default function AdminPage({
     }
   };
 
+  const handleAdjustPoints = async (teamId: string, sign: 1 | -1) => {
+    const raw = pointDrafts[teamId] ?? "";
+    const amount = Math.floor(Number(raw));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Enter a positive number of points");
+      return;
+    }
+    const delta = sign * amount;
+    setPointsBusyId(teamId);
+    try {
+      const res = await fetch("/api/admin/team-points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, delta }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to adjust points");
+        return;
+      }
+      setTeams((prev) =>
+        prev.map((t) =>
+          t.id === teamId
+            ? {
+                ...t,
+                bonusPoints: data.team.bonusPoints,
+                score: data.score.score,
+                earned: data.score.earned,
+                deposited: data.score.deposited,
+              }
+            : t,
+        ),
+      );
+      setPointDrafts((prev) => ({ ...prev, [teamId]: "" }));
+    } catch {
+      alert("Failed to adjust points");
+    } finally {
+      setPointsBusyId(null);
+    }
+  };
+
   const confirmAdminToggle = async () => {
     if (!pendingAdminToggle) return;
     const { user: target, nextValue } = pendingAdminToggle;
@@ -853,6 +900,8 @@ export default function AdminPage({
                     <Tr>
                       <Th>Team</Th>
                       <Th>Color</Th>
+                      <Th>Points</Th>
+                      <Th>Adjust</Th>
                       <Th>Members</Th>
                     </Tr>
                   </Thead>
@@ -887,6 +936,57 @@ export default function AdminPage({
                             <Text fontSize="xs" color="gray.500">
                               {team.color || "#3182CE"}
                             </Text>
+                          </HStack>
+                        </Td>
+                        <Td>
+                          <Text fontWeight="semibold">
+                            {team.score ?? "—"}
+                          </Text>
+                          <Text fontSize="xs" color="gray.500">
+                            earned {team.earned ?? 0}
+                            {(team.bonusPoints ?? 0) !== 0
+                              ? ` · bonus ${team.bonusPoints}`
+                              : ""}
+                            {(team.deposited ?? 0) > 0
+                              ? ` · deposited ${team.deposited}`
+                              : ""}
+                          </Text>
+                        </Td>
+                        <Td>
+                          <HStack>
+                            <Input
+                              type="number"
+                              min={1}
+                              size="sm"
+                              maxW="80px"
+                              placeholder="pts"
+                              value={pointDrafts[team.id] ?? ""}
+                              onChange={(e) =>
+                                setPointDrafts((prev) => ({
+                                  ...prev,
+                                  [team.id]: e.target.value,
+                                }))
+                              }
+                            />
+                            <Button
+                              size="sm"
+                              colorScheme="green"
+                              isLoading={pointsBusyId === team.id}
+                              onClick={() => void handleAdjustPoints(team.id, 1)}
+                            >
+                              Give
+                            </Button>
+                            <Button
+                              size="sm"
+                              colorScheme="red"
+                              variant="outline"
+                              isLoading={pointsBusyId === team.id}
+                              onClick={() =>
+                                void handleAdjustPoints(team.id, -1)
+                              }
+                            >
+                              Take
+                            </Button>
                           </HStack>
                         </Td>
                         <Td>

@@ -62,6 +62,8 @@ model Team {
   emoji     String
   /// Hex color used for territory map fill / labels.
   color     String   @default("#3182CE")
+  /// Admin-granted (or clawed-back) points; included in spendable score.
+  bonusPoints Int    @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

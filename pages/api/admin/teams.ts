@@ -48,14 +48,34 @@ export default async function handler(
             isActive: true,
           },
         },
+        submissions: {
+          where: { accepted: true },
+          select: { challenge: { select: { pts: true } } },
+        },
+        deposits: {
+          where: { voidedAt: null },
+          select: { points: true },
+        },
       },
       orderBy: { name: "asc" },
     });
     return res.status(200).json({
-      teams: teams.map((t) => ({
-        ...serializeTeam(t),
-        users: t.users,
-      })),
+      teams: teams.map((t) => {
+        const earned = t.submissions.reduce(
+          (sum, s) => sum + s.challenge.pts,
+          0,
+        );
+        const deposited = t.deposits.reduce((sum, d) => sum + d.points, 0);
+        const bonus = t.bonusPoints;
+        return {
+          ...serializeTeam(t),
+          bonusPoints: bonus,
+          earned,
+          deposited,
+          score: earned + bonus - deposited,
+          users: t.users,
+        };
+      }),
     });
   }
 

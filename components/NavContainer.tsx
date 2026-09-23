@@ -97,7 +97,7 @@ export default function NavContainer({
         onOverlayClick={onClose}
         size="full"
       >
-        <DrawerContent>
+        <DrawerContent overflowY="auto">
           <SidebarContent
             title={"Scavhunt"}
             onClose={onClose}
@@ -208,6 +208,7 @@ const SidebarContent = ({
       w={{ base: "full", md: "20vw" }}
       pos="fixed"
       h="full"
+      overflowY="auto"
       {...rest}
     >
       <Flex h="20" alignItems="center" mx="8" justifyContent="space-between">

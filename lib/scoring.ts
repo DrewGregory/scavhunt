@@ -18,22 +18,42 @@ export async function getDepositedPoints(teamId: string): Promise<number> {
   return agg._sum.points ?? 0;
 }
 
+/** Admin bonus (can be negative) on the team row. */
+export async function getBonusPoints(teamId: string): Promise<number> {
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { bonusPoints: true },
+  });
+  return team?.bonusPoints ?? 0;
+}
+
 /**
- * A team's score *is* its spendable bank: earned - deposited.
+ * A team's score *is* its spendable bank: earned + bonus - deposited.
  * Total earned is a derived metric used by the cumulative chart.
  */
 export async function getTeamScore(teamId: string): Promise<{
   earned: number;
   deposited: number;
+  bonus: number;
   score: number;
 }> {
-  const [earned, deposited] = await Promise.all([
+  const [earned, deposited, bonus] = await Promise.all([
     getEarnedPoints(teamId),
     getDepositedPoints(teamId),
+    getBonusPoints(teamId),
   ]);
-  return { earned, deposited, score: earned - deposited };
+  return {
+    earned,
+    deposited,
+    bonus,
+    score: scoreFromParts(earned, deposited, bonus),
+  };
 }
 
-export function scoreFromParts(earned: number, deposited: number): number {
-  return earned - deposited;
+export function scoreFromParts(
+  earned: number,
+  deposited: number,
+  bonus = 0,
+): number {
+  return earned + bonus - deposited;
 }

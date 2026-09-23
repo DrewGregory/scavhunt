@@ -15,12 +15,14 @@ import {
   Box,
   Button,
   HStack,
+  IconButton,
   Input,
   Switch,
   Text,
   VStack,
   useToast,
 } from "@chakra-ui/react";
+import { FiLayers } from "react-icons/fi";
 import { getPosition, type GeoFix } from "./useSession";
 import {
   centroidOf,
@@ -101,6 +103,7 @@ export default function LeafletMap({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [myFix, setMyFix] = useState<GeoFix | null>(null);
   const [locating, setLocating] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const myFixRef = useRef<GeoFix | null>(null);
   /** Only one neighborhood highlight at a time (fast mouse moves skip mouseout). */
   const highlightedLayerRef = useRef<{
@@ -179,6 +182,38 @@ export default function LeafletMap({
     if (!myFix) return null;
     return findNeighborhoodAt(myFix.lng, myFix.lat, neighborhoods);
   }, [myFix, neighborhoods]);
+
+  const controlAfterDeposit = useMemo(() => {
+    if (!team || !currentNeighborhood) return null;
+    const pts = Math.floor(Number(depositAmount));
+    if (!Number.isFinite(pts) || pts <= 0) return null;
+
+    const mineNow =
+      currentNeighborhood.totals.find((t) => t.teamId === team.id)?.points ?? 0;
+    const mineAfter = mineNow + pts;
+    const topRival = currentNeighborhood.totals.find((t) => t.teamId !== team.id);
+    const rivalPts = topRival?.points ?? 0;
+
+    if (mineAfter > rivalPts) {
+      return {
+        kind: "control" as const,
+        label: `${team.emoji ?? ""} ${team.name ?? "Your team"}`.trim(),
+      };
+    }
+    if (topRival && mineAfter === rivalPts) {
+      return { kind: "tie" as const, label: null };
+    }
+    if (topRival) {
+      return {
+        kind: "other" as const,
+        label: `${topRival.teamEmoji} ${topRival.teamName}`,
+      };
+    }
+    return {
+      kind: "control" as const,
+      label: `${team.emoji ?? ""} ${team.name ?? "Your team"}`.trim(),
+    };
+  }, [team, currentNeighborhood, depositAmount]);
 
   const refreshTerritory = useCallback(async () => {
     if (!territoryEnabled) return;
@@ -304,7 +339,6 @@ export default function LeafletMap({
       }
       toast({
         title: `Deposited ${points} pts into ${data.deposit.neighborhoodName}`,
-        description: "Spending lowers your points rank.",
         status: "success",
       });
       if (data.bank) setBank(data.bank);
@@ -325,79 +359,90 @@ export default function LeafletMap({
 
   return (
     <Box position="relative" height="100%" width="100%">
-      <Box
-        position="absolute"
-        bottom={territoryEnabled && team ? "140px" : 4}
-        right={4}
-        zIndex={1000}
-        bg="white"
-        p={4}
-        borderRadius="md"
-        boxShadow="lg"
-        maxWidth="280px"
-      >
-        <VStack spacing={3} alignItems="stretch">
-          <HStack justifyContent="space-between">
-            <Text fontSize="sm" fontWeight="medium">
-              Challenges
-            </Text>
-            <Switch
-              isChecked={showChallenges}
-              onChange={(e) => setShowChallenges(e.target.checked)}
-              colorScheme="blue"
-            />
-          </HStack>
-          <HStack justifyContent="space-between">
-            <Text fontSize="sm" fontWeight="medium">
-              Teams
-            </Text>
-            <Switch
-              isChecked={showPlayers}
-              onChange={(e) => setShowPlayers(e.target.checked)}
-              colorScheme="blue"
-            />
-          </HStack>
-          {territoryEnabled && (
-            <HStack justifyContent="space-between">
-              <Text fontSize="sm" fontWeight="medium">
-                Neighborhoods
-              </Text>
-              <Switch
-                isChecked={showNeighborhoods}
-                onChange={(e) => setShowNeighborhoods(e.target.checked)}
-                colorScheme="blue"
-              />
-            </HStack>
-          )}
-          {team && (
-            <>
-              <Box borderTop="1px solid" borderColor="gray.200" pt={3}>
-                <HStack justifyContent="space-between">
-                  <Text fontSize="xs" fontWeight="medium" color="gray.600">
-                    Hide finished
-                  </Text>
-                  <Switch
-                    size="sm"
-                    isChecked={hideCompleted}
-                    onChange={(e) => setHideCompleted(e.target.checked)}
-                    colorScheme="blue"
-                  />
-                </HStack>
-              </Box>
+      <Box position="absolute" top={4} right={4} zIndex={1000}>
+        <IconButton
+          aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
+          icon={<FiLayers />}
+          size="md"
+          colorScheme="blackAlpha"
+          bg="white"
+          color="gray.700"
+          boxShadow="lg"
+          onClick={() => setLayersOpen((o) => !o)}
+        />
+        {layersOpen ? (
+          <Box
+            mt={2}
+            bg="white"
+            p={4}
+            borderRadius="md"
+            boxShadow="lg"
+            maxWidth="280px"
+          >
+            <VStack spacing={3} alignItems="stretch">
               <HStack justifyContent="space-between">
-                <Text fontSize="xs" fontWeight="medium" color="gray.600">
-                  Hide at capacity
+                <Text fontSize="sm" fontWeight="medium">
+                  Challenges
                 </Text>
                 <Switch
-                  size="sm"
-                  isChecked={hideFullChallenges}
-                  onChange={(e) => setHideFullChallenges(e.target.checked)}
+                  isChecked={showChallenges}
+                  onChange={(e) => setShowChallenges(e.target.checked)}
                   colorScheme="blue"
                 />
               </HStack>
-            </>
-          )}
-        </VStack>
+              <HStack justifyContent="space-between">
+                <Text fontSize="sm" fontWeight="medium">
+                  Teams
+                </Text>
+                <Switch
+                  isChecked={showPlayers}
+                  onChange={(e) => setShowPlayers(e.target.checked)}
+                  colorScheme="blue"
+                />
+              </HStack>
+              {territoryEnabled && (
+                <HStack justifyContent="space-between">
+                  <Text fontSize="sm" fontWeight="medium">
+                    Neighborhoods
+                  </Text>
+                  <Switch
+                    isChecked={showNeighborhoods}
+                    onChange={(e) => setShowNeighborhoods(e.target.checked)}
+                    colorScheme="blue"
+                  />
+                </HStack>
+              )}
+              {team && (
+                <>
+                  <Box borderTop="1px solid" borderColor="gray.200" pt={3}>
+                    <HStack justifyContent="space-between">
+                      <Text fontSize="xs" fontWeight="medium" color="gray.600">
+                        Hide finished
+                      </Text>
+                      <Switch
+                        size="sm"
+                        isChecked={hideCompleted}
+                        onChange={(e) => setHideCompleted(e.target.checked)}
+                        colorScheme="blue"
+                      />
+                    </HStack>
+                  </Box>
+                  <HStack justifyContent="space-between">
+                    <Text fontSize="xs" fontWeight="medium" color="gray.600">
+                      Hide at capacity
+                    </Text>
+                    <Switch
+                      size="sm"
+                      isChecked={hideFullChallenges}
+                      onChange={(e) => setHideFullChallenges(e.target.checked)}
+                      colorScheme="blue"
+                    />
+                  </HStack>
+                </>
+              )}
+            </VStack>
+          </Box>
+        ) : null}
       </Box>
 
       {territoryEnabled && team && (
@@ -414,58 +459,42 @@ export default function LeafletMap({
         >
           <VStack align="stretch" spacing={2}>
             <Text fontSize="sm" fontWeight="semibold">
-              Deposit points
+              {currentNeighborhood
+                ? `Deposit points in ${currentNeighborhood.emoji ? `${currentNeighborhood.emoji} ` : ""}${currentNeighborhood.name}`
+                : locating && !myFix
+                  ? "Finding your location…"
+                  : myFix
+                    ? "Move into a neighborhood to deposit"
+                    : "Allow GPS to deposit"}
             </Text>
-            <Box
-              px={3}
-              py={2}
-              borderRadius="md"
-              bg={currentNeighborhood ? "blue.50" : "orange.50"}
-              borderWidth="1px"
-              borderColor={currentNeighborhood ? "blue.200" : "orange.200"}
-            >
-              {locating && !myFix ? (
-                <Text fontSize="sm" color="gray.600">
-                  Finding your location…
-                </Text>
-              ) : currentNeighborhood ? (
-                <>
-                  <Text fontSize="xs" color="blue.700" fontWeight="medium">
-                    You&apos;re in
-                  </Text>
-                  <Text fontSize="md" fontWeight="bold" color="blue.900">
-                    {currentNeighborhood.emoji
-                      ? `${currentNeighborhood.emoji} `
-                      : ""}
-                    {currentNeighborhood.name}
-                  </Text>
-                  <Text fontSize="xs" color="blue.700" mt={0.5}>
-                    Deposit goes here (highlighted on the map)
-                  </Text>
-                </>
-              ) : myFix ? (
-                <Text fontSize="sm" color="orange.800" fontWeight="medium">
-                  You&apos;re outside every playable neighborhood — move into
-                  one to deposit.
-                </Text>
-              ) : (
-                <Text fontSize="sm" color="orange.800" fontWeight="medium">
-                  Location unknown — allow GPS, then refresh.
-                </Text>
-              )}
-            </Box>
             <Text fontSize="xs" color="gray.600">
               You have{" "}
               <Text as="span" fontWeight="bold" color="gray.800">
                 {bank?.score ?? "—"} pts
               </Text>
-              . Spending lowers your points rank.
-              {myFix?.accuracy != null ? (
+              {controlAfterDeposit?.kind === "control" ? (
                 <>
-                  {" "}
-                  GPS ±{Math.round(myFix.accuracy)}m
+                  . After this deposit,{" "}
+                  <Text as="span" fontWeight="bold" color="gray.800">
+                    {controlAfterDeposit.label}
+                  </Text>{" "}
+                  will control this neighborhood.
                 </>
-              ) : null}
+              ) : controlAfterDeposit?.kind === "tie" ? (
+                <>
+                  . After this deposit, this neighborhood will be contested.
+                </>
+              ) : controlAfterDeposit?.kind === "other" ? (
+                <>
+                  . After this deposit,{" "}
+                  <Text as="span" fontWeight="bold" color="gray.800">
+                    {controlAfterDeposit.label}
+                  </Text>{" "}
+                  will control this neighborhood.
+                </>
+              ) : (
+                "."
+              )}
             </Text>
             <HStack>
               <Input
