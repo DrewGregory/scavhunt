@@ -34,6 +34,8 @@ export type DraftMapNeighborhood = {
   emoji?: string | null;
   boundary: unknown;
   onMap?: boolean;
+  centerLat?: number | null;
+  centerLng?: number | null;
 };
 
 function pinHtml(fill: string, size: number) {
@@ -294,11 +296,7 @@ export default function ChallengeDraftMap({
           />
 
           {showNeighborhoods && (
-            <QuietNeighborhoodLayers
-              neighborhoods={neighborhoods}
-              fillOpacity={0.1}
-              showTooltip={false}
-            />
+            <QuietNeighborhoodLayers neighborhoods={neighborhoods} />
           )}
 
           {showChallenges &&
@@ -334,8 +332,9 @@ export default function ChallengeDraftMap({
 
       <VStack align="stretch" spacing={0} px={3} py={2} flexShrink={0}>
         <Text fontSize="xs" color="gray.500">
-          Blue = enabled, gray = disabled, orange = selected. Neighborhoods are
-          faint context — click one to zoom. Unplaced challenges stay in the
+          Blue = enabled, gray = disabled, orange = selected. Toggle
+          Neighborhoods for fills, hover highlight, and name pills (same as the
+          player map). Click a zone to zoom. Unplaced challenges stay in the
           side lists.
         </Text>
       </VStack>

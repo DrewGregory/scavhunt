@@ -39,6 +39,8 @@ export type LocationMapNeighborhood = {
   emoji?: string | null;
   boundary: unknown;
   onMap?: boolean;
+  centerLat?: number | null;
+  centerLng?: number | null;
 };
 
 const pinIcon = L.divIcon({
@@ -206,11 +208,7 @@ export default function AdminLocationMap({
         />
 
         {showNeighborhoods && (
-          <QuietNeighborhoodLayers
-            neighborhoods={neighborhoods}
-            fillOpacity={0.12}
-            showTooltip
-          />
+          <QuietNeighborhoodLayers neighborhoods={neighborhoods} />
         )}
 
         {showChallenges &&

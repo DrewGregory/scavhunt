@@ -1,4 +1,8 @@
-/** Free raster basemaps for Leaflet TileLayer. */
+/**
+ * Raster basemaps for Leaflet TileLayer.
+ * Avoid Carto CDN — it now watermarks "API KEY REQUIRED" without a key.
+ * These Esri / OSM endpoints work for light admin + player use with attribution.
+ */
 
 export type BasemapId = "positron" | "dark" | "satellite" | "osm";
 
@@ -10,22 +14,24 @@ export type BasemapDef = {
   maxZoom?: number;
 };
 
+const ESRI_ATTR =
+  "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community";
+
 export const BASEMAPS: Record<BasemapId, BasemapDef> = {
+  /** Light / Positron-like — Esri World Gray Canvas (no API key). */
   positron: {
     id: "positron",
-    label: "Positron",
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxZoom: 20,
+    label: "Light",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: ESRI_ATTR,
+    maxZoom: 16,
   },
   dark: {
     id: "dark",
     label: "Dark",
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxZoom: 20,
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: ESRI_ATTR,
+    maxZoom: 16,
   },
   satellite: {
     id: "satellite",
@@ -45,7 +51,7 @@ export const BASEMAPS: Record<BasemapId, BasemapDef> = {
   },
 };
 
-export const DEFAULT_ADMIN_BASEMAP: BasemapId = "positron";
+export const DEFAULT_ADMIN_BASEMAP: BasemapId = "osm";
 export const DEFAULT_PLAYER_BASEMAP: BasemapId = "osm";
 
 export function loadBasemap(

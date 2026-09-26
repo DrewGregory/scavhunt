@@ -129,6 +129,8 @@ export default function ChallengeDraftBoard() {
         emoji: n.emoji,
         boundary: n.boundary,
         onMap: n.onMap,
+        centerLat: n.centerLat,
+        centerLng: n.centerLng,
       })),
     [neighborhoods],
   );

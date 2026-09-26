@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
-import { TileLayer, useMap } from "react-leaflet";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { GeoJSON, Marker, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import { GeoSearchControl, OpenStreetMapProvider } from "leaflet-geosearch";
 import "leaflet-geosearch/dist/geosearch.css";
-import { GeoJSON } from "react-leaflet";
 import { Select } from "@chakra-ui/react";
 import {
   BASEMAPS,
@@ -13,7 +12,7 @@ import {
   saveBasemap,
   type BasemapId,
 } from "../lib/mapBasemaps";
-import { type GeoGeometry } from "../lib/geo";
+import { centroidOf, type GeoGeometry } from "../lib/geo";
 
 export function isGeoGeometry(raw: unknown): raw is GeoGeometry {
   if (!raw || typeof raw !== "object") return false;
@@ -125,81 +124,121 @@ export type QuietNeighborhood = {
   emoji?: string | null;
   boundary: unknown;
   onMap?: boolean;
+  centerLat?: number | null;
+  centerLng?: number | null;
+};
+
+const BASE_NBH_STYLE: L.PathOptions = {
+  color: "#718096",
+  weight: 1,
+  fillColor: "#E2E8F0",
+  fillOpacity: 0.25,
+};
+
+const HOVER_NBH_STYLE: L.PathOptions = {
+  fillColor: "#68D391",
+  fillOpacity: 0.55,
+  color: "#276749",
+  weight: 3,
+  dashArray: undefined,
 };
 
 /**
- * Faint neighborhood polygons for admin canvases.
- * Minimal hover; click pans/fits the neighborhood (does not place pins).
+ * Neighborhood polygons matching the player map: visible fill, hover highlight,
+ * name pills, click to pan. Use on admin draft / location maps.
  */
 export function QuietNeighborhoodLayers({
   neighborhoods,
-  fillOpacity = 0.1,
-  showTooltip = false,
 }: {
   neighborhoods: QuietNeighborhood[];
-  fillOpacity?: number;
-  /** Sticky hover tooltip — prefer false on draft board. */
-  showTooltip?: boolean;
 }) {
   const map = useMap();
-  const features = neighborhoods
-    .filter((n) => n.onMap !== false && isGeoGeometry(n.boundary))
-    .map((n) => ({
-      type: "Feature" as const,
-      properties: { id: n.id, name: n.name, emoji: n.emoji ?? null },
-      geometry: n.boundary as GeoGeometry,
-    }));
+  const highlightedRef = useRef<{
+    layer: L.Path;
+    style: L.PathOptions;
+  } | null>(null);
+
+  const withGeom = neighborhoods.filter(
+    (n) => n.onMap !== false && isGeoGeometry(n.boundary),
+  );
 
   return (
     <>
-      {features.map((f) => (
-        <GeoJSON
-          key={f.properties.id}
-          data={f as any}
-          style={() => ({
-            color: "#718096",
-            weight: 1,
-            fillColor: "#A0AEC0",
-            fillOpacity,
-          })}
-          onEachFeature={(feature, layer) => {
-            const name = feature.properties?.name ?? "";
-            const emoji = feature.properties?.emoji;
-            if (showTooltip) {
-              layer.bindTooltip(emoji ? `${emoji} ${name}` : name, {
-                sticky: true,
-                opacity: 0.85,
-              });
-            }
-            layer.on({
-              click: (e) => {
-                L.DomEvent.stopPropagation(e);
-                const path = e.target as L.Polygon;
-                if (typeof path.getBounds === "function") {
-                  const b = path.getBounds();
-                  if (b.isValid()) {
-                    map.fitBounds(b, {
-                      padding: [40, 40],
-                      maxZoom: 15,
-                      animate: true,
-                    });
-                  }
-                }
-              },
-              mouseover: (e) => {
-                const path = e.target as L.Path;
-                path.setStyle({
-                  fillOpacity: Math.min(fillOpacity + 0.08, 0.25),
+      {withGeom.map((n) => {
+        const feature = {
+          type: "Feature" as const,
+          properties: { id: n.id, name: n.name, emoji: n.emoji ?? null },
+          geometry: n.boundary as GeoGeometry,
+        };
+        const fromBoundary = centroidOf(n.boundary as GeoGeometry);
+        const lat = fromBoundary?.lat ?? n.centerLat ?? null;
+        const lng = fromBoundary?.lng ?? n.centerLng ?? null;
+        const label = n.emoji ? `${n.emoji} ${n.name}` : n.name;
+
+        return (
+          <Fragment key={n.id}>
+            <GeoJSON
+              data={feature as any}
+              style={() => ({ ...BASE_NBH_STYLE })}
+              onEachFeature={(_feature, layer) => {
+                const baseStyle = { ...BASE_NBH_STYLE };
+                layer.bindTooltip(label, { sticky: true, opacity: 0.9 });
+                layer.on({
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    const path = e.target as L.Polygon;
+                    if (typeof path.getBounds === "function") {
+                      const b = path.getBounds();
+                      if (b.isValid()) {
+                        map.fitBounds(b, {
+                          padding: [40, 40],
+                          maxZoom: 15,
+                          animate: true,
+                        });
+                      }
+                    }
+                  },
+                  mouseover: (e) => {
+                    const target = e.target as L.Path;
+                    const prev = highlightedRef.current;
+                    if (prev && prev.layer !== target) {
+                      prev.layer.setStyle(prev.style);
+                    }
+                    target.setStyle(HOVER_NBH_STYLE);
+                    if (typeof target.bringToFront === "function") {
+                      target.bringToFront();
+                    }
+                    highlightedRef.current = {
+                      layer: target,
+                      style: baseStyle,
+                    };
+                  },
+                  mouseout: (e) => {
+                    const target = e.target as L.Path;
+                    target.setStyle(baseStyle);
+                    if (highlightedRef.current?.layer === target) {
+                      highlightedRef.current = null;
+                    }
+                  },
                 });
-              },
-              mouseout: (e) => {
-                const path = e.target as L.Path;
-                path.setStyle({ fillOpacity });
-              },
-            });
-          }}
-        />
-      ))}
+              }}
+            />
+            {lat != null && lng != null && (
+              <Marker
+                position={[lat, lng]}
+                interactive={false}
+                zIndexOffset={400}
+                icon={L.divIcon({
+                  className: "neighborhood-label-icon",
+                  html: `<div class="neighborhood-label-pill" style="border-color:#CBD5E0">${label}</div>`,
+                  iconSize: [0, 0],
+                  iconAnchor: [0, 0],
+                })}
+              />
+            )}
+          </Fragment>
+        );
+      })}
     </>
   );
 }
