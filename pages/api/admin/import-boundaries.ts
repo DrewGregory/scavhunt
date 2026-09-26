@@ -27,7 +27,7 @@ type DatasfSeed = {
 const bodySchema = z.object({
   /**
    * reset-topology: re-apply curated shared-arc topology + boundaries for
-   * neighborhoods that already exist (matched by unique name). No create/demote.
+   * neighborhoods that already exist (matched by name). No create/demote.
    * reset-neighborhoods: full curated reseed (create/update/demote). Requires
    * zero live deposits.
    * source: legacy alias — curated → reset-neighborhoods, datasf still supported.
@@ -70,7 +70,7 @@ async function upsertNeighborhood(item: {
   const centerLng = item.centerLng ?? validated.center.lng;
   const isIsland = Boolean(item.isIsland);
 
-  const existing = await prisma.neighborhood.findUnique({
+  const existing = await prisma.neighborhood.findFirst({
     where: { name: item.name },
   });
 

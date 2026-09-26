@@ -857,6 +857,7 @@ export default function AdminMapPanel({
           onRowClick={(n) => {
             setSelectedIds([n.id]);
             setEditingMapId(null);
+            toggleExpand(n.id);
           }}
           isRowSelected={(n) => selectedIds.includes(n.id)}
           isRowExpanded={(n) => expandedIds.has(n.id)}
@@ -885,7 +886,7 @@ export default function AdminMapPanel({
             <Text fontSize="sm">
               Re-applies the bundled gap-free shared-border topology to
               neighborhoods that <strong>already exist</strong>, matched by{" "}
-              <strong>unique name</strong>. Updates their boundaries and the
+              <strong>name</strong>. Updates their boundaries and the
               shared-arc map. Does <strong>not</strong> create, delete, or
               demote neighborhoods, and does not touch deposits.
             </Text>

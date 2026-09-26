@@ -147,7 +147,8 @@ model Location {
 
 model Neighborhood {
   id        String   @id @default(cuid())
-  name      String   @unique
+  /// Display name (duplicates allowed — soft-deleted absorbs must not block renames).
+  name      String
   /// Optional display emoji; falls back to a hash of the name when null.
   emoji     String?
   /// GeoJSON Polygon | MultiPolygon, WGS84 [lng, lat]. Null = no boundary yet.

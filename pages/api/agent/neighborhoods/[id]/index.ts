@@ -93,9 +93,7 @@ export default async function handler(
       });
     } catch (error) {
       console.error("agent patch neighborhood:", error);
-      return res
-        .status(409)
-        .json({ error: "A neighborhood with this name already exists" });
+      return res.status(500).json({ error: "Failed to update neighborhood" });
     }
   }
 
@@ -109,7 +107,10 @@ export default async function handler(
     }
     const neighborhood = await prisma.neighborhood.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: {
+        deletedAt: new Date(),
+        onMap: false,
+      },
     });
     return res.status(200).json({
       ok: true,
