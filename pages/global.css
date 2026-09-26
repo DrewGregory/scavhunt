@@ -78,3 +78,15 @@ body {
 .leaflet-container:focus {
   outline: none !important;
 }
+
+/* Draft board challenge pins (divIcon) — transparent chrome, grab when draggable */
+.leaflet-marker-icon.challenge-draft-pin {
+  background: transparent !important;
+  border: none !important;
+}
+.leaflet-marker-icon.challenge-draft-pin.leaflet-marker-draggable {
+  cursor: grab;
+}
+.leaflet-marker-icon.challenge-draft-pin.leaflet-marker-draggable:active {
+  cursor: grabbing;
+}

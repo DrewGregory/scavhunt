@@ -1,4 +1,4 @@
-import { Button, Heading, HStack, VStack } from "@chakra-ui/react";
+import { Button, Heading, HStack, Text, VStack } from "@chakra-ui/react";
 import type {
   GetServerSidePropsContext,
   InferGetServerSidePropsType,

@@ -23,6 +23,7 @@ export function serializeChallenge(challenge: Challenge): SerializedChallenge {
     id: challenge.id,
     title: challenge.title,
     prompt: challenge.prompt,
+    emoji: challenge.emoji ?? null,
     lat: challenge.lat,
     lng: challenge.lng,
     pts: challenge.pts,

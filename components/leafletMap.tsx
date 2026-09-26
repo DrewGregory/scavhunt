@@ -39,6 +39,7 @@ import {
 type ChallengeWithSubmissions = {
   id: string;
   title: string;
+  emoji?: string | null;
   lat: number | null;
   lng: number | null;
   numWinners: number;
@@ -718,7 +719,9 @@ export default function LeafletMap({
               position={[c.lat ?? SF_CENTER[0], c.lng ?? SF_CENTER[1]]}
             >
               <Popup>
-                <Link href={`/challenges?challenge=${c.id}`}>{c.title}</Link>
+                <Link href={`/challenges?challenge=${c.id}`}>
+                  {c.emoji ? `${c.emoji} ${c.title}` : c.title}
+                </Link>
               </Popup>
             </Marker>
           ))}

@@ -3,10 +3,12 @@ import { z } from "zod";
 import { requireAdminApiKey } from "../../../../../lib/agentAuth";
 import { prisma } from "../../../../../lib/prisma";
 import { parseJsonBody, serializeChallenge } from "../../../../../lib/serialize";
+import { firstEmoji } from "../../../../../lib/emoji";
 
 const patchSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   prompt: z.string().optional(),
+  emoji: z.string().trim().max(16).nullable().optional(),
   pts: z.number().int().positive().optional(),
   numWinners: z.number().int().min(1).optional(),
   lat: z.number().finite().nullable().optional(),
@@ -51,6 +53,7 @@ export default async function handler(
     const data: {
       title?: string;
       prompt?: string;
+      emoji?: string | null;
       pts?: number;
       numWinners?: number;
       lat?: number | null;
@@ -59,6 +62,12 @@ export default async function handler(
     } = {};
     if (parsed.data.title !== undefined) data.title = parsed.data.title;
     if (parsed.data.prompt !== undefined) data.prompt = parsed.data.prompt;
+    if (parsed.data.emoji !== undefined) {
+      data.emoji =
+        parsed.data.emoji === null
+          ? null
+          : firstEmoji(parsed.data.emoji) ?? null;
+    }
     if (parsed.data.pts !== undefined) data.pts = parsed.data.pts;
     if (parsed.data.numWinners !== undefined) {
       data.numWinners = parsed.data.numWinners;

@@ -6,3 +6,10 @@ node_modules
 tsconfig.tsbuildinfo
 backup/*
 .env.op
+
+# Local challenge dumps
+challenges.csv
+
+# Local-only scripts (folder kept via .gitkeep)
+scripts/*
+!scripts/.gitkeep

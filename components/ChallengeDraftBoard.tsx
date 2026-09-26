@@ -12,6 +12,11 @@ import {
   Heading,
   HStack,
   Input,
+  Menu,
+  MenuButton,
+  MenuItemOption,
+  MenuList,
+  MenuOptionGroup,
   Select,
   Text,
   useToast,
@@ -33,16 +38,99 @@ const ChallengeDraftMap = dynamic(() => import("./ChallengeDraftMap"), {
   ssr: false,
 });
 
+const PANEL_WIDTHS_KEY = "scavhunt.draftBoard.panelWidths";
+const DEFAULT_PANEL_WIDTHS = [26, 22, 52]; // % disabled / enabled / map
+const MIN_PANEL_PCT = 12;
+
+function loadPanelWidths(): number[] {
+  if (typeof window === "undefined") return DEFAULT_PANEL_WIDTHS;
+  try {
+    const raw = localStorage.getItem(PANEL_WIDTHS_KEY);
+    if (!raw) return DEFAULT_PANEL_WIDTHS;
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length !== 3 ||
+      !parsed.every((n) => typeof n === "number" && Number.isFinite(n))
+    ) {
+      return DEFAULT_PANEL_WIDTHS;
+    }
+    const sum = (parsed as number[]).reduce((a, b) => a + b, 0);
+    if (sum <= 0) return DEFAULT_PANEL_WIDTHS;
+    return (parsed as number[]).map((n) => (n / sum) * 100);
+  } catch {
+    return DEFAULT_PANEL_WIDTHS;
+  }
+}
+
+function PanelResizeHandle({
+  onDrag,
+}: {
+  onDrag: (deltaPx: number, containerWidth: number) => void;
+}) {
+  return (
+    <Box
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panels"
+      flexShrink={0}
+      w="10px"
+      mx="-2px"
+      cursor="col-resize"
+      display={{ base: "none", lg: "flex" }}
+      alignItems="center"
+      justifyContent="center"
+      zIndex={2}
+      userSelect="none"
+      onMouseDown={(e) => {
+        e.preventDefault();
+        const container = e.currentTarget.parentElement as HTMLElement | null;
+        const containerWidth = container?.getBoundingClientRect().width ?? 1;
+        let lastX = e.clientX;
+        const onMove = (ev: MouseEvent) => {
+          const delta = ev.clientX - lastX;
+          lastX = ev.clientX;
+          onDrag(delta, containerWidth);
+        };
+        const onUp = () => {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+        };
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      }}
+      _hover={{ bg: "purple.100" }}
+      sx={{
+        "&::after": {
+          content: '""',
+          display: "block",
+          w: "3px",
+          h: "36px",
+          borderRadius: "full",
+          bg: "gray.300",
+        },
+        "&:hover::after": { bg: "purple.400" },
+      }}
+    />
+  );
+}
+
 type ApiChallenge = {
   id: string;
   title: string;
   prompt: string;
+  emoji: string | null;
   lat: number | null;
   lng: number | null;
   pts: number;
   numWinners: number;
   enabled: boolean;
   createdAt: string;
+  updatedAt?: string;
 };
 
 type ApiNeighborhood = {
@@ -83,6 +171,7 @@ function hydrate(
   }
   return {
     ...c,
+    emoji: c.emoji ?? null,
     neighborhood,
   };
 }
@@ -99,9 +188,60 @@ export default function ChallengeDraftBoard() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [panToken, setPanToken] = useState(0);
   const [dragOver, setDragOver] = useState<DropTarget | null>(null);
+  const [panelWidths, setPanelWidths] = useState<number[] | null>(null);
   const focusTitleId = useRef<string | null>(null);
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
+  );
+  const widths = panelWidths ?? DEFAULT_PANEL_WIDTHS;
+
+  useEffect(() => {
+    setPanelWidths(loadPanelWidths());
+  }, []);
+
+  useEffect(() => {
+    if (panelWidths == null) return;
+    try {
+      localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(panelWidths));
+    } catch {
+      /* ignore */
+    }
+  }, [panelWidths]);
+
+  const resizePanels = useCallback((index: number, deltaPx: number, containerWidth: number) => {
+    if (containerWidth <= 0) return;
+    const deltaPct = (deltaPx / containerWidth) * 100;
+    setPanelWidths((prev) => {
+      const base = prev ?? DEFAULT_PANEL_WIDTHS;
+      const next = [...base];
+      const left = next[index]! + deltaPct;
+      const right = next[index + 1]! - deltaPct;
+      if (left < MIN_PANEL_PCT || right < MIN_PANEL_PCT) return prev;
+      next[index] = left;
+      next[index + 1] = right;
+      return next;
+    });
+  }, []);
+
+  /** Resize between (disabled+enabled) group and the map. */
+  const resizeListGroupVsMap = useCallback(
+    (deltaPx: number, containerWidth: number) => {
+      if (containerWidth <= 0) return;
+      const deltaPct = (deltaPx / containerWidth) * 100;
+      setPanelWidths((prev) => {
+        const base = prev ?? DEFAULT_PANEL_WIDTHS;
+        const [a, b, c] = base;
+        const leftSum = a + b;
+        const newLeft = leftSum + deltaPct;
+        const newRight = c - deltaPct;
+        if (newLeft < MIN_PANEL_PCT * 2 || newRight < MIN_PANEL_PCT) {
+          return prev;
+        }
+        const scale = leftSum > 0 ? newLeft / leftSum : 1;
+        return [a * scale, b * scale, newRight];
+      });
+    },
+    [],
   );
 
   const neighborhoodGeo = useMemo(
@@ -168,6 +308,69 @@ export default function ChallengeDraftBoard() {
     })();
   }, [load, toast]);
 
+  // Live updates: poll while the tab is focused. Pending local edits win.
+  useEffect(() => {
+    if (loading) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const [cRes, nRes] = await Promise.all([
+          fetch("/api/admin/challenges"),
+          fetch("/api/admin/neighborhoods"),
+        ]);
+        if (!cRes.ok || !nRes.ok || cancelled) return;
+        const cData = await cRes.json();
+        const nData = await nRes.json();
+        const ns = (nData.neighborhoods ?? []) as ApiNeighborhood[];
+        const geo = ns.map((n) => ({
+          id: n.id,
+          name: n.name,
+          emoji: n.emoji,
+          boundary: n.boundary,
+          centerLat: n.centerLat,
+          centerLng: n.centerLng,
+        })) as (NeighborhoodWithBoundary & { emoji: string | null })[];
+        const remote = ((cData.challenges ?? []) as ApiChallenge[]).map((c) =>
+          hydrate(
+            {
+              ...c,
+              emoji: c.emoji ?? null,
+            },
+            geo,
+          ),
+        );
+        if (cancelled) return;
+        setNeighborhoods(ns);
+        setChallenges((prev) => {
+          const pending = new Set(saveTimers.current.keys());
+          if (editingId) pending.add(editingId);
+          const prevById = new Map(prev.map((p) => [p.id, p]));
+          const remoteIds = new Set(remote.map((r) => r.id));
+          const merged = remote.map((r) =>
+            pending.has(r.id) ? (prevById.get(r.id) ?? r) : r,
+          );
+          for (const p of prev) {
+            if (pending.has(p.id) && !remoteIds.has(p.id)) merged.push(p);
+          }
+          return merged;
+        });
+      } catch {
+        /* ignore poll errors */
+      }
+    };
+    const id = window.setInterval(() => void tick(), 2000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [loading, editingId]);
+
   useEffect(() => {
     if (!focusTitleId.current) return;
     const id = focusTitleId.current;
@@ -196,12 +399,14 @@ export default function ChallengeDraftBoard() {
             id: next.id,
             title: next.title,
             prompt: next.prompt,
+            emoji: next.emoji ?? null,
             lat: next.lat,
             lng: next.lng,
             pts: next.pts,
             numWinners: next.numWinners,
             enabled: next.enabled,
             createdAt: next.createdAt,
+            updatedAt: next.updatedAt,
           },
           neighborhoodGeo,
         );
@@ -256,12 +461,14 @@ export default function ChallengeDraftBoard() {
             id: next.id,
             title: next.title,
             prompt: next.prompt,
+            emoji: next.emoji ?? null,
             lat: next.lat,
             lng: next.lng,
             pts: next.pts,
             numWinners: next.numWinners,
             enabled: next.enabled,
             createdAt: next.createdAt,
+            updatedAt: next.updatedAt,
           },
           neighborhoodGeo,
         );
@@ -458,6 +665,8 @@ export default function ChallengeDraftBoard() {
       display="flex"
       flexDirection="column"
       minH={0}
+      height="100%"
+      flex={1}
       outline={dragOver === target ? "2px solid" : undefined}
       outlineColor={dragOver === target ? "purple.400" : undefined}
       {...makeDropHandlers(target)}
@@ -507,6 +716,10 @@ export default function ChallengeDraftBoard() {
             selected={selectedId === c.id}
             editing={editingId === c.id}
             onSelect={() => {
+              if (selectedId === c.id) {
+                setSelectedId(null);
+                return;
+              }
               setSelectedId(c.id);
               setPanToken((t) => t + 1);
             }}
@@ -521,6 +734,7 @@ export default function ChallengeDraftBoard() {
               const body: Record<string, unknown> = {};
               if (patch.title !== undefined) body.title = patch.title;
               if (patch.prompt !== undefined) body.prompt = patch.prompt;
+              if (patch.emoji !== undefined) body.emoji = patch.emoji;
               if (patch.pts !== undefined) body.pts = patch.pts;
               if (patch.numWinners !== undefined) {
                 body.numWinners = patch.numWinners;
@@ -543,58 +757,156 @@ export default function ChallengeDraftBoard() {
 
   return (
     <VStack align="stretch" spacing={3} height={{ base: "auto", lg: "calc(100dvh - 160px)" }} minH="480px">
-      <HStack flexWrap="wrap" gap={2} align="flex-end">
-        <Box flex="1" minW="160px">
-          <Text fontSize="xs" color="gray.500" mb={1}>
-            Search
-          </Text>
-          <Input
-            size="sm"
-            placeholder="Title or prompt…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-        </Box>
-        <Box>
-          <Text fontSize="xs" color="gray.500" mb={1}>
-            Sort
-          </Text>
-          <Select
-            size="sm"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            w="160px"
-          >
-            <option value="title">Title</option>
-            <option value="pts">Points</option>
-            <option value="neighborhood">Neighborhood</option>
-            <option value="created">Created</option>
-          </Select>
-        </Box>
-      </HStack>
-
       <Box
-        display="grid"
-        gridTemplateColumns={{
-          base: "1fr",
-          lg: "minmax(220px,260px) minmax(220px,260px) 1fr",
-        }}
-        gap={3}
+        display="flex"
+        flexDirection={{ base: "column", lg: "row" }}
+        gap={{ base: 3, lg: 0 }}
         flex={1}
         minH={0}
       >
-        {renderColumn("Enabled", enabledList, "enabled")}
-        {renderColumn("Disabled", disabledList, "disabled", true)}
-        <Box minH={{ base: "360px", lg: 0 }} minW={0}>
+        {/* List columns + their toolbar (not over the map) */}
+        <VStack
+          align="stretch"
+          spacing={2}
+          flex={{ base: "none", lg: `${widths[0]! + widths[1]!} 1 0` }}
+          w={{ base: "100%", lg: undefined }}
+          minW={{ lg: 0 }}
+          minH={{ base: "420px", lg: 0 }}
+          overflow="hidden"
+        >
+          <HStack flexWrap="wrap" gap={2} align="flex-end" flexShrink={0}>
+            <Box flex="1" minW="120px">
+              <Text fontSize="xs" color="gray.500" mb={1}>
+                Search
+              </Text>
+              <Input
+                size="sm"
+                placeholder="Title or prompt…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="gray.500" mb={1}>
+                Sort
+              </Text>
+              <Select
+                size="sm"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                w="140px"
+              >
+                <option value="title">Title</option>
+                <option value="pts">Points</option>
+                <option value="neighborhood">Neighborhood</option>
+                <option value="created">Created</option>
+              </Select>
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="gray.500" mb={1}>
+                Filter
+              </Text>
+              <Menu closeOnSelect={false}>
+                <MenuButton
+                  as={Button}
+                  size="sm"
+                  variant="outline"
+                  fontWeight="medium"
+                  minW="120px"
+                >
+                  {neighborhoodFilter.length === 0
+                    ? "All neighborhoods"
+                    : `${neighborhoodFilter.length} selected`}
+                </MenuButton>
+                <MenuList maxH="280px" overflowY="auto" minW="240px" zIndex={20}>
+                  <Box px={3} pt={2} pb={1}>
+                    <Text fontSize="xs" color="gray.500">
+                      Neighborhoods — multi-select
+                    </Text>
+                  </Box>
+                  <MenuOptionGroup
+                    type="checkbox"
+                    value={neighborhoodFilter}
+                    onChange={(v) =>
+                      setNeighborhoodFilter(
+                        typeof v === "string" ? [v] : [...v],
+                      )
+                    }
+                  >
+                    {neighborhoodOptions.map((o) => (
+                      <MenuItemOption key={o.id} value={o.id}>
+                        {o.label}
+                      </MenuItemOption>
+                    ))}
+                  </MenuOptionGroup>
+                  {neighborhoodFilter.length > 0 && (
+                    <Box px={3} py={2} borderTopWidth="1px">
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        w="100%"
+                        onClick={() => setNeighborhoodFilter([])}
+                      >
+                        Clear filter
+                      </Button>
+                    </Box>
+                  )}
+                </MenuList>
+              </Menu>
+            </Box>
+          </HStack>
+
+          <Box
+            display="flex"
+            flexDirection={{ base: "column", lg: "row" }}
+            gap={{ base: 3, lg: 0 }}
+            flex={1}
+            minH={0}
+            overflow="hidden"
+          >
+            <Box
+              flex={{ base: "none", lg: `${widths[0]} 1 0` }}
+              w={{ base: "100%", lg: undefined }}
+              minW={{ lg: 0 }}
+              minH={{ base: "240px", lg: 0 }}
+              display="flex"
+              flexDirection="column"
+              overflow="hidden"
+            >
+              {renderColumn("Disabled", disabledList, "disabled", true)}
+            </Box>
+            <PanelResizeHandle onDrag={(d, w) => resizePanels(0, d, w)} />
+            <Box
+              flex={{ base: "none", lg: `${widths[1]} 1 0` }}
+              w={{ base: "100%", lg: undefined }}
+              minW={{ lg: 0 }}
+              minH={{ base: "240px", lg: 0 }}
+              display="flex"
+              flexDirection="column"
+              overflow="hidden"
+            >
+              {renderColumn("Enabled", enabledList, "enabled")}
+            </Box>
+          </Box>
+        </VStack>
+
+        <PanelResizeHandle onDrag={(d, w) => resizeListGroupVsMap(d, w)} />
+
+        <Box
+          flex={{ base: "none", lg: `${widths[2]} 1 0` }}
+          w={{ base: "100%", lg: undefined }}
+          minW={{ lg: 0 }}
+          minH={{ base: "360px", lg: 0 }}
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+        >
           <ChallengeDraftMap
             challenges={filteredSorted}
             neighborhoods={mapNeighborhoods}
             selectedId={selectedId}
             editingId={editingId}
             panToken={panToken}
-            neighborhoodFilter={neighborhoodFilter}
-            neighborhoodOptions={neighborhoodOptions}
-            onNeighborhoodFilterChange={setNeighborhoodFilter}
             onSelect={(id) => {
               setSelectedId(id);
               setPanToken((t) => t + 1);
@@ -602,8 +914,9 @@ export default function ChallengeDraftBoard() {
                 .querySelector(`[data-challenge-id="${id}"]`)
                 ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
             }}
+            onDeselect={() => setSelectedId(null)}
             onMapClickPlace={(lat, lng) => {
-              const id = editingId;
+              const id = selectedId;
               if (!id) return;
               void patchChallenge(id, { lat, lng }, { lat, lng });
             }}
