@@ -5,14 +5,18 @@ import {
   AccordionItem,
   AccordionPanel,
   Alert,
+  AlertDescription,
   AlertIcon,
+  AlertTitle,
   Badge,
   Box,
   Button,
   Checkbox,
+  Code,
   Heading,
   HStack,
   Input,
+  Link as ExtLink,
   Progress,
   Stack,
   Text,
@@ -110,6 +114,89 @@ function statBlock(v: TestView, side: "original" | "compressed"): ReactNode {
       {up && <Text>upload {fmtMs(up.summary.totalMs)} · {up.summary.parts} parts</Text>}
       {dl?.firstFrameCdn && <Text>first frame (CDN) {fmtMs(dl.firstFrameCdn.playingMs)}</Text>}
     </VStack>
+  );
+}
+
+function RunStatusBanner({
+  running,
+  phase,
+  view,
+}: {
+  running: boolean;
+  phase: string;
+  view: TestView | null;
+}) {
+  if (running) {
+    return (
+      <Alert status="info" borderRadius="md">
+        <AlertIcon />
+        <Box>
+          <AlertTitle fontSize="sm">Run in progress</AlertTitle>
+          <AlertDescription fontSize="sm">
+            {phase || "Starting…"} — progress bars below are byte upload only. Success is decided after Spaces
+            multipart <Code fontSize="xs">complete</Code> returns (there is no overall run timeout; part signed URLs
+            expire after 15 minutes).
+          </AlertDescription>
+        </Box>
+      </Alert>
+    );
+  }
+  if (!view) return null;
+  const up = view.uploads.compressed;
+  if (!up) {
+    return (
+      <Alert status="warning" borderRadius="md">
+        <AlertIcon />
+        <Box>
+          <AlertTitle fontSize="sm">No upload result yet</AlertTitle>
+          <AlertDescription fontSize="sm">
+            Compression/preview may have updated, but multipart upload never recorded a result. Check the console for{" "}
+            <Code fontSize="xs">upload-testing</Code>.
+          </AlertDescription>
+        </Box>
+      </Alert>
+    );
+  }
+  if (up.ok) {
+    return (
+      <Alert status="success" borderRadius="md">
+        <AlertIcon />
+        <Box>
+          <AlertTitle fontSize="sm">Upload succeeded</AlertTitle>
+          <AlertDescription fontSize="sm">
+            Multipart complete finished. Key: <Code fontSize="xs">{up.key ?? "—"}</Code>
+            {up.cdnUrl && (
+              <>
+                {" · "}
+                <ExtLink href={up.cdnUrl} isExternal color="green.700">
+                  open CDN URL
+                </ExtLink>
+              </>
+            )}
+          </AlertDescription>
+        </Box>
+      </Alert>
+    );
+  }
+  return (
+    <Alert status="error" borderRadius="md">
+      <AlertIcon />
+      <Box>
+        <AlertTitle fontSize="sm">Upload failed</AlertTitle>
+        <AlertDescription fontSize="sm">
+          {up.error || "Upload did not complete."}
+          {up.key ? (
+            <>
+              {" "}
+              Partial key was <Code fontSize="xs">{up.key}</Code> — incomplete multipart may still exist in Spaces until
+              aborted/expired.
+            </>
+          ) : null}{" "}
+          Note: the bar can hit 100% (all part bytes sent) and still fail on the final <Code fontSize="xs">complete</Code>{" "}
+          call.
+        </AlertDescription>
+      </Box>
+    </Alert>
   );
 }
 
@@ -250,11 +337,28 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
   const runSingle = async () => {
     abortRef.current = new AbortController();
     setRunning(true);
+    setPhase("Starting…");
     try {
       const v = await execute(config, configLabel(config));
       if (v) {
         setView(v);
         revealResults();
+        const up = v.uploads.compressed;
+        if (up?.ok) {
+          toast({
+            status: "success",
+            title: "Upload succeeded",
+            description: up.cdnUrl ? "CDN URL ready — see the green banner." : `Key: ${up.key}`,
+            duration: 8000,
+          });
+        } else {
+          toast({
+            status: "error",
+            title: "Upload failed",
+            description: up?.error ?? "See the red banner and console logs.",
+            duration: 10000,
+          });
+        }
       }
     } catch (e) {
       dbg.error("runSingle failed", e);
@@ -416,7 +520,7 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
               {Object.entries(uploadProgress).map(([l, f]) => (
                 <Box key={l}>
                   <Text fontSize="xs">
-                    Upload {l} {Math.round(f * 100)}%
+                    Upload {l} {Math.round(f * 100)}% (bytes only — not final success)
                   </Text>
                   <Progress size="sm" value={f * 100} colorScheme="teal" />
                 </Box>
@@ -424,6 +528,9 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
               {liveWaterfall.rows.length > 0 && <PartWaterfall waterfall={liveWaterfall} />}
             </VStack>
           )}
+          <Box mt={3}>
+            <RunStatusBanner running={running} phase={phase} view={view} />
+          </Box>
         </Box>
 
         <Accordion allowMultiple index={openSections} onChange={(idx) => setOpenSections(Array.isArray(idx) ? idx : [idx])}>

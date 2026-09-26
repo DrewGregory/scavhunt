@@ -101,6 +101,8 @@ type UrlInfo = {
   fileId: string;
   partNumber: number;
   multipart: boolean;
+  key: string;
+  uploadId?: string;
   publicUrl?: string;
   expiresSec?: number;
 };
@@ -200,53 +202,180 @@ export function createUploader(opts: CreateUploaderOptions): Uploader {
 
   const partEvent = (e: Omit<PartEvent, "t">) => hooks.onPartEvent?.({ ...e, t: performance.now() });
 
+  /**
+   * Fetch ETag from our API when the browser cannot read it from the PUT
+   * response (missing Access-Control-Expose-Headers: ETag on the bucket).
+   * Avoids requiring Spaces CORS changes.
+   */
+  async function fetchEtagFromServer(
+    info: UrlInfo,
+    headers: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const delays = [0, 200, 500, 1000, 2000];
+    let lastErr: unknown;
+    for (const delay of delays) {
+      if (delay) await new Promise((r) => setTimeout(r, delay));
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      try {
+        const res = await axios.get("/api/s3/part-etag", {
+          params: {
+            key: info.key,
+            ...(info.uploadId
+              ? { uploadId: info.uploadId, partNumber: info.partNumber }
+              : {}),
+          },
+          headers,
+          signal,
+        });
+        const etag = res.data?.etag as string | undefined;
+        if (etag) return etag;
+        lastErr = new Error("empty etag");
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("Could not resolve part ETag");
+  }
+
   const uploadPartBytes: typeof AwsS3.uploadPartBytes = async (options) => {
-    const { signature, size, onProgress, signal } = options;
+    const { signature, body, size, onProgress, onComplete, signal } = options;
     const info = urlInfo.get(signature.url);
     if (!info) return AwsS3.uploadPartBytes(options);
     urlInfo.delete(signature.url);
 
-    const bytes = size ?? (options.body instanceof Blob ? options.body.size : 0);
+    const bytes = size ?? (body instanceof Blob ? body.size : 0);
     const counter = counterFor(info.fileId, info.partNumber);
     const attempt = ++counter.put;
-    const base = { fileId: info.fileId, partNumber: info.partNumber, multipart: info.multipart, attempt, bytes };
+    const base = {
+      fileId: info.fileId,
+      partNumber: info.partNumber,
+      multipart: info.multipart,
+      attempt,
+      bytes,
+    };
     if (attempt > 1) {
       statsFor(info.fileId).partRetries++;
-      track("upload_part_retry", telemetry(info.fileId, { level: "warn", bytes, meta: { partNumber: info.partNumber, attempt } }));
+      track("upload_part_retry", telemetry(info.fileId, {
+        level: "warn",
+        bytes,
+        meta: { partNumber: info.partNumber, attempt },
+      }));
     }
     partEvent({ ...base, phase: "put_start" });
+
+    const method = (signature.method ?? "PUT").toUpperCase();
+    const expiresSec =
+      info.expiresSec != null
+        ? info.expiresSec
+        : typeof signature.expires === "number"
+          ? signature.expires
+          : undefined;
 
     const inner = new AbortController();
     const onOuterAbort = () => inner.abort();
     if (signal?.aborted) inner.abort();
     signal?.addEventListener("abort", onOuterAbort);
+
     const inject = faults != null && Math.random() < faults.putFailRate;
     const cutAt = bytes * (0.2 + Math.random() * 0.6);
     let injected = false;
 
     try {
-      const result = await AwsS3.uploadPartBytes({
-        ...options,
-        signature:
-          info.expiresSec != null && signature.expires == null
-            ? { ...signature, expires: info.expiresSec }
-            : signature,
-        signal: inner.signal,
-        onProgress: (ev: ProgressEvent) => {
+      const etag = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(method, signature.url, true);
+        if (signature.headers) {
+          for (const [k, v] of Object.entries(signature.headers)) {
+            xhr.setRequestHeader(k, v);
+          }
+        }
+        xhr.responseType = "text";
+        if (expiresSec != null) xhr.timeout = expiresSec * 1000;
+
+        const cleanup = () => {
+          signal?.removeEventListener("abort", onOuterAbort);
+        };
+        const onabort = () => {
+          xhr.abort();
+        };
+        inner.signal.addEventListener("abort", onabort);
+
+        xhr.upload.addEventListener("progress", (ev) => {
           partEvent({ ...base, phase: "put_progress", loaded: ev.loaded });
           onProgress?.(ev);
           if (inject && !injected && ev.loaded >= cutAt) {
             injected = true;
             inner.abort();
           }
-        },
+        });
+        xhr.addEventListener("abort", () => {
+          cleanup();
+          reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        });
+        xhr.addEventListener("timeout", () => {
+          cleanup();
+          const error: ErrorWithSource = Object.assign(new Error("Request has expired"), {
+            source: { status: 403 },
+          });
+          reject(error);
+        });
+        xhr.addEventListener("error", () => {
+          cleanup();
+          reject(new Error("Network error during part upload"));
+        });
+        xhr.addEventListener("load", () => {
+          cleanup();
+          if (
+            xhr.status === 403 &&
+            typeof xhr.responseText === "string" &&
+            xhr.responseText.includes("<Message>Request has expired</Message>")
+          ) {
+            const error: ErrorWithSource = Object.assign(new Error("Request has expired"), {
+              source: { status: 403 },
+            });
+            reject(error);
+            return;
+          }
+          if (xhr.status < 200 || xhr.status >= 300) {
+            const error: ErrorWithSource = Object.assign(new Error(`Non 2xx (${xhr.status})`), {
+              source: { status: xhr.status },
+            });
+            reject(error);
+            return;
+          }
+          onProgress?.({ loaded: bytes, lengthComputable: true } as ProgressEvent);
+
+          // Header names from getAllResponseHeaders are lowercased.
+          const raw = xhr.getAllResponseHeaders().trim().split(/[\r\n]+/);
+          const headersMap: Record<string, string> = {};
+          for (const line of raw) {
+            const i = line.indexOf(": ");
+            if (i > 0) headersMap[line.slice(0, i).toLowerCase()] = line.slice(i + 2);
+          }
+          const fromCors = headersMap.etag;
+          if (fromCors) {
+            resolve(fromCors);
+            return;
+          }
+          // CORS did not expose ETag — ask our server (ListParts / HeadObject).
+          void fetchEtagFromServer(info, headersFor(info.fileId), signal)
+            .then(resolve)
+            .catch(reject);
+        });
+        xhr.send(body);
       });
+
       statsFor(info.fileId).parts.add(info.partNumber);
       partEvent({ ...base, phase: "put_end", loaded: bytes });
-      return info.publicUrl ? { ...result, location: info.publicUrl } : result;
+      onComplete?.(etag);
+      return {
+        etag,
+        ETag: etag,
+        ...(info.publicUrl ? { location: info.publicUrl } : {}),
+      };
     } catch (err) {
       if (injected && !signal?.aborted) {
-        // status 0 makes Uppy treat it like a dropped connection and retry.
         const fault: ErrorWithSource = Object.assign(new Error("Injected upload failure"), {
           source: { status: 0 },
         });
@@ -312,7 +441,14 @@ export function createUploader(opts: CreateUploaderOptions): Uploader {
       };
       keys.set(file.id, key);
       const expiresSec = t.partTimeoutMs != null ? t.partTimeoutMs / 1000 : undefined;
-      urlInfo.set(url, { fileId: file.id, partNumber: 1, multipart: false, publicUrl, expiresSec });
+      urlInfo.set(url, {
+        fileId: file.id,
+        partNumber: 1,
+        multipart: false,
+        key,
+        publicUrl,
+        expiresSec,
+      });
       return { method: "PUT", url, headers, ...(expiresSec != null ? { expires: expiresSec } : {}) };
     },
     createMultipartUpload: async (file) => {
@@ -363,7 +499,14 @@ export function createUploader(opts: CreateUploaderOptions): Uploader {
           signal,
         });
         const expiresSec = t.partTimeoutMs != null ? t.partTimeoutMs / 1000 : undefined;
-        urlInfo.set(res.data.url, { fileId: file.id, partNumber, multipart: true, expiresSec });
+        urlInfo.set(res.data.url, {
+          fileId: file.id,
+          partNumber,
+          multipart: true,
+          key,
+          uploadId,
+          expiresSec,
+        });
         partEvent({ ...base, phase: "sign_end" });
         return {
           url: res.data.url,

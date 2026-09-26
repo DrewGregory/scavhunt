@@ -107,8 +107,10 @@ rewrites any legacy origin URLs to the CDN host at read time.
 **Spaces control panel**
 
 1. Enable the CDN for the bucket and set the edge TTL to the maximum.
-2. CORS: allow `GET`, `PUT`, `HEAD` from the app origin, and expose `ETag`
-   (Uppy multipart needs it for part completion).
+2. CORS: allow `PUT` (and `GET`/`HEAD` if you use download benches) from the app
+   origin. Exposing `ETag` is optional — the client falls back to
+   `/api/s3/part-etag` (server-side ListParts/HeadObject) when the browser
+   cannot read the header.
 3. Lifecycle: expire the `sandbox/` prefix after 14 days (admin Upload testing
    page writes there). Example:
 
