@@ -65,7 +65,6 @@ function locationBadge(c: DraftChallenge): {
 }
 
 function CardChrome({
-  selected,
   onDragStart,
   onStartEdit,
   children,
@@ -83,13 +82,34 @@ function CardChrome({
           cursor="grab"
           color="gray.400"
           draggable
+          userSelect="none"
+          _active={{ cursor: "grabbing", color: "gray.600" }}
           onDragStart={(e) => {
             e.stopPropagation();
+            const handle = e.currentTarget as HTMLElement;
+            const card = handle.closest(
+              "[data-challenge-id]",
+            ) as HTMLElement | null;
+            if (card && e.dataTransfer.setDragImage) {
+              const cardRect = card.getBoundingClientRect();
+              const offsetX = Math.max(0, e.clientX - cardRect.left);
+              const offsetY = Math.max(0, e.clientY - cardRect.top);
+              e.dataTransfer.setDragImage(card, offsetX, offsetY);
+              card.dataset.dragging = "1";
+              const clear = () => {
+                delete card.dataset.dragging;
+                window.removeEventListener("dragend", clear);
+              };
+              window.addEventListener("dragend", clear);
+            }
             onDragStart?.(e);
           }}
           onClick={(e) => e.stopPropagation()}
           aria-label="Drag to enable or disable"
           lineHeight={1}
+          p={0.5}
+          borderRadius="sm"
+          _hover={{ bg: "gray.100", color: "gray.600" }}
         >
           <FiMenu />
         </Box>
@@ -147,6 +167,9 @@ export default function ChallengeDraftCard({
         p={2}
         boxShadow={selected ? "md" : "sm"}
         data-challenge-id={challenge.id}
+        sx={{
+          '&[data-dragging="1"]': { opacity: 0.4 },
+        }}
       >
         <CardChrome
           selected={selected}
@@ -279,6 +302,9 @@ export default function ChallengeDraftCard({
       outlineOffset="1px"
       _hover={{ borderColor: selected ? "orange.400" : "gray.300" }}
       data-challenge-id={challenge.id}
+      sx={{
+        '&[data-dragging="1"]': { opacity: 0.4 },
+      }}
     >
       <CardChrome
         selected={selected}
