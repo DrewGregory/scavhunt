@@ -417,7 +417,6 @@ export default function TeamAssignBoard() {
                 minW={0}
                 display="flex"
                 flexDirection="column"
-                overflow="hidden"
                 outline={dragOver === key ? "2px solid" : undefined}
                 outlineColor={dragOver === key ? "blue.400" : undefined}
                 borderTopWidth="4px"
@@ -459,14 +458,7 @@ export default function TeamAssignBoard() {
                     {members.length}
                   </Text>
                 </HStack>
-                <VStack
-                  align="stretch"
-                  spacing={1}
-                  p={2}
-                  flex="1"
-                  minH={0}
-                  overflowY="auto"
-                >
+                <VStack align="stretch" spacing={1} p={2}>
                   {members.length === 0 ? (
                     <Text fontSize="xs" color="gray.400" textAlign="center" py={4}>
                       Drop players here
