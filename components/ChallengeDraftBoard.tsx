@@ -507,6 +507,10 @@ export default function ChallengeDraftBoard() {
             selected={selectedId === c.id}
             editing={editingId === c.id}
             onSelect={() => {
+              if (selectedId === c.id) {
+                setSelectedId(null);
+                return;
+              }
               setSelectedId(c.id);
               setPanToken((t) => t + 1);
             }}
@@ -602,6 +606,7 @@ export default function ChallengeDraftBoard() {
                 .querySelector(`[data-challenge-id="${id}"]`)
                 ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
             }}
+            onDeselect={() => setSelectedId(null)}
             onMapClickPlace={(lat, lng) => {
               const id = selectedId;
               if (!id) return;

@@ -47,17 +47,14 @@ export type DraftMapNeighborhood = {
 /** Stack point for challenges with no lat/lng yet. */
 const UNPLACED_STACK: [number, number] = SF_CENTER;
 
-function pinHtml(fill: string, size: number, ring = false) {
-  const ringSvg = ring
-    ? `<circle cx="12" cy="9" r="10" fill="none" stroke="#DD6B20" stroke-width="2.5" opacity="0.95"/>`
-    : "";
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="#ffffff" stroke-width="1.5">${ringSvg}<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#ffffff" stroke="none"/></svg>`;
+function pinHtml(fill: string, size: number) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="#ffffff" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#ffffff" stroke="none"/></svg>`;
 }
 
-function makeIcon(fill: string, size: number, ring = false) {
+function makeIcon(fill: string, size: number) {
   return L.divIcon({
     className: "challenge-draft-pin",
-    html: pinHtml(fill, size, ring),
+    html: pinHtml(fill, size),
     iconSize: [size, size],
     iconAnchor: [size / 2, size],
     popupAnchor: [0, -size],
@@ -66,28 +63,76 @@ function makeIcon(fill: string, size: number, ring = false) {
 
 const enabledIcon = makeIcon("#3182CE", 28);
 const disabledIcon = makeIcon("#A0AEC0", 24);
-const selectedIcon = makeIcon("#DD6B20", 34, true);
+const selectedIcon = makeIcon("#DD6B20", 34);
 const unplacedIcon = makeIcon("#718096", 26);
-const unplacedSelectedIcon = makeIcon("#DD6B20", 34, true);
+const unplacedSelectedIcon = makeIcon("#DD6B20", 34);
 
 function MapEvents({
   selectedId,
   onMapClickPlace,
   onContextCreate,
+  onDeselect,
 }: {
   selectedId: string | null;
   onMapClickPlace: (lat: number, lng: number) => void;
   onContextCreate: (lat: number, lng: number) => void;
+  onDeselect: () => void;
 }) {
   useMapEvents({
     click(e) {
       if (selectedId) onMapClickPlace(e.latlng.lat, e.latlng.lng);
+    },
+    dblclick(e) {
+      if (!selectedId) return;
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e.originalEvent);
+      onDeselect();
     },
     contextmenu(e) {
       e.originalEvent.preventDefault();
       onContextCreate(e.latlng.lat, e.latlng.lng);
     },
   });
+  return null;
+}
+
+/** Esc clears selection while a challenge is selected. */
+function EscapeDeselect({
+  selectedId,
+  onDeselect,
+}: {
+  selectedId: string | null;
+  onDeselect: () => void;
+}) {
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      onDeselect();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId, onDeselect]);
+  return null;
+}
+
+/** Prefer deselect-on-dblclick over zoom while a pin is selected. */
+function DoubleClickZoomWhenIdle({ selectedId }: { selectedId: string | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (selectedId) map.doubleClickZoom.disable();
+    else map.doubleClickZoom.enable();
+  }, [map, selectedId]);
   return null;
 }
 
@@ -130,6 +175,7 @@ export default function ChallengeDraftMap({
   selectedId,
   panToken = 0,
   onSelect,
+  onDeselect,
   onMapClickPlace,
   onContextCreate,
   onMarkerMove,
@@ -145,6 +191,7 @@ export default function ChallengeDraftMap({
   editingId?: string | null;
   panToken?: number;
   onSelect: (id: string) => void;
+  onDeselect: () => void;
   onMapClickPlace: (lat: number, lng: number) => void;
   onContextCreate: (lat: number, lng: number) => void;
   onMarkerMove: (id: string, lat: number, lng: number) => void;
@@ -329,7 +376,7 @@ export default function ChallengeDraftMap({
             pointerEvents="none"
             whiteSpace="nowrap"
           >
-            Drag pin to place · click map to drop
+            Drag pin to place · click map to drop · Esc / dbl-click to clear
           </Box>
         )}
 
@@ -345,7 +392,10 @@ export default function ChallengeDraftMap({
             selectedId={selectedId}
             onMapClickPlace={onMapClickPlace}
             onContextCreate={onContextCreate}
+            onDeselect={onDeselect}
           />
+          <EscapeDeselect selectedId={selectedId} onDeselect={onDeselect} />
+          <DoubleClickZoomWhenIdle selectedId={selectedId} />
           <FlyToSelected challenge={selected} token={panToken} />
           <MapDragLock locked={pinDragging} />
           <InvalidateMapSize
@@ -390,7 +440,13 @@ export default function ChallengeDraftMap({
                   eventHandlers={{
                     click: (e) => {
                       L.DomEvent.stopPropagation(e);
-                      onSelect(c.id);
+                      if (isSelected) onDeselect();
+                      else onSelect(c.id);
+                    },
+                    dblclick: (e) => {
+                      L.DomEvent.stopPropagation(e);
+                      L.DomEvent.preventDefault(e.originalEvent);
+                      if (isSelected) onDeselect();
                     },
                     mousedown: (e) => {
                       if (isSelected) L.DomEvent.stopPropagation(e);

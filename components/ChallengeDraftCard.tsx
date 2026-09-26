@@ -304,7 +304,7 @@ export default function ChallengeDraftCard({
           </HStack>
           {selected && (
             <Text fontSize="2xs" color="orange.600" fontWeight="medium">
-              Selected — drag pin on map to place
+              Selected — drag pin on map · click again or Esc to clear
             </Text>
           )}
         </VStack>
