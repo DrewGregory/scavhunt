@@ -42,7 +42,8 @@ export default function AdminAssignPage({
           <Text as="span" fontWeight="semibold">
             + New group
           </Text>{" "}
-          to create one. Drag back to Unassigned to remove from a team.
+          to instantly create an untitled team (rename inline). Drag back to
+          Unassigned to remove from a team.
         </Text>
         <TeamAssignBoard />
       </VStack>

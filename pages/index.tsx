@@ -97,12 +97,20 @@ export default function HomePage({
         </Box>
 
         <Box position="relative" zIndex={1}>
-          <Container maxW="container.xl" pt={{ base: 6, md: 8 }} pb={4}>
+          <Container
+            maxW="container.xl"
+            pt={{ base: 6, md: 8 }}
+            pb={4}
+            minH="100vh"
+            display="flex"
+            flexDirection="column"
+          >
             <HStack
               justify="space-between"
               align="flex-start"
               flexWrap="wrap"
               gap={3}
+              flexShrink={0}
             >
               <VStack align="flex-start" spacing={1}>
                 <Heading size={{ base: "lg", md: "xl" }} letterSpacing="tight">
@@ -120,15 +128,6 @@ export default function HomePage({
                       {user.name}
                       {user.isAdmin ? " · admin" : ""}
                     </Text>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      color="white"
-                      borderColor="whiteAlpha.600"
-                      onClick={() => setSurveyOpen(true)}
-                    >
-                      {surveyDone ? "Edit survey" : "Player survey"}
-                    </Button>
                     {user.isAdmin ? (
                       <Button
                         as={Link}
@@ -163,27 +162,99 @@ export default function HomePage({
             </HStack>
 
             <Box
-              mt={6}
-              mx="auto"
-              maxW="md"
-              bg="whiteAlpha.200"
-              backdropFilter="blur(10px)"
-              borderRadius="2xl"
-              px={6}
-              py={5}
-              textAlign="center"
-              boxShadow="xl"
+              flex={1}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              py={8}
             >
-              <Text
-                fontSize="xs"
-                letterSpacing="widest"
-                textTransform="uppercase"
-                mb={2}
-                color="whiteAlpha.800"
+              <Box
+                mx="auto"
+                maxW="md"
+                w="100%"
+                bg="whiteAlpha.200"
+                backdropFilter="blur(10px)"
+                borderRadius="2xl"
+                px={6}
+                py={6}
+                textAlign="center"
+                boxShadow="xl"
               >
-                Hunt starts in
-              </Text>
-              <CountdownInline startTime={parseISO(startTimeISO)} />
+                <VStack spacing={5}>
+                  <Box w="100%" textAlign="center">
+                    <Text
+                      fontSize="xs"
+                      letterSpacing="widest"
+                      textTransform="uppercase"
+                      mb={2}
+                      color="whiteAlpha.800"
+                      textAlign="center"
+                    >
+                      Hunt starts in
+                    </Text>
+                    <CountdownInline startTime={parseISO(startTimeISO)} />
+                  </Box>
+
+                  {user ? (
+                    surveyDone ? (
+                      <VStack spacing={2}>
+                        <Text fontSize="sm" color="whiteAlpha.900">
+                          Thanks — your player survey is in.
+                        </Text>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          color="white"
+                          onClick={() => setSurveyOpen(true)}
+                        >
+                          Edit survey
+                        </Button>
+                      </VStack>
+                    ) : (
+                      <VStack spacing={3}>
+                        <Text fontSize="md" color="whiteAlpha.950" px={2}>
+                          Tell us how you want to play so we can place you on a
+                          team.
+                        </Text>
+                        <Button
+                          size="lg"
+                          colorScheme="yellow"
+                          onClick={() => setSurveyOpen(true)}
+                          w={{ base: "100%", sm: "auto" }}
+                          minW="220px"
+                        >
+                          Fill out player survey
+                        </Button>
+                      </VStack>
+                    )
+                  ) : (
+                    <VStack spacing={3}>
+                      <Text fontSize="md" color="whiteAlpha.950" px={2}>
+                        Sign up to fill out the player survey and get ready for
+                        the hunt.
+                      </Text>
+                      <HStack spacing={3} flexWrap="wrap" justify="center">
+                        <Button
+                          size="lg"
+                          colorScheme="yellow"
+                          onClick={() => openAuth("signup")}
+                        >
+                          Sign up
+                        </Button>
+                        <Button
+                          size="lg"
+                          variant="outline"
+                          color="white"
+                          borderColor="whiteAlpha.700"
+                          onClick={() => openAuth("login")}
+                        >
+                          Log in
+                        </Button>
+                      </HStack>
+                    </VStack>
+                  )}
+                </VStack>
+              </Box>
             </Box>
           </Container>
         </Box>

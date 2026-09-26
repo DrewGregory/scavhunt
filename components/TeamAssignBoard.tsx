@@ -2,18 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react
 import {
   Box,
   Button,
-  FormControl,
-  FormLabel,
   Heading,
   HStack,
   Input,
-  Modal,
-  ModalBody,
-  ModalCloseButton,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalOverlay,
   Text,
   useToast,
   VStack,
@@ -41,6 +32,33 @@ type DropTarget = { kind: "unassigned" } | { kind: "team"; teamId: string } | { 
 
 const DRAG_MIME = "application/x-scavhunt-user-id";
 
+const TEAM_EMOJIS = [
+  "🚀",
+  "🦊",
+  "🐻",
+  "🦁",
+  "🐼",
+  "🦄",
+  "🐙",
+  "🐸",
+  "🐝",
+  "🦋",
+  "🔥",
+  "🌊",
+  "⚡",
+  "🌟",
+  "🎯",
+  "🎲",
+  "🧩",
+  "🎸",
+  "🍕",
+  "🌮",
+];
+
+function randomTeamEmoji(): string {
+  return TEAM_EMOJIS[Math.floor(Math.random() * TEAM_EMOJIS.length)];
+}
+
 type FilterChip = "all" | "playing" | "browsing" | "incomplete";
 
 export default function TeamAssignBoard() {
@@ -52,12 +70,6 @@ export default function TeamAssignBoard() {
   const [chip, setChip] = useState<FilterChip>("all");
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const [pendingNew, setPendingNew] = useState<{
-    userId: string;
-  } | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newEmoji, setNewEmoji] = useState("🚀");
 
   const load = useCallback(async () => {
     const [uRes, tRes] = await Promise.all([
@@ -127,14 +139,9 @@ export default function TeamAssignBoard() {
     }
   };
 
-  const createTeamAndAssign = async () => {
-    if (!pendingNew) return;
-    const name = newName.trim();
-    const emoji = newEmoji.trim();
-    if (!name || !emoji) {
-      toast({ title: "Name and emoji required", status: "warning" });
-      return;
-    }
+  const createTeamAndAssign = async (userId: string) => {
+    const name = "Untitled team";
+    const emoji = randomTeamEmoji();
     setBusy(true);
     try {
       const res = await fetch("/api/admin/create-team", {
@@ -151,10 +158,6 @@ export default function TeamAssignBoard() {
       setTeams((prev) =>
         [...prev, team].sort((a, b) => a.name.localeCompare(b.name)),
       );
-      const userId = pendingNew.userId;
-      setPendingNew(null);
-      setNewName("");
-      setNewEmoji("🚀");
       await assignUser(userId, team.id);
     } catch {
       toast({ title: "Failed to create team", status: "error" });
@@ -215,12 +218,7 @@ export default function TeamAssignBoard() {
         } else if (target.kind === "team") {
           await assignUser(userId, target.teamId);
         } else {
-          setPendingNew({ userId });
-          const user = users.find((u) => u.id === userId);
-          if (user && !newName) {
-            // mild default from first name
-            setNewName(`${user.name.split(" ")[0]}'s team`);
-          }
+          await createTeamAndAssign(userId);
         }
       },
     };
@@ -386,7 +384,7 @@ export default function TeamAssignBoard() {
             + New group
           </Text>
           <Text fontSize="xs" color="gray.500">
-            Drop a player here to create a team and assign them
+            Drop a player — creates “Untitled team” with a random emoji
           </Text>
         </Box>
 
@@ -479,58 +477,6 @@ export default function TeamAssignBoard() {
           })}
         </Box>
       </Box>
-
-      <Modal
-        isOpen={!!pendingNew}
-        onClose={() => setPendingNew(null)}
-        isCentered
-      >
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Create team</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack align="stretch" spacing={3}>
-              <Text fontSize="sm" color="gray.600">
-                Creating a team for{" "}
-                <Text as="span" fontWeight="semibold">
-                  {users.find((u) => u.id === pendingNew?.userId)?.name ??
-                    "player"}
-                </Text>
-              </Text>
-              <FormControl isRequired>
-                <FormLabel>Name</FormLabel>
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Team name"
-                  autoFocus
-                />
-              </FormControl>
-              <FormControl isRequired>
-                <FormLabel>Emoji</FormLabel>
-                <Input
-                  value={newEmoji}
-                  onChange={(e) => setNewEmoji(e.target.value)}
-                  maxW="100px"
-                />
-              </FormControl>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={() => setPendingNew(null)}>
-              Cancel
-            </Button>
-            <Button
-              colorScheme="blue"
-              isLoading={busy}
-              onClick={() => void createTeamAndAssign()}
-            >
-              Create &amp; assign
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </Box>
   );
 }
