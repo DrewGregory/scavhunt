@@ -1,10 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import assert from "assert";
 import { z } from "zod";
-import { PutObjectAclCommand, S3Client } from "@aws-sdk/client-s3";
+import { PutObjectAclCommand } from "@aws-sdk/client-s3";
 import { prisma } from "../../lib/prisma";
 import { requireApiUser } from "../../lib/auth";
 import { requireHuntStartedApi } from "../../lib/time";
+import { getSpacesConfig } from "../../lib/s3";
 import { parseJsonBody } from "../../lib/serialize";
 import type { SubmissionResponseBody } from "../../lib/types";
 
@@ -67,29 +67,16 @@ export default async function handler(
   }
 
   if (mediaURL != null && mediaURL !== "") {
-    const spacesKey = process.env.SPACES_KEY;
-    assert(spacesKey != null);
-    const spacesSecret = process.env.SPACES_SECRET;
-    assert(spacesSecret != null);
-    const spacesRegion = process.env.SPACES_REGION;
-    assert(spacesRegion != null);
-    const bucket = process.env.SPACES_BUCKET_NAME;
-    assert(bucket != null);
-    const spacesEndpoint = process.env.SPACES_ENDPOINT;
-    assert(spacesEndpoint != null);
-
-    const client = new S3Client({
-      credentials: {
-        accessKeyId: spacesKey,
-        secretAccessKey: spacesSecret,
-      },
-      region: spacesRegion,
-      endpoint: spacesEndpoint,
-      forcePathStyle: false,
-    });
+    const spaces = getSpacesConfig();
+    if (!spaces) {
+      return respond(400, {
+        status: "error",
+        message: "Storage not configured on server",
+      });
+    }
 
     const mediaURLRegex = new RegExp(
-      `^https://${bucket}\\.${process.env.SPACES_REGION}\\.digitaloceanspaces\\.com/(.+)/(.+)/(.+)`,
+      `^https://${spaces.bucket}\\.${spaces.region}\\.(?:cdn\\.)?digitaloceanspaces\\.com/(.+)/(.+)/(.+)`,
     );
     const match = mediaURL.match(mediaURLRegex);
     if (match == null) {
@@ -100,16 +87,16 @@ export default async function handler(
     }
     const [, challengeIdFromUrl, teamIdFromUrl, fileName] = match;
     if (challengeIdFromUrl !== challengeId || teamIdFromUrl !== teamId) {
-      return res.status(400).json({
+      return respond(400, {
         status: "error",
         message: "Invalid media URL",
       });
     }
 
     const key = `${challengeId}/${teamId}/${fileName}`;
-    await client.send(
+    await spaces.client.send(
       new PutObjectAclCommand({
-        Bucket: bucket,
+        Bucket: spaces.bucket,
         Key: key,
         ACL: "public-read",
       }),

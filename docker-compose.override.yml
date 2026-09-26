@@ -1,0 +1,8 @@
+services:
+  server:
+    environment:
+      - SPACES_KEY
+      - SPACES_SECRET
+    env_file:
+      - path: .env.local
+        required: false

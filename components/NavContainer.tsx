@@ -141,8 +141,6 @@ export default function NavContainer({
           height="10dvh"
           title={title}
           onOpen={onOpen}
-          onOpenSurvey={() => setSurveyOpen(true)}
-          surveyLabel={surveyLabel}
         />
       )}
       {hideTopBar && (
@@ -420,8 +418,6 @@ const NavItem = ({
 
 interface MobileProps extends FlexProps {
   onOpen: () => void;
-  onOpenSurvey?: () => void;
-  surveyLabel?: string;
 }
 const MobileNav = ({
   onOpen,

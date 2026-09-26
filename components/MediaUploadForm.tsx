@@ -65,23 +65,45 @@ export default function MediaUploadForm({
     showRecordingLength: true,
     showVideoSourceDropdown: true,
   }).use(AwsS3, {
-    endpoint: apiEndpoint,
-    limit: 1,
-    getUploadParameters: async (file, options) => {
-      const url = await axios.post("/api/presigned-url", {
-        challengeId, 
+    shouldUseMultipart: true,
+    createMultipartUpload: async (file) => {
+      const res = await axios.post("/api/s3/multipart", {
+        challengeId,
         filename: file.name,
-        fileType: file.type,
-        contentType: file.type
+        contentType: file.type,
       });
-      const method: "PUT" = "PUT";
       return {
-        method,
-        url: url.data.url,
-        headers: {
-          'Content-Type': file.type,
-        }
-      }
+        uploadId: res.data.uploadId,
+        key: res.data.key,
+      };
+    },
+    signPart: async (file, partData) => {
+      const res = await axios.get("/api/s3/sign-part", {
+        params: {
+          uploadId: partData.uploadId,
+          key: partData.key,
+          partNumber: partData.partNumber,
+        },
+      });
+      return {
+        url: res.data.url,
+        headers: res.data.headers,
+      };
+    },
+    completeMultipartUpload: async (file, { uploadId, key, parts }) => {
+      const res = await axios.post("/api/s3/complete", {
+        uploadId,
+        key,
+        parts,
+      });
+      return {
+        location: res.data.location,
+      };
+    },
+    abortMultipartUpload: async (file, { uploadId, key }) => {
+      await axios.delete("/api/s3/abort", {
+        params: { uploadId, key },
+      });
     },
   }));
 
