@@ -35,6 +35,12 @@ export type SerializedSubmission = {
   accepted: boolean;
   rejected: boolean;
   mediaURL: string | null;
+  posterURL: string | null;
+  durationSec: number | null;
+  width: number | null;
+  height: number | null;
+  sizeBytes: number | null;
+  compressed: boolean | null;
   note: string;
   createdAt: string;
 };

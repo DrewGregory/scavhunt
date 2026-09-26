@@ -3,6 +3,10 @@ import { AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
 import { requireApiUser } from "../../../lib/auth";
 import { requireHuntStartedApi } from "../../../lib/time";
 import { getSpacesConfig } from "../../../lib/s3";
+import {
+  attemptIdFromHeaders,
+  logServerEvent,
+} from "../../../lib/serverTelemetry";
 
 export default async function handler(
   req: NextApiRequest,
@@ -28,6 +32,7 @@ export default async function handler(
     return res.status(500).json({ error: "Storage not configured on server" });
   }
 
+  const attemptId = attemptIdFromHeaders(req.headers);
   try {
     const cmd = new AbortMultipartUploadCommand({
       Bucket: spaces.bucket,
@@ -35,9 +40,25 @@ export default async function handler(
       UploadId: uploadId,
     });
     await spaces.client.send(cmd);
+    void logServerEvent({
+      type: "multipart_aborted",
+      userId: user.id,
+      teamId: user.teamId,
+      attemptId,
+      meta: { key },
+    });
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("s3 multipart abort error", err);
+    void logServerEvent({
+      type: "multipart_aborted",
+      level: "error",
+      userId: user.id,
+      teamId: user.teamId,
+      attemptId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+      meta: { key },
+    });
     return res.status(500).json({ error: "Failed to abort multipart upload" });
   }
 }

@@ -3,6 +3,10 @@ import { ListPartsCommand } from "@aws-sdk/client-s3";
 import { requireApiUser } from "../../../lib/auth";
 import { requireHuntStartedApi } from "../../../lib/time";
 import { getSpacesConfig } from "../../../lib/s3";
+import {
+  attemptIdFromHeaders,
+  logServerEvent,
+} from "../../../lib/serverTelemetry";
 
 export default async function handler(
   req: NextApiRequest,
@@ -28,6 +32,7 @@ export default async function handler(
     return res.status(500).json({ error: "Storage not configured on server" });
   }
 
+  const attemptId = attemptIdFromHeaders(req.headers);
   try {
     const cmd = new ListPartsCommand({
       Bucket: spaces.bucket,
@@ -35,15 +40,30 @@ export default async function handler(
       UploadId: uploadId,
     });
     const result = await spaces.client.send(cmd);
-    return res.status(200).json({
-      parts: (result.Parts ?? []).map((p) => ({
-        PartNumber: p.PartNumber,
-        Size: p.Size,
-        ETag: p.ETag,
-      })),
+    const parts = (result.Parts ?? []).map((p) => ({
+      PartNumber: p.PartNumber,
+      Size: p.Size,
+      ETag: p.ETag,
+    }));
+    void logServerEvent({
+      type: "multipart_list_parts",
+      userId: user.id,
+      teamId: user.teamId,
+      attemptId,
+      meta: { key, parts: parts.length },
     });
+    return res.status(200).json({ parts });
   } catch (err) {
     console.error("s3 multipart list-parts error", err);
+    void logServerEvent({
+      type: "multipart_list_parts",
+      level: "error",
+      userId: user.id,
+      teamId: user.teamId,
+      attemptId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+      meta: { key },
+    });
     return res.status(500).json({ error: "Failed to list parts" });
   }
 }

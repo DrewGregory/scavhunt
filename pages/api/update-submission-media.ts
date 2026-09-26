@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { PutObjectAclCommand } from "@aws-sdk/client-s3";
 import { prisma } from "../../lib/prisma";
 import { requireApiUser } from "../../lib/auth";
@@ -7,6 +8,15 @@ import { requireHuntStartedApi } from "../../lib/time";
 import { getSpacesConfig } from "../../lib/s3";
 import { parseJsonBody } from "../../lib/serialize";
 import type { SubmissionResponseBody } from "../../lib/types";
+import {
+  attemptIdFromHeaders,
+  logServerEvent,
+} from "../../lib/serverTelemetry";
+import {
+  parseMediaMeta,
+  spacesMediaUrlRegex,
+  type MediaMeta,
+} from "../../lib/upload/submissionMeta";
 
 const requestBodySchema = z.object({
   submissionId: z.string(),
@@ -28,8 +38,24 @@ export default async function handler(
 
   if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
 
-  const parsedReq = requestBodySchema.safeParse(parseJsonBody(req.body));
+  const attemptId = attemptIdFromHeaders(req.headers);
+  const validationFailed = (message: string, meta?: Record<string, unknown>) =>
+    void logServerEvent({
+      type: "validation_failed",
+      level: "warn",
+      userId: user.id,
+      teamId: user.teamId,
+      attemptId,
+      errorMessage: message,
+      meta: { route: "update-submission-media", ...meta },
+    });
+
+  const body = parseJsonBody(req.body);
+  const parsedReq = requestBodySchema.safeParse(body);
   if (!parsedReq.success) {
+    validationFailed("Invalid request body", {
+      issues: parsedReq.error.issues.map((i) => i.path.join(".")),
+    });
     return respond(400, {
       status: "error",
       message: "Invalid request body",
@@ -66,6 +92,7 @@ export default async function handler(
 
   const teamIdForAcl = user.teamId ?? submission.teamId;
 
+  let mediaMeta: MediaMeta = {};
   if (mediaURL != null && mediaURL !== "") {
     const spaces = getSpacesConfig();
     if (!spaces) {
@@ -75,11 +102,9 @@ export default async function handler(
       });
     }
 
-    const mediaURLRegex = new RegExp(
-      `^https://${spaces.bucket}\\.${spaces.region}\\.(?:cdn\\.)?digitaloceanspaces\\.com/(.+)/(.+)/(.+)`,
-    );
-    const match = mediaURL.match(mediaURLRegex);
+    const match = mediaURL.match(spacesMediaUrlRegex(spaces));
     if (match == null) {
+      validationFailed("Invalid mediaURL format", { mediaURL, submissionId });
       return respond(400, {
         status: "error",
         message: "Invalid mediaURL format",
@@ -90,6 +115,7 @@ export default async function handler(
       challengeIdFromUrl !== challengeId ||
       teamIdFromUrl !== teamIdForAcl
     ) {
+      validationFailed("Media URL challenge/team mismatch", { mediaURL, submissionId });
       return respond(400, {
         status: "error",
         message: "Invalid media URL - mismatch with challenge or team ID",
@@ -112,11 +138,44 @@ export default async function handler(
         message: "Failed to set file permissions. Try again.",
       });
     }
+
+    const parsedMeta = parseMediaMeta(body, {
+      spaces,
+      challengeId,
+      teamId: teamIdForAcl,
+    });
+    mediaMeta = parsedMeta.meta;
+    if (parsedMeta.problems.length > 0) {
+      validationFailed("Dropped invalid media metadata", {
+        problems: parsedMeta.problems,
+        submissionId,
+      });
+    }
+    if (parsedMeta.posterKey) {
+      // The presigned PUT already requests public-read; this covers hosts that ignore it.
+      await spaces.client
+        .send(
+          new PutObjectAclCommand({
+            Bucket: spaces.bucket,
+            Key: parsedMeta.posterKey,
+            ACL: "public-read",
+          }),
+        )
+        .catch((err) => console.error("poster ACL error", err));
+    }
   }
 
-  const updateFields: { mediaURL?: string; note?: string } = {};
+  const updateFields: Prisma.SubmissionUpdateInput = {};
   if (mediaURL) {
     updateFields.mediaURL = mediaURL;
+    // Replace (not merge) so a new video never keeps the old one's poster or dimensions.
+    updateFields.posterURL = mediaMeta.posterURL ?? null;
+    updateFields.durationSec = mediaMeta.durationSec ?? null;
+    updateFields.width = mediaMeta.width ?? null;
+    updateFields.height = mediaMeta.height ?? null;
+    updateFields.sizeBytes = mediaMeta.sizeBytes ?? null;
+    updateFields.originalSizeBytes = mediaMeta.originalSizeBytes ?? null;
+    updateFields.compressed = mediaMeta.compressed ?? null;
   }
   if (note !== undefined) {
     updateFields.note = note;
@@ -125,6 +184,23 @@ export default async function handler(
   await prisma.submission.update({
     where: { id: submissionId },
     data: updateFields,
+  });
+
+  void logServerEvent({
+    type: "submission_media_updated",
+    userId: user.id,
+    teamId: submission.teamId,
+    challengeId: submission.challengeId,
+    submissionId,
+    attemptId,
+    bytes: mediaMeta.sizeBytes ?? null,
+    meta: {
+      mediaUpdated: Boolean(mediaURL),
+      noteUpdated: note !== undefined,
+      compressed: mediaMeta.compressed ?? null,
+      hasPoster: Boolean(mediaMeta.posterURL),
+      originalSizeBytes: mediaMeta.originalSizeBytes ?? null,
+    },
   });
 
   return respond(200, {

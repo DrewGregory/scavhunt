@@ -70,8 +70,32 @@ Base path: `/api/agent`
 | POST | `/submissions/[id]/reject` | Reject |
 | DELETE | `/submissions/[id]` | Soft-delete |
 | POST | `/submissions/[id]/restore` | Restore |
+| GET | `/telemetry` | Upload/playback telemetry (`?view=summary\|events`) |
 
 Out of scope for agents: topology/boundary editing, CSV import, seed-demo.
+
+### Telemetry
+
+`GET /api/agent/telemetry?view=summary|events`
+
+Mirrors the admin telemetry dashboard APIs. Requires the agent API key.
+
+| Param | Notes |
+|-------|--------|
+| `view` | **Required.** `summary` (cards, timeseries, by-device, top failures) or `events` (paginated log) |
+| `range` | `1h` \| `6h` \| `24h` \| `hunt` (hunt start from settings; fallback 24h). Default `24h` |
+| `since` | ISO timestamp; overrides `range` |
+| `includeSandbox` | `1` to include sandbox runs (excluded by default) |
+| `type`, `level`, `userId`, `teamId`, `attemptId` | Event filters (`events` view; `attemptId` returns ascending timeline) |
+| `q` | Search `errorMessage` / `type` |
+| `cursor`, `limit` | Cursor pagination on `events` (default limit 100, max 500) |
+
+Example:
+
+```bash
+curl -s -H "Authorization: Bearer $KEY" \
+  "$BASE/api/agent/telemetry?view=summary&range=6h" | jq .
+```
 
 ## curl examples
 

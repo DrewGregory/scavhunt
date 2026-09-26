@@ -7,6 +7,15 @@ import { requireHuntStartedApi } from "../../lib/time";
 import { getSpacesConfig } from "../../lib/s3";
 import { parseJsonBody } from "../../lib/serialize";
 import type { SubmissionResponseBody } from "../../lib/types";
+import {
+  attemptIdFromHeaders,
+  logServerEvent,
+} from "../../lib/serverTelemetry";
+import {
+  parseMediaMeta,
+  spacesMediaUrlRegex,
+  type MediaMeta,
+} from "../../lib/upload/submissionMeta";
 
 const requestBodySchema = z.object({
   challengeId: z.string(),
@@ -36,8 +45,24 @@ export default async function handler(
   }
 
   const teamId = user.teamId;
-  const parsedReq = requestBodySchema.safeParse(parseJsonBody(req.body));
+  const attemptId = attemptIdFromHeaders(req.headers);
+  const validationFailed = (message: string, meta?: Record<string, unknown>) =>
+    void logServerEvent({
+      type: "validation_failed",
+      level: "warn",
+      userId: user.id,
+      teamId,
+      attemptId,
+      errorMessage: message,
+      meta: { route: "upload", ...meta },
+    });
+
+  const body = parseJsonBody(req.body);
+  const parsedReq = requestBodySchema.safeParse(body);
   if (!parsedReq.success) {
+    validationFailed("Invalid request body", {
+      issues: parsedReq.error.issues.map((i) => i.path.join(".")),
+    });
     return respond(400, {
       status: "error",
       message: "Invalid request body",
@@ -66,6 +91,7 @@ export default async function handler(
     });
   }
 
+  let mediaMeta: MediaMeta = {};
   if (mediaURL != null && mediaURL !== "") {
     const spaces = getSpacesConfig();
     if (!spaces) {
@@ -75,11 +101,9 @@ export default async function handler(
       });
     }
 
-    const mediaURLRegex = new RegExp(
-      `^https://${spaces.bucket}\\.${spaces.region}\\.(?:cdn\\.)?digitaloceanspaces\\.com/(.+)/(.+)/(.+)`,
-    );
-    const match = mediaURL.match(mediaURLRegex);
+    const match = mediaURL.match(spacesMediaUrlRegex(spaces));
     if (match == null) {
+      validationFailed("Invalid mediaURL format", { mediaURL });
       return respond(400, {
         status: "error",
         message: "Invalid mediaURL format",
@@ -87,6 +111,7 @@ export default async function handler(
     }
     const [, challengeIdFromUrl, teamIdFromUrl, fileName] = match;
     if (challengeIdFromUrl !== challengeId || teamIdFromUrl !== teamId) {
+      validationFailed("Media URL challenge/team mismatch", { mediaURL });
       return respond(400, {
         status: "error",
         message: "Invalid media URL",
@@ -101,6 +126,26 @@ export default async function handler(
         ACL: "public-read",
       }),
     );
+
+    const parsedMeta = parseMediaMeta(body, { spaces, challengeId, teamId });
+    mediaMeta = parsedMeta.meta;
+    if (parsedMeta.problems.length > 0) {
+      validationFailed("Dropped invalid media metadata", {
+        problems: parsedMeta.problems,
+      });
+    }
+    if (parsedMeta.posterKey) {
+      // The presigned PUT already requests public-read; this covers hosts that ignore it.
+      await spaces.client
+        .send(
+          new PutObjectAclCommand({
+            Bucket: spaces.bucket,
+            Key: parsedMeta.posterKey,
+            ACL: "public-read",
+          }),
+        )
+        .catch((err) => console.error("poster ACL error", err));
+    }
   }
 
   const submission = await prisma.submission.create({
@@ -112,6 +157,24 @@ export default async function handler(
       rejected: false,
       mediaURL: mediaURL || null,
       note,
+      ...mediaMeta,
+    },
+  });
+
+  void logServerEvent({
+    type: "submission_created",
+    userId: user.id,
+    teamId,
+    challengeId,
+    submissionId: submission.id,
+    attemptId,
+    bytes: mediaMeta.sizeBytes ?? null,
+    meta: {
+      hasMedia: Boolean(mediaURL),
+      skipUpload: Boolean(skipUpload),
+      compressed: mediaMeta.compressed ?? null,
+      hasPoster: Boolean(mediaMeta.posterURL),
+      originalSizeBytes: mediaMeta.originalSizeBytes ?? null,
     },
   });
 

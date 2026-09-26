@@ -40,6 +40,17 @@ export default async function handler(
     return res.status(500).json({ error: "Storage not configured on server" });
   }
 
+  let expiresIn = 60 * 15;
+  const requested = Number(req.query.expiresIn);
+  if (
+    req.query.expiresIn !== undefined &&
+    Number.isFinite(requested) &&
+    user.isAdmin &&
+    key.startsWith(`sandbox/${user.id}/`)
+  ) {
+    expiresIn = Math.min(3600, Math.max(30, Math.round(requested)));
+  }
+
   try {
     const cmd = new UploadPartCommand({
       Bucket: spaces.bucket,
@@ -48,7 +59,7 @@ export default async function handler(
       PartNumber: partNum,
     });
     const url = await getSignedUrl(spaces.client as any, cmd as any, {
-      expiresIn: 60 * 15,
+      expiresIn,
     });
     return res.status(200).json({ url, headers: {} });
   } catch (err) {
