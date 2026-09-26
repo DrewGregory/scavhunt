@@ -114,7 +114,7 @@ export function RegistrationSurveyModal({
           <Stack as="form" spacing={4} onSubmit={submit}>
             <Text fontSize="sm" color="gray.600">
               {required
-                ? "Fill this out before you can vote in the tournament."
+                ? "Help us match you with a team."
                 : "Help us form teams. You can edit this anytime from the header."}
             </Text>
 

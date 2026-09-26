@@ -28,7 +28,12 @@ type ChallengeWithSubmissions = SerializedChallenge & {
   submissions: SerializedSubmission[];
 };
 
-type Bank = { earned: number; deposited: number; score: number };
+type Bank = {
+  earned: number;
+  deposited: number;
+  bonus?: number;
+  score: number;
+};
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -75,11 +80,13 @@ export const getServerSideProps = async (
       }));
   }
 
-  const territoryEnabled = await isTerritoryEnabled();
+  const territoryGloballyEnabled = await isTerritoryEnabled();
+  const isAdmin = Boolean(auth.user.isAdmin);
+  const showTerritory = territoryGloballyEnabled || isAdmin;
   let neighborhoods: TerritoryNeighborhood[] = [];
   let bank: Bank | null = null;
 
-  if (territoryEnabled) {
+  if (showTerritory) {
     const standings = await getStandings({
       onMapOnly: true,
       includeBoundary: true,
@@ -106,9 +113,10 @@ export const getServerSideProps = async (
       challenges,
       locations,
       team: auth.user.team ? serializeTeam(auth.user.team) : null,
-      territoryEnabled,
-      neighborhoods: territoryEnabled ? neighborhoods : [],
-      bank: territoryEnabled ? bank : null,
+      territoryEnabled: territoryGloballyEnabled,
+      isAdmin,
+      neighborhoods: showTerritory ? neighborhoods : [],
+      bank: showTerritory ? bank : null,
     },
   };
 };
@@ -118,6 +126,7 @@ export default function Page({
   challenges,
   team,
   territoryEnabled,
+  isAdmin,
   neighborhoods,
   bank,
 }: {
@@ -125,6 +134,7 @@ export default function Page({
   challenges: Array<ChallengeWithSubmissions>;
   team: SerializedTeam | null;
   territoryEnabled: boolean;
+  isAdmin: boolean;
   neighborhoods: TerritoryNeighborhood[];
   bank: Bank | null;
 }) {
@@ -136,6 +146,7 @@ export default function Page({
           locations={locations}
           team={team}
           territoryEnabled={territoryEnabled}
+          isAdmin={isAdmin}
           initialNeighborhoods={neighborhoods}
           initialBank={bank}
         />

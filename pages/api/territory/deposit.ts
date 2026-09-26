@@ -9,6 +9,7 @@ import { assertTerritoryEnabled } from "../../../lib/territoryGate";
 import { findNeighborhoodAt } from "../../../lib/geo";
 import { getStandings } from "../../../lib/territory";
 import { getHuntSettings } from "../../../lib/time";
+import { scoreFromParts } from "../../../lib/scoring";
 
 const MAX_ACCURACY_M = 200;
 
@@ -34,7 +35,7 @@ export default async function handler(
   const user = await requireApiUser(req, res);
   if (!user) return;
 
-  if (!(await assertTerritoryEnabled(res))) return;
+  if (!(await assertTerritoryEnabled(res, user))) return;
 
   try {
     assertSameOrigin(req);
@@ -105,7 +106,13 @@ export default async function handler(
         _sum: { points: true },
       });
       const deposited = depositedAgg._sum.points ?? 0;
-      const score = earned - deposited;
+
+      const team = await tx.team.findUnique({
+        where: { id: teamId },
+        select: { bonusPoints: true },
+      });
+      const bonus = team?.bonusPoints ?? 0;
+      const score = scoreFromParts(earned, deposited, bonus);
 
       if (points > score) {
         const err = new Error("INSUFFICIENT_POINTS") as Error & {
@@ -134,6 +141,7 @@ export default async function handler(
         remainingScore: score - points,
         earned,
         deposited: deposited + points,
+        bonus,
       };
     });
 
@@ -156,6 +164,7 @@ export default async function handler(
       bank: {
         earned: result.earned,
         deposited: result.deposited,
+        bonus: result.bonus,
         score: result.remainingScore,
       },
       neighborhood: neighborhoodStanding

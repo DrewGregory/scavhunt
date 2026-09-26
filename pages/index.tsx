@@ -18,61 +18,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { getUserFromReq, publicUser } from "../lib/auth";
 import { getStartTime } from "../lib/time";
-import { prisma } from "../lib/prisma";
-import {
-  ensureRoundClosedIfExpired,
-} from "../lib/tournament";
 import sfBg from "../public/sf_bg.webp";
 import { AuthModal } from "../components/AuthModal";
 import { RegistrationSurveyModal } from "../components/RegistrationSurveyModal";
-import { RoundCountdownBanner } from "../components/RoundCountdownBanner";
-import {
-  TournamentBracket,
-  type BracketMatchup,
-} from "../components/TournamentBracket";
 import CountdownInline from "../components/CountdownInline";
-
-function serializeBracket(
-  rows: Array<{
-    id: string;
-    round: number;
-    isOpen: boolean;
-    slotAId: string;
-    slotBId: string;
-    winnerId: string | null;
-    slotA: { id: string; name: string; emoji: string | null };
-    slotB: { id: string; name: string; emoji: string | null };
-    votes: Array<{ userId: string; neighborhoodId: string }>;
-  }>,
-  userId: string | null,
-): BracketMatchup[] {
-  return rows.map((m) => {
-    const votesA = m.votes.filter((v) => v.neighborhoodId === m.slotAId).length;
-    const votesB = m.votes.filter((v) => v.neighborhoodId === m.slotBId).length;
-    const mine = userId
-      ? m.votes.find((v) => v.userId === userId)?.neighborhoodId ?? null
-      : null;
-    return {
-      id: m.id,
-      round: m.round,
-      isOpen: m.isOpen,
-      slotA: {
-        id: m.slotA.id,
-        name: m.slotA.name,
-        emoji: m.slotA.emoji,
-      },
-      slotB: {
-        id: m.slotB.id,
-        name: m.slotB.name,
-        emoji: m.slotB.emoji,
-      },
-      winnerId: m.winnerId,
-      votesA,
-      votesB,
-      myVoteNeighborhoodId: mine,
-    };
-  });
-}
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -83,32 +32,12 @@ export const getServerSideProps = async (
     process.env.SCAVENGER_HUNT_NAME || "Scavenger Hunt";
   const huntStarted = Date.now() >= startTime.getTime();
 
-  const roundInfo = await ensureRoundClosedIfExpired();
-
-  const rows = await prisma.matchup.findMany({
-    include: {
-      slotA: true,
-      slotB: true,
-      votes: { select: { userId: true, neighborhoodId: true } },
-    },
-    orderBy: [{ round: "asc" }, { id: "asc" }],
-  });
-
-  const currentRound =
-    roundInfo.currentRound ??
-    (rows.some((r) => r.isOpen)
-      ? Math.max(...rows.filter((r) => r.isOpen).map((r) => r.round))
-      : null);
-
   return {
     props: {
       user: user ? publicUser(user) : null,
       startTimeISO: formatISO(startTime),
       scavengerHuntName,
       huntStarted,
-      matchups: serializeBracket(rows, user?.id ?? null),
-      currentRound,
-      currentRoundEndsAt: roundInfo.endsAt,
     },
   };
 };
@@ -118,15 +47,11 @@ export default function HomePage({
   startTimeISO,
   scavengerHuntName,
   huntStarted,
-  matchups,
-  currentRound,
-  currentRoundEndsAt,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "signup">("signup");
   const [surveyOpen, setSurveyOpen] = useState(false);
-  const [surveyRequired, setSurveyRequired] = useState(false);
   const [surveyDone, setSurveyDone] = useState(
     Boolean(user?.surveyCompletedAt),
   );
@@ -137,7 +62,7 @@ export default function HomePage({
 
   useEffect(() => {
     if (user && !user.surveyCompletedAt && router.query.survey === "1") {
-      openSurvey(false);
+      setSurveyOpen(true);
     }
   }, [user, router.query.survey]);
 
@@ -146,19 +71,11 @@ export default function HomePage({
     setAuthOpen(true);
   }
 
-  function openSurvey(required = false) {
-    setSurveyRequired(required);
-    setSurveyOpen(true);
-  }
-
   const surveyModal = user ? (
     <RegistrationSurveyModal
       isOpen={surveyOpen}
-      onClose={() => {
-        setSurveyOpen(false);
-        setSurveyRequired(false);
-      }}
-      required={surveyRequired}
+      onClose={() => setSurveyOpen(false)}
+      required={false}
       onCompleted={() => setSurveyDone(true)}
     />
   ) : null;
@@ -192,7 +109,7 @@ export default function HomePage({
                   {scavengerHuntName}
                 </Heading>
                 <Text color="whiteAlpha.800" fontSize="sm">
-                  Neighborhood tournament · vote before the hunt begins
+                  Scavenger hunt · get ready before it starts
                 </Text>
               </VStack>
 
@@ -208,7 +125,7 @@ export default function HomePage({
                       variant="outline"
                       color="white"
                       borderColor="whiteAlpha.600"
-                      onClick={() => openSurvey(false)}
+                      onClick={() => setSurveyOpen(true)}
                     >
                       {surveyDone ? "Edit survey" : "Player survey"}
                     </Button>
@@ -269,50 +186,13 @@ export default function HomePage({
               <CountdownInline startTime={parseISO(startTimeISO)} />
             </Box>
           </Container>
-
-          <Container maxW="container.xl" pb={10}>
-            <Box
-              bg="whiteAlpha.100"
-              backdropFilter="blur(8px)"
-              borderRadius="2xl"
-              borderWidth="1px"
-              borderColor="whiteAlpha.300"
-              px={{ base: 2, md: 4 }}
-              py={4}
-              boxShadow="xl"
-            >
-              <Box mb={3}>
-                <RoundCountdownBanner
-                  round={currentRound}
-                  endsAtISO={currentRoundEndsAt}
-                  onExpired={() => router.replace(router.asPath)}
-                />
-              </Box>
-              <Text
-                textAlign="center"
-                fontSize="sm"
-                color="whiteAlpha.800"
-                mb={2}
-              >
-                {user ? "Tap a neighborhood to vote" : "Sign up to vote"}
-                {" · "}
-                scroll for later rounds
-              </Text>
-              <TournamentBracket
-                matchups={matchups}
-                loggedIn={Boolean(user)}
-                onNeedAuth={() => openAuth("signup")}
-                onNeedSurvey={() => openSurvey(true)}
-              />
-            </Box>
-          </Container>
         </Box>
 
         <AuthModal
           isOpen={authOpen}
           onClose={() => setAuthOpen(false)}
           initialMode={authMode}
-          onSignupSuccess={() => openSurvey(false)}
+          onSignupSuccess={() => setSurveyOpen(true)}
         />
         {surveyModal}
       </Box>
@@ -381,7 +261,7 @@ export default function HomePage({
                     size="lg"
                     variant="ghost"
                     color="white"
-                    onClick={() => openSurvey(false)}
+                    onClick={() => setSurveyOpen(true)}
                   >
                     {surveyDone ? "Edit survey" : "Player survey"}
                   </Button>
@@ -415,7 +295,7 @@ export default function HomePage({
         isOpen={authOpen}
         onClose={() => setAuthOpen(false)}
         initialMode={authMode}
-        onSignupSuccess={() => openSurvey(false)}
+        onSignupSuccess={() => setSurveyOpen(true)}
       />
       {surveyModal}
     </Box>

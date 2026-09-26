@@ -14,12 +14,15 @@ export async function isTerritoryEnabled(): Promise<boolean> {
 
 /**
  * 404 (not 403) when territory is off so the endpoint does not advertise itself.
- * Returns true if enabled; otherwise has already written the response.
+ * Admins may access when globally off (map preview / testing deposits).
+ * Returns true if allowed; otherwise has already written the response.
  */
 export async function assertTerritoryEnabled(
   res: NextApiResponse,
+  user?: { isAdmin?: boolean } | null,
 ): Promise<boolean> {
   if (await isTerritoryEnabled()) return true;
+  if (user?.isAdmin) return true;
   res.status(404).json({ error: "Not found" });
   return false;
 }

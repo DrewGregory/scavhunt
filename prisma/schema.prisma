@@ -31,28 +31,18 @@ model User {
   team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
   submissions  Submission[]
   favorites    Favorite[]
-  chatMessages ChatMessage[]
-  votes        Vote[]
   deposits     NeighborhoodDeposit[]
 
   @@index([teamId])
 }
 
-/// Singleton hunt window (id = "default"). Separate from tournament round deadlines.
+/// Singleton hunt window (id = "default").
 model HuntSettings {
   id        String   @id @default("default")
   startsAt  DateTime
   endsAt    DateTime
   /// Master switch for the whole territory feature. Off = players see no trace of it.
   territoryEnabled Boolean @default(false)
-  updatedAt DateTime @updatedAt
-}
-
-/// When voting for a given tournament round closes (lazy auto-advance).
-model TournamentRoundSchedule {
-  id        String   @id @default(cuid())
-  round     Int      @unique
-  endsAt    DateTime
   updatedAt DateTime @updatedAt
 }
 
@@ -70,7 +60,6 @@ model Team {
   users        User[]
   submissions  Submission[]
   locations    Location[]
-  chatMessages ChatMessage[]
   deposits     NeighborhoodDeposit[]
 }
 
@@ -78,8 +67,9 @@ model Challenge {
   id         String   @id @default(cuid())
   title      String
   prompt     String
-  lat        Float
-  lng        Float
+  /// Null = unplaced draft; map falls back to SF center for display.
+  lat        Float?
+  lng        Float?
   pts        Int
   numWinners Int
   createdAt  DateTime @default(now())
@@ -136,21 +126,6 @@ model Location {
   @@index([teamId, createdAt])
 }
 
-model ChatMessage {
-  id        String   @id @default(cuid())
-  teamId    String
-  userId    String
-  message   String
-  isAdmin   Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([teamId, createdAt])
-  @@index([createdAt])
-}
-
 model Neighborhood {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -159,7 +134,7 @@ model Neighborhood {
   /// GeoJSON Polygon | MultiPolygon, WGS84 [lng, lat]. Null = no boundary yet.
   /// Derived from MapTopology arcs when topology is imported — do not freehand-edit.
   boundary  Json?
-  /// Participates in the territory map (tournament-only entries stay false).
+  /// Participates in the territory map.
   onMap     Boolean  @default(false)
   /// True only for Treasure Island (Yerba Buena). Mainland zones must be a single ring.
   isIsland  Boolean  @default(false)
@@ -167,11 +142,7 @@ model Neighborhood {
   centerLng Float?
   createdAt DateTime @default(now())
 
-  matchupsAsA Matchup[] @relation("MatchupSlotA")
-  matchupsAsB Matchup[] @relation("MatchupSlotB")
-  wins        Matchup[] @relation("MatchupWinner")
-  votes       Vote[]
-  deposits    NeighborhoodDeposit[]
+  deposits NeighborhoodDeposit[]
 }
 
 /// Singleton shared-edge topology for gap-free SF territory boundaries.
@@ -210,35 +181,4 @@ model NeighborhoodDeposit {
   @@index([teamId])
   @@index([userId])
   @@index([createdAt])
-}
-
-model Matchup {
-  id       String  @id @default(cuid())
-  round    Int
-  slotAId  String
-  slotBId  String
-  winnerId String?
-  isOpen   Boolean @default(true)
-
-  slotA  Neighborhood  @relation("MatchupSlotA", fields: [slotAId], references: [id])
-  slotB  Neighborhood  @relation("MatchupSlotB", fields: [slotBId], references: [id])
-  winner Neighborhood? @relation("MatchupWinner", fields: [winnerId], references: [id])
-  votes  Vote[]
-
-  @@index([round])
-}
-
-model Vote {
-  id             String   @id @default(cuid())
-  userId         String
-  matchupId      String
-  neighborhoodId String
-  createdAt      DateTime @default(now())
-
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  matchup      Matchup      @relation(fields: [matchupId], references: [id], onDelete: Cascade)
-  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, matchupId])
-  @@index([matchupId])
 }

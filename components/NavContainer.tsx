@@ -17,7 +17,6 @@ import {
 } from "@chakra-ui/react";
 import { FiMenu } from "react-icons/fi";
 import {
-  Gi3dMeeple,
   GiTreasureMap,
   GiPodium,
   GiNotebook,
@@ -26,7 +25,6 @@ import {
   GiScrollUnfurled,
 } from "react-icons/gi";
 import { FaVideo } from "react-icons/fa";
-import { IoChatbubbles } from "react-icons/io5";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useSession } from "./useSession";
@@ -47,8 +45,6 @@ const LinkItems: Array<LinkItemProps> = [
   { name: "Challenges", icon: GiNotebook, url: "/challenges" },
   { name: "Leaderboard", icon: GiPodium, url: "/teams" },
   { name: "Map", icon: GiTreasureMap, url: "/map" },
-  { name: "Tournament", icon: Gi3dMeeple, url: "/tournament" },
-  { name: "Chat", icon: IoChatbubbles, url: "/chat" },
   { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" },
   { name: "Admin", icon: GiNotebook, url: "/admin", adminOnly: true },
 ];

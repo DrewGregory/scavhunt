@@ -1,18 +1,17 @@
 # Scavenger Hunt Web Application
 
 A self-hosted scavenger hunt web app (Dokku-friendly). Players sign up with phone/email
-verification (Bird), get assigned to teams, submit challenge videos, vote in a
-neighborhood tournament, and compete on a points leaderboard.
+verification (Bird), get assigned to teams, submit challenge videos, claim neighborhoods
+on a territory map, and compete on a points leaderboard.
 
 ![Screenshot of Map View](image.png)
 
 Features:
 - User accounts with Bird SMS/email OTP (no team-code login)
-- Admin dashboard to manage users, teams, challenges, and the tournament
-- Interactive map of challenges and live team locations
+- Admin dashboard to manage users, teams, challenges, and the map
+- Interactive map of challenges, live team locations, and territory control
 - Video challenge submissions + feed with favorites
 - Team points leaderboard with a CTF-style line graph
-- Neighborhood tournament bracket (collective voting)
 
 Created by @cablej, @aivantg, and @drewgregory.
 
@@ -56,8 +55,8 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-Seed creates 16 placeholder neighborhoods, a round-1 bracket, and optionally
-imports `scripts/example_challenges.csv` if present.
+Seed ensures hunt settings and optionally imports `scripts/sample_challenges.csv`
+if present.
 
 ### 4. Run the app
 
@@ -82,11 +81,6 @@ CMD+SHIFT+P → "Reopen in Container" if you want an isolated install.
 3. Admins listed in `ADMIN_EMAILS` get `isAdmin` on successful auth
 4. Admins assign users to teams from `/admin`
 
-## Tournament
-
-After login, `/` links into the neighborhood bracket. Everyone votes once per
-matchup. Admins close a round from the Admin → Tournament tab to advance winners.
-
 ## Dokku deployment
 
 1. Create/link a Postgres service (Dokku postgres plugin) instead of Mongo
@@ -109,5 +103,5 @@ git push dokku main
 | `pnpm dev` | Next.js on port 80 |
 | `pnpm build` | `prisma generate` + Next build |
 | `pnpm db:migrate` | Prisma migrate (dev) |
-| `pnpm db:seed` | Neighborhoods + bracket (+ optional challenges CSV) |
+| `pnpm db:seed` | Hunt settings (+ optional challenges CSV) |
 | `pnpm db:studio` | Prisma Studio |

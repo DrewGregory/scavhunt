@@ -27,14 +27,15 @@ import { getPosition, type GeoFix } from "./useSession";
 import {
   centroidOf,
   findNeighborhoodAt,
+  SF_CENTER,
   type GeoGeometry,
 } from "../lib/geo";
 
 type ChallengeWithSubmissions = {
   id: string;
   title: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   numWinners: number;
   submissions: Array<{
     teamId: string;
@@ -79,13 +80,16 @@ export default function LeafletMap({
   challenges,
   team,
   territoryEnabled = false,
+  isAdmin = false,
   initialNeighborhoods = [],
   initialBank = null,
 }: {
   locations: Array<LatestTeamLocation>;
   challenges: Array<ChallengeWithSubmissions>;
   team: { id: string; name?: string; emoji?: string; color?: string } | null;
+  /** Global HuntSettings.territoryEnabled — players only see territory when true. */
   territoryEnabled?: boolean;
+  isAdmin?: boolean;
   initialNeighborhoods?: TerritoryNeighborhood[];
   initialBank?: Bank | null;
 }) {
@@ -95,6 +99,11 @@ export default function LeafletMap({
   const [showNeighborhoods, setShowNeighborhoods] = useState(true);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [hideFullChallenges, setHideFullChallenges] = useState(false);
+  /** Admin-only local toggle (does not change HuntSettings). */
+  const [previewTerritory, setPreviewTerritory] = useState(
+    () => territoryEnabled || isAdmin,
+  );
+  const territoryOn = isAdmin ? previewTerritory : territoryEnabled;
   const [neighborhoods, setNeighborhoods] =
     useState<TerritoryNeighborhood[]>(initialNeighborhoods);
   const [bank, setBank] = useState<Bank | null>(initialBank);
@@ -121,7 +130,7 @@ export default function LeafletMap({
   }, []);
 
   const refreshMyLocation = useCallback(async () => {
-    if (!territoryEnabled || !team) return;
+    if (!territoryOn || !team) return;
     setLocating(true);
     try {
       const fix = await getPosition({
@@ -144,12 +153,12 @@ export default function LeafletMap({
     } finally {
       setLocating(false);
     }
-  }, [territoryEnabled, team, toast, applyFix]);
+  }, [territoryOn, team, toast, applyFix]);
 
   // Live GPS via watch only — avoid a parallel getCurrentPosition (that was
   // re-prompting / hanging on deposit). Refresh button still does a one-shot.
   useEffect(() => {
-    if (!territoryEnabled || !team) return;
+    if (!territoryOn || !team) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
@@ -176,7 +185,7 @@ export default function LeafletMap({
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [territoryEnabled, team, applyFix]);
+  }, [territoryOn, team, applyFix]);
 
   const currentNeighborhood = useMemo(() => {
     if (!myFix) return null;
@@ -216,13 +225,19 @@ export default function LeafletMap({
   }, [team, currentNeighborhood, depositAmount]);
 
   const refreshTerritory = useCallback(async () => {
-    if (!territoryEnabled) return;
+    if (!territoryOn) return;
     const res = await fetch("/api/territory");
     if (!res.ok) return;
     const data = await res.json();
     setNeighborhoods(data.neighborhoods ?? []);
     if (data.bank) setBank(data.bank);
-  }, [territoryEnabled]);
+  }, [territoryOn]);
+
+  useEffect(() => {
+    if (territoryOn && neighborhoods.length === 0) {
+      void refreshTerritory();
+    }
+  }, [territoryOn, neighborhoods.length, refreshTerritory]);
 
   const completedFiltered =
     hideCompleted && team
@@ -289,7 +304,7 @@ export default function LeafletMap({
   );
 
   const handleDeposit = async () => {
-    if (!team || !territoryEnabled) return;
+    if (!team || !territoryOn) return;
     if (!currentNeighborhood) {
       toast({
         title: "Move into a neighborhood first",
@@ -355,7 +370,7 @@ export default function LeafletMap({
     }
   };
 
-  const position: LatLngExpression = [37.7749, -122.4194];
+  const position: LatLngExpression = SF_CENTER;
 
   return (
     <Box position="relative" height="100%" width="100%">
@@ -400,7 +415,26 @@ export default function LeafletMap({
                   colorScheme="blue"
                 />
               </HStack>
-              {territoryEnabled && (
+              {isAdmin && (
+                <HStack justifyContent="space-between">
+                  <Box>
+                    <Text fontSize="sm" fontWeight="medium">
+                      Territory mode
+                    </Text>
+                    {!territoryEnabled && (
+                      <Text fontSize="xs" color="purple.600">
+                        Players: off
+                      </Text>
+                    )}
+                  </Box>
+                  <Switch
+                    isChecked={previewTerritory}
+                    onChange={(e) => setPreviewTerritory(e.target.checked)}
+                    colorScheme="purple"
+                  />
+                </HStack>
+              )}
+              {territoryOn && (
                 <HStack justifyContent="space-between">
                   <Text fontSize="sm" fontWeight="medium">
                     Neighborhoods
@@ -445,7 +479,7 @@ export default function LeafletMap({
         ) : null}
       </Box>
 
-      {territoryEnabled && team && (
+      {territoryOn && team && (
         <Box
           position="absolute"
           bottom={4}
@@ -541,7 +575,7 @@ export default function LeafletMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
-        {territoryEnabled &&
+        {territoryOn &&
           showNeighborhoods &&
           neighborhoods.map((n) => {
             if (!n.boundary) return null;
@@ -616,7 +650,7 @@ export default function LeafletMap({
               />
             );
           })}
-        {territoryEnabled &&
+        {territoryOn &&
           showNeighborhoods &&
           neighborhoods.map((n) => {
             const fromBoundary =
@@ -649,7 +683,11 @@ export default function LeafletMap({
           })}
         {showChallenges &&
           filteredChallenges.map((c) => (
-            <Marker icon={BlackMarker} key={c.id} position={[c.lat, c.lng]}>
+            <Marker
+              icon={BlackMarker}
+              key={c.id}
+              position={[c.lat ?? SF_CENTER[0], c.lng ?? SF_CENTER[1]]}
+            >
               <Popup>
                 <Link href={`/challenges?challenge=${c.id}`}>{c.title}</Link>
               </Popup>
@@ -674,7 +712,7 @@ export default function LeafletMap({
               </Popup>
             </Marker>
           ))}
-        {territoryEnabled && myFix && (
+        {territoryOn && myFix && (
           <CircleMarker
             center={[myFix.lat, myFix.lng]}
             radius={8}

@@ -43,8 +43,8 @@ export type SerializedChallenge = {
   id: string;
   title: string;
   prompt: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   pts: number;
   numWinners: number;
 };
@@ -54,13 +54,4 @@ export type SerializedTeam = {
   name: string;
   emoji: string;
   color: string;
-};
-
-export type SerializedChatMessage = {
-  id: string;
-  teamId: string;
-  teamName: string;
-  message: string;
-  isAdmin: boolean;
-  createdAt: string;
 };

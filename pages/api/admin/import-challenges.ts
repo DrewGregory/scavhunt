@@ -35,6 +35,14 @@ export default async function handler(
         const [title, prompt, pts, lat, lng, numWinners] = row;
         if (!title) continue;
 
+        const parseCoord = (v: string | undefined) => {
+          if (v == null || String(v).trim() === "") return null;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
+        const latN = parseCoord(lat);
+        const lngN = parseCoord(lng);
+
         const existing = await prisma.challenge.findFirst({
           where: { title },
         });
@@ -45,8 +53,8 @@ export default async function handler(
             data: {
               title,
               prompt: prompt || " ",
-              lat: Number(lat),
-              lng: Number(lng),
+              lat: latN,
+              lng: lngN,
               pts: Number(pts),
               numWinners: Number(numWinners),
             },
@@ -57,8 +65,8 @@ export default async function handler(
             data: {
               title,
               prompt: prompt || " ",
-              lat: Number(lat),
-              lng: Number(lng),
+              lat: latN,
+              lng: lngN,
               pts: Number(pts),
               numWinners: Number(numWinners),
             },
