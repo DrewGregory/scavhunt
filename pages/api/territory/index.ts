@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireApiUser } from "../../../lib/auth";
+import { requireHuntStartedApi } from "../../../lib/time";
 import { assertTerritoryEnabled } from "../../../lib/territoryGate";
 import { getStandings } from "../../../lib/territory";
 import { getTeamScore } from "../../../lib/scoring";
@@ -19,6 +20,8 @@ export default async function handler(
 
   const user = await requireApiUser(req, res);
   if (!user) return;
+
+  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
 
   if (!(await assertTerritoryEnabled(res, user))) return;
 

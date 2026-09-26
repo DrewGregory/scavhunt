@@ -28,6 +28,7 @@ import { formatDistance } from "date-fns";
 import { useRouter } from "next/router";
 import { prisma } from "../lib/prisma";
 import { publicUser, requireUserSSP } from "../lib/auth";
+import { requireHuntStartedSSP } from "../lib/time";
 import {
   serializeChallenge,
   serializeSubmission,
@@ -49,6 +50,9 @@ export const getServerSideProps = async (
 ) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
+
+  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  if (huntRedirect) return { redirect: huntRedirect };
 
   const user = auth.user!;
   const submissionsRaw = await prisma.submission.findMany({

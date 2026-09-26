@@ -11,10 +11,14 @@ import NavContainer from "../../components/NavContainer";
 import MediaUploadForm from "../../components/MediaUploadForm";
 import { prisma } from "../../lib/prisma";
 import { requireUserSSP } from "../../lib/auth";
+import { requireHuntStartedSSP } from "../../lib/time";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
+
+  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  if (huntRedirect) return { redirect: huntRedirect };
 
   const user = auth.user;
 

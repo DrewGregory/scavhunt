@@ -8,7 +8,7 @@ import { jsonError } from "../../../lib/http";
 import { assertTerritoryEnabled } from "../../../lib/territoryGate";
 import { findNeighborhoodAt } from "../../../lib/geo";
 import { getStandings } from "../../../lib/territory";
-import { getHuntSettings } from "../../../lib/time";
+import { getHuntSettings, requireHuntStartedApi } from "../../../lib/time";
 import { scoreFromParts } from "../../../lib/scoring";
 
 const MAX_ACCURACY_M = 200;
@@ -34,6 +34,8 @@ export default async function handler(
 
   const user = await requireApiUser(req, res);
   if (!user) return;
+
+  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
 
   if (!(await assertTerritoryEnabled(res, user))) return;
 

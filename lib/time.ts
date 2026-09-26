@@ -1,5 +1,6 @@
 import assert from "assert";
 import { isValid, parseISO } from "date-fns";
+import { NextApiResponse } from "next";
 import { prisma } from "./prisma";
 
 function parseEnvDate(value: string | undefined, label: string): Date {
@@ -64,4 +65,33 @@ export async function ensureHuntSettings(): Promise<void> {
   await prisma.huntSettings.create({
     data: { id: "default", startsAt, endsAt },
   });
+}
+
+/** Returns a redirect object if the hunt has not started and the user is not an admin. */
+export async function requireHuntStartedSSP(
+  isAdmin: boolean,
+): Promise<{ destination: string; permanent: false } | null> {
+  if (isAdmin) return null;
+  const startTime = await getStartTime();
+  if (Date.now() < startTime.getTime()) {
+    return { destination: "/", permanent: false };
+  }
+  return null;
+}
+
+/**
+ * Sends a 403 response if the hunt has not started and the user is not an admin.
+ * Returns true if the request should proceed.
+ */
+export async function requireHuntStartedApi(
+  res: NextApiResponse,
+  isAdmin: boolean,
+): Promise<boolean> {
+  if (isAdmin) return true;
+  const startTime = await getStartTime();
+  if (Date.now() < startTime.getTime()) {
+    res.status(403).json({ error: "Hunt has not started yet" });
+    return false;
+  }
+  return true;
 }

@@ -18,6 +18,7 @@ import NavContainer from "../components/NavContainer";
 import { useSession } from "../components/useSession";
 import { prisma } from "../lib/prisma";
 import { requireUserSSP } from "../lib/auth";
+import { requireHuntStartedSSP } from "../lib/time";
 import {
   serializeChallenge,
   serializeSubmission,
@@ -34,6 +35,9 @@ type ChallengeWithSubmissions = SerializedChallenge & {
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
+
+  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  if (huntRedirect) return { redirect: huntRedirect };
 
   const challengesRaw = await prisma.challenge.findMany({
     include: {

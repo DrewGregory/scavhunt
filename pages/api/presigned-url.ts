@@ -3,6 +3,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomBytes } from "crypto";
 import { requireApiUser } from "../../lib/auth";
+import { requireHuntStartedApi } from "../../lib/time";
 
 type PresignedRequestBody = {
   challengeId?: string;
@@ -21,6 +22,8 @@ export default async function handler(
 
   const user = await requireApiUser(req, res);
   if (!user) return;
+
+  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
 
   if (!user.teamId) {
     return res.status(400).json({ error: "You must be on a team to upload" });

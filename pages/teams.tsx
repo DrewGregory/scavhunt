@@ -14,7 +14,7 @@ import { ChevronDownIcon } from "@chakra-ui/icons";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { formatISO, parseISO } from "date-fns";
-import { getEndTime, getStartTime } from "../lib/time";
+import { getEndTime, getStartTime, requireHuntStartedSSP } from "../lib/time";
 import { prisma } from "../lib/prisma";
 import { requireUserSSP } from "../lib/auth";
 import { serializeSubmission, serializeTeam } from "../lib/serialize";
@@ -63,6 +63,9 @@ export const getServerSideProps = async (
 ) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
+
+  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  if (huntRedirect) return { redirect: huntRedirect };
 
   const teamsRaw = await prisma.team.findMany({
     include: {

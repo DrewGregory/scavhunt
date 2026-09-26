@@ -4,6 +4,7 @@ import { z } from "zod";
 import { PutObjectAclCommand, S3Client } from "@aws-sdk/client-s3";
 import { prisma } from "../../lib/prisma";
 import { requireApiUser } from "../../lib/auth";
+import { requireHuntStartedApi } from "../../lib/time";
 import { parseJsonBody } from "../../lib/serialize";
 import type { SubmissionResponseBody } from "../../lib/types";
 
@@ -24,6 +25,8 @@ export default async function handler(
 
   const user = await requireApiUser(req, res);
   if (!user) return;
+
+  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
 
   if (!user.teamId) {
     return respond(400, {

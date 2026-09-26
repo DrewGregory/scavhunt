@@ -2,6 +2,7 @@ import { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
 import { useEffect, useRef } from "react";
 import { prisma } from "../lib/prisma";
 import { requireUserSSP } from "../lib/auth";
+import { requireHuntStartedSSP } from "../lib/time";
 import {
   serializeChallenge,
   serializeSubmission,
@@ -16,6 +17,9 @@ export const getServerSideProps = async (
 ) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
+
+  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  if (huntRedirect) return { redirect: huntRedirect };
 
   const submissionsRaw = await prisma.submission.findMany({
     orderBy: { createdAt: "desc" },

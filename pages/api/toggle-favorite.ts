@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
 import { requireApiUser } from "../../lib/auth";
+import { requireHuntStartedApi } from "../../lib/time";
 import { parseJsonBody } from "../../lib/serialize";
 
 const requestSchema = z.object({
@@ -19,6 +20,8 @@ export default async function handler(
   try {
     const user = await requireApiUser(req, res);
     if (!user) return;
+
+    if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
 
     const body = requestSchema.parse(parseJsonBody(req.body));
     const { submissionId } = body;

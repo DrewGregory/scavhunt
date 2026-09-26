@@ -4,6 +4,7 @@ import { Flex } from "@chakra-ui/react";
 import NavContainer from "../components/NavContainer";
 import { prisma } from "../lib/prisma";
 import { requireUserSSP } from "../lib/auth";
+import { requireHuntStartedSSP } from "../lib/time";
 import {
   serializeChallenge,
   serializeSubmission,
@@ -40,6 +41,9 @@ export const getServerSideProps = async (
 ) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
+
+  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  if (huntRedirect) return { redirect: huntRedirect };
 
   const challengesRaw = await prisma.challenge.findMany({
     include: {
