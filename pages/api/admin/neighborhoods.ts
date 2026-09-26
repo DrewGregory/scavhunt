@@ -80,28 +80,16 @@ export default async function handler(
     }
 
     const { name, emoji, onMap } = parsed.data;
-    try {
-      const created = await prisma.neighborhood.create({
-        data: {
-          name,
-          emoji: emoji?.trim() || null,
-          onMap: onMap ?? false,
-        },
-      });
-      return res
-        .status(201)
-        .json({ neighborhood: serializeNeighborhood(created) });
-    } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === "P2002"
-      ) {
-        return res
-          .status(409)
-          .json({ error: "A neighborhood with that name already exists" });
-      }
-      throw e;
-    }
+    const created = await prisma.neighborhood.create({
+      data: {
+        name,
+        emoji: emoji?.trim() || null,
+        onMap: onMap ?? false,
+      },
+    });
+    return res
+      .status(201)
+      .json({ neighborhood: serializeNeighborhood(created) });
   }
 
   if (req.method === "PATCH") {
@@ -154,31 +142,19 @@ export default async function handler(
       }
     }
 
-    try {
-      const updated = await prisma.neighborhood.update({
-        where: { id },
-        data: {
-          ...(name != null ? { name } : {}),
-          ...(emoji !== undefined ? { emoji: emoji?.trim() || null } : {}),
-          ...(onMap !== undefined ? { onMap } : {}),
-          ...boundaryData,
-        },
-      });
+    const updated = await prisma.neighborhood.update({
+      where: { id },
+      data: {
+        ...(name != null ? { name } : {}),
+        ...(emoji !== undefined ? { emoji: emoji?.trim() || null } : {}),
+        ...(onMap !== undefined ? { onMap } : {}),
+        ...boundaryData,
+      },
+    });
 
-      return res
-        .status(200)
-        .json({ neighborhood: serializeNeighborhood(updated) });
-    } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === "P2002"
-      ) {
-        return res
-          .status(409)
-          .json({ error: "A neighborhood with that name already exists" });
-      }
-      throw e;
-    }
+    return res
+      .status(200)
+      .json({ neighborhood: serializeNeighborhood(updated) });
   }
 
   if (req.method === "DELETE") {
@@ -210,7 +186,7 @@ export default async function handler(
 
     await prisma.neighborhood.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: { deletedAt: new Date(), onMap: false },
     });
     return res.status(200).json({ ok: true });
   }

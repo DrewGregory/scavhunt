@@ -35,6 +35,8 @@ Use the HTTP agent admin API documented in [`docs/agent-api.md`](../../../docs/a
 | Moderate | `POST /api/agent/submissions/:id/accept` or `/reject` |
 | Hunt window / territory | `GET` / `PATCH /api/agent/settings` |
 | Soft-delete deposit | `DELETE /api/agent/deposits/:id` |
+| Telemetry summary | `GET /api/agent/telemetry?view=summary&range=1h\|6h\|24h\|hunt` |
+| Telemetry events | `GET /api/agent/telemetry?view=events` (+ `type`, `level`, `teamId`, `userId`, `attemptId`, `q`, `cursor`, `includeSandbox=1`) |
 
 ## Do not use agents for
 

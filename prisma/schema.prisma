@@ -46,6 +46,8 @@ model HuntSettings {
   endsAt    DateTime
   /// Master switch for the whole territory feature. Off = players see no trace of it.
   territoryEnabled Boolean @default(false)
+  /// Partial UploadConfig overrides (lib/upload/config.ts); null = code defaults.
+  uploadConfig Json?
   updatedAt DateTime @updatedAt
 }
 
@@ -102,6 +104,14 @@ model Submission {
   accepted    Boolean  @default(false)
   rejected    Boolean  @default(false)
   mediaURL    String?
+  posterURL   String?
+  durationSec Float?
+  width       Int?
+  height      Int?
+  /// Bytes actually uploaded (after client compression, if any).
+  sizeBytes         Int?
+  originalSizeBytes Int?
+  compressed        Boolean?
   note        String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -147,7 +157,8 @@ model Location {
 
 model Neighborhood {
   id        String   @id @default(cuid())
-  name      String   @unique
+  /// Display name (duplicates allowed — soft-deleted absorbs must not block renames).
+  name      String
   /// Optional display emoji; falls back to a hash of the name when null.
   emoji     String?
   /// GeoJSON Polygon | MultiPolygon, WGS84 [lng, lat]. Null = no boundary yet.
@@ -202,6 +213,59 @@ model NeighborhoodDeposit {
 
   @@index([neighborhoodId])
   @@index([teamId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+/// Client + server telemetry for uploads and playback (lib/telemetry.ts, lib/serverTelemetry.ts).
+model ClientEvent {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  type          String
+  /// info | warn | error
+  level         String   @default("info")
+  /// client | server
+  source        String   @default("client")
+  userId        String?
+  teamId        String?
+  submissionId  String?
+  challengeId   String?
+  sessionId     String?
+  attemptId     String?
+  durationMs    Int?
+  bytes         Int?
+  originalBytes Int?
+  errorCode     String?
+  errorMessage  String?
+  platform      String?
+  browser       String?
+  userAgent     String?
+  connection    String?
+  sandbox       Boolean  @default(false)
+  meta          Json?
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+  @@index([userId])
+  @@index([attemptId])
+}
+
+/// Admin upload-testing sandbox runs (pages/admin/upload-testing.tsx).
+model UploadTestRun {
+  id            String    @id @default(cuid())
+  userId        String
+  createdAt     DateTime  @default(now())
+  deviceLabel   String?
+  connection    String?
+  fileName      String?
+  settings      Json
+  metrics       Json
+  originalKey   String?
+  compressedKey String?
+  posterKey     String?
+  deletedAt     DateTime?
+
   @@index([userId])
   @@index([createdAt])
   @@index([deletedAt])

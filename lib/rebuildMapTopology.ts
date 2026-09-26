@@ -8,6 +8,7 @@ import type { Topology } from "topojson-specification";
 import type { GeoGeometry, Position } from "./geo";
 import type { ZoneObject } from "./topology";
 import { prisma } from "./prisma";
+import { cleanMergedGeometry } from "./neighborhoodGeom";
 
 function roundCoord(n: number): number {
   return Math.round(n * 1e5) / 1e5;
@@ -101,14 +102,23 @@ export async function rebuildMapTopologyFromDb(): Promise<{
     }
   > = {};
 
+  const boundaryFixes: Array<{ id: string; boundary: GeoGeometry }> = [];
+
   for (const n of neighborhoods) {
     if (!n.boundary || typeof n.boundary !== "object") continue;
     const g = n.boundary as GeoGeometry;
     if (g.type !== "Polygon" && g.type !== "MultiPolygon") continue;
+    // Drop sliver holes / undissolved internal rings left by older combines —
+    // Leaflet strokes every ring, which shows up as borders inside a zone.
+    const cleaned = cleanMergedGeometry(g);
+    const changed = JSON.stringify(cleaned) !== JSON.stringify(g);
+    if (changed) {
+      boundaryFixes.push({ id: n.id, boundary: cleaned });
+    }
     named[n.id] = {
       type: "Feature",
       properties: { id: n.id },
-      geometry: g,
+      geometry: cleaned,
     };
   }
 
@@ -142,21 +152,32 @@ export async function rebuildMapTopologyFromDb(): Promise<{
     });
     const nextVersion = (existing?.version ?? 0) + 1;
 
-    await prisma.mapTopology.upsert({
-      where: { id: "default" },
-      create: {
-        id: "default",
-        arcs: absoluteArcs as unknown as Prisma.InputJsonValue,
-        objects: objects as unknown as Prisma.InputJsonValue,
-        lockedArcs: lockedArcs as unknown as Prisma.InputJsonValue,
-        version: nextVersion,
-      },
-      update: {
-        arcs: absoluteArcs as unknown as Prisma.InputJsonValue,
-        objects: objects as unknown as Prisma.InputJsonValue,
-        lockedArcs: lockedArcs as unknown as Prisma.InputJsonValue,
-        version: nextVersion,
-      },
+    await prisma.$transaction(async (tx) => {
+      for (const fix of boundaryFixes) {
+        await tx.neighborhood.update({
+          where: { id: fix.id },
+          data: {
+            boundary: fix.boundary as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      await tx.mapTopology.upsert({
+        where: { id: "default" },
+        create: {
+          id: "default",
+          arcs: absoluteArcs as unknown as Prisma.InputJsonValue,
+          objects: objects as unknown as Prisma.InputJsonValue,
+          lockedArcs: lockedArcs as unknown as Prisma.InputJsonValue,
+          version: nextVersion,
+        },
+        update: {
+          arcs: absoluteArcs as unknown as Prisma.InputJsonValue,
+          objects: objects as unknown as Prisma.InputJsonValue,
+          lockedArcs: lockedArcs as unknown as Prisma.InputJsonValue,
+          version: nextVersion,
+        },
+      });
     });
 
     return { ok: true, version: nextVersion };

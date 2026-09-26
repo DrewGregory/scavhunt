@@ -396,7 +396,7 @@ export default function TeamAssignBoard() {
           display="grid"
           gridTemplateColumns={{ base: "1fr", md: "1fr 1fr" }}
           gap={3}
-          alignContent="start"
+          alignItems="stretch"
         >
           {teams.map((team) => {
             const members = membersByTeam.get(team.id) ?? [];
@@ -412,9 +412,12 @@ export default function TeamAssignBoard() {
                 borderWidth="1px"
                 borderRadius="md"
                 boxShadow="sm"
-                minH="140px"
+                minH="120px"
+                h="100%"
+                minW={0}
                 display="flex"
                 flexDirection="column"
+                overflow="hidden"
                 outline={dragOver === key ? "2px solid" : undefined}
                 outlineColor={dragOver === key ? "blue.400" : undefined}
                 borderTopWidth="4px"
@@ -427,6 +430,7 @@ export default function TeamAssignBoard() {
                   borderBottomWidth="1px"
                   spacing={2}
                   align="center"
+                  flexShrink={0}
                 >
                   <Input
                     size="sm"
@@ -455,7 +459,14 @@ export default function TeamAssignBoard() {
                     {members.length}
                   </Text>
                 </HStack>
-                <VStack align="stretch" spacing={2} p={2} flex="1">
+                <VStack
+                  align="stretch"
+                  spacing={1}
+                  p={2}
+                  flex="1"
+                  minH={0}
+                  overflowY="auto"
+                >
                   {members.length === 0 ? (
                     <Text fontSize="xs" color="gray.400" textAlign="center" py={4}>
                       Drop players here

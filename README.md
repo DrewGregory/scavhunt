@@ -87,13 +87,70 @@ CMD+SHIFT+P → "Reopen in Container" if you want an isolated install.
 2. Set the env vars from `.env.example` via `dokku config:set`
 3. Push the app; the Docker image runs `prisma migrate deploy` on start
 4. Seed once: `dokku run <app> pnpm db:seed`
-5. Keep nginx `client-max-body-size` high enough for video uploads
+
+Uploads go direct from the browser to Spaces (multipart), so the app nginx
+proxy does not need a raised `client-max-body-size` for media.
 
 ```bash
 dokku postgres:create scavhuntdb
 dokku postgres:link scavhuntdb <app>
 dokku config:set <app> SESSION_SECRET=... ADMIN_EMAILS=... APP_ORIGIN=https://your.host ...
 git push dokku main
+```
+
+## Media storage & CDN
+
+Media lives in DigitalOcean Spaces. New uploads store **CDN** URLs
+(`https://{bucket}.{region}.cdn.digitaloceanspaces.com/...`); `serializeSubmission`
+rewrites any legacy origin URLs to the CDN host at read time.
+
+**Spaces control panel**
+
+1. Enable the CDN for the bucket and set the edge TTL to the maximum.
+2. CORS: allow `GET`, `PUT`, `HEAD` from the app origin, and expose `ETag`
+   (Uppy multipart needs it for part completion).
+3. Lifecycle: expire the `sandbox/` prefix after 14 days (admin Upload testing
+   page writes there). Example:
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-sandbox-14d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "sandbox/" },
+      "Expiration": { "Days": 14 }
+    }
+  ]
+}
+```
+
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket "$SPACES_BUCKET_NAME" \
+  --endpoint-url "https://${SPACES_REGION}.digitaloceanspaces.com" \
+  --lifecycle-configuration file://lifecycle.json
+```
+
+**Upload testing (admin → Upload testing, `/admin/upload-testing`)** runs a
+picked or recorded file through the real production pipeline (compression,
+Uppy multipart, poster) with any `UploadConfig`, plus optional chaos (failed
+signs/PUTs, pause, simulated offline). It shows a part waterfall, concurrency,
+throughput, compression stats and origin-vs-CDN download / first-frame
+benchmarks, and saves runs to `UploadTestRun` (soft delete). Objects go to
+`sandbox/{userId}/{runId}/` only (admin-only on the server; no submissions are
+created) and rely on the lifecycle rule above for cleanup. "Apply as production
+default" stores the config in `HuntSettings.uploadConfig`, which players pick
+up via `/api/upload-config`; "Reset" falls back to `lib/upload/config.ts`.
+Download benchmarks need the bucket CORS to allow `GET` from the app origin.
+
+**Backfill immutable Cache-Control** on existing objects (new uploads already
+set `public, max-age=31536000, immutable`):
+
+```bash
+pnpm exec tsx scripts/backfill-cache-control.ts --dry-run
+pnpm exec tsx scripts/backfill-cache-control.ts
+# optional: --prefix=submissions/
 ```
 
 ## Scripts
@@ -105,3 +162,4 @@ git push dokku main
 | `pnpm db:migrate` | Prisma migrate (dev) |
 | `pnpm db:seed` | Hunt settings (+ optional challenges CSV) |
 | `pnpm db:studio` | Prisma Studio |
+| `pnpm exec tsx scripts/backfill-cache-control.ts` | Set immutable Cache-Control on existing Spaces objects |

@@ -5,17 +5,24 @@ import {
   FormControl,
   FormHelperText,
   FormLabel,
+  HStack,
   Input,
+  Progress,
+  Spinner,
+  Text,
   VStack,
   Box,
 } from "@chakra-ui/react";
-import axios from "axios";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { submissionResponseBodySchema } from "../lib/types";
-import Uppy from '@uppy/core';
 import Dashboard from '@uppy/react/dashboard';
-import Webcam from '@uppy/webcam';
-import AwsS3 from '@uppy/aws-s3';
+import type { Body, Meta, UppyFile } from "@uppy/core";
+import {
+  PRODUCTION_UPLOAD_CONFIG,
+  mergeUploadConfig,
+  type UploadConfig,
+} from "../lib/upload/config";
+import { createUploader, type Uploader } from "../lib/upload/uppyConfig";
 
 import '@uppy/core/css/style.min.css';
 import '@uppy/dashboard/css/style.min.css';
@@ -31,6 +38,46 @@ interface MediaUploadFormProps {
   noteRequired?: boolean;
   showSkipUpload?: boolean;
   skipUploadHelperText?: string;
+}
+
+type FileStatus = "processing" | "uploading" | "uploaded" | "error";
+
+type PreprocessInfo = {
+  mode: "determinate" | "indeterminate";
+  message?: string;
+  value?: number;
+};
+
+const CONFIG_TIMEOUT_MS = 4000;
+const POSTER_WAIT_MS = 10_000;
+
+let configPromise: Promise<UploadConfig> | null = null;
+
+function loadUploadConfig(): Promise<UploadConfig> {
+  if (!configPromise) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CONFIG_TIMEOUT_MS);
+    configPromise = fetch("/api/upload-config", { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => mergeUploadConfig(PRODUCTION_UPLOAD_CONFIG, data?.config))
+      .catch(() => {
+        configPromise = null;
+        return PRODUCTION_UPLOAD_CONFIG;
+      })
+      .finally(() => clearTimeout(timer));
+  }
+  return configPromise;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
+function finiteOrUndefined(n: number | null | undefined): number | undefined {
+  return n != null && Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
 export default function MediaUploadForm({
@@ -51,90 +98,115 @@ export default function MediaUploadForm({
     message: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [uploadComplete, setUploadComplete] = useState<boolean>(false);
+  const [uploader, setUploader] = useState<Uploader | null>(null);
+  const [fileId, setFileId] = useState<string | null>(null);
+  const [fileStatus, setFileStatus] = useState<FileStatus | null>(null);
+  const [mediaURL, setMediaURL] = useState<string>("");
+  const [preprocess, setPreprocess] = useState<PreprocessInfo | null>(null);
+  const posterRef = useRef<Promise<string | null> | null>(null);
   const { challengeId } = formData;
 
-  const [uppy] = useState(() => new Uppy({
-    restrictions: {
-      maxNumberOfFiles: 1, 
-      minNumberOfFiles: 1,
-    }
-  }).use(Webcam, {
-    modes:["video-audio"],
-    mobileNativeCamera: true,
-    showRecordingLength: true,
-    showVideoSourceDropdown: true,
-  }).use(AwsS3, {
-    shouldUseMultipart: true,
-    createMultipartUpload: async (file) => {
-      const res = await axios.post("/api/s3/multipart", {
-        challengeId,
-        filename: file.name,
-        contentType: file.type,
-      });
-      return {
-        uploadId: res.data.uploadId,
-        key: res.data.key,
-      };
-    },
-    listParts: async (file, { uploadId, key }) => {
-      const res = await axios.get("/api/s3/list-parts", {
-        params: { uploadId, key },
-      });
-      return res.data.parts;
-    },
-    signPart: async (file, partData) => {
-      const res = await axios.get("/api/s3/sign-part", {
-        params: {
-          uploadId: partData.uploadId,
-          key: partData.key,
-          partNumber: partData.partNumber,
-        },
-      });
-      return {
-        url: res.data.url,
-        headers: res.data.headers,
-      };
-    },
-    completeMultipartUpload: async (file, { uploadId, key, parts }) => {
-      const res = await axios.post("/api/s3/complete", {
-        uploadId,
-        key,
-        parts,
-      });
-      return {
-        location: res.data.location,
-      };
-    },
-    abortMultipartUpload: async (file, { uploadId, key }) => {
-      await axios.delete("/api/s3/abort", {
-        params: { uploadId, key },
-      });
-    },
-  }));
-
-  // Listen to Uppy events to update state when uploads complete
   useEffect(() => {
-    const handleUploadSuccess = () => {
-      setUploadComplete(true);
-    };
-    
-    const handleFileRemoved = () => {
-      setUploadComplete(false);
-    };
-
-    uppy.on('upload-success', handleUploadSuccess);
-    uppy.on('file-removed', handleFileRemoved);
-    
+    let cancelled = false;
+    let created: Uploader | null = null;
+    void loadUploadConfig().then((config) => {
+      if (cancelled) return;
+      created = createUploader({ config, challengeId, webcam: true });
+      setUploader(created);
+    });
     return () => {
-      uppy.off('upload-success', handleUploadSuccess);
-      uppy.off('file-removed', handleFileRemoved);
+      cancelled = true;
+      created?.destroy();
+      setUploader(null);
     };
-  }, [uppy]);
+  }, [challengeId]);
+
+  useEffect(() => {
+    if (!uploader) return;
+    const { uppy } = uploader;
+
+    const reset = () => {
+      setFileId(null);
+      setFileStatus(null);
+      setMediaURL("");
+      setPreprocess(null);
+      posterRef.current = null;
+    };
+    const handleFileAdded = (file: UppyFile<Meta, Body>) => {
+      reset();
+      setFileId(file.id);
+      setFileStatus("processing");
+      setResult(null);
+    };
+    const handlePreprocessProgress = (
+      file: UppyFile<Meta, Body> | undefined,
+      progress: PreprocessInfo,
+    ) => {
+      if (file) setPreprocess(progress);
+    };
+    const handlePreprocessComplete = () => setPreprocess(null);
+    const handleUploadStart = () => setFileStatus("uploading");
+    const handleUploadSuccess = (
+      file: UppyFile<Meta, Body> | undefined,
+      response: { uploadURL?: string },
+    ) => {
+      if (!file) return;
+      setMediaURL(response.uploadURL ?? file.uploadURL ?? "");
+      setFileStatus("uploaded");
+      posterRef.current = uploader.uploadPoster(file.id);
+    };
+    const handleUploadError = () => setFileStatus("error");
+
+    uppy.on("file-added", handleFileAdded);
+    uppy.on("file-removed", reset);
+    uppy.on("preprocess-progress", handlePreprocessProgress);
+    uppy.on("preprocess-complete", handlePreprocessComplete);
+    uppy.on("upload-start", handleUploadStart);
+    uppy.on("upload-success", handleUploadSuccess);
+    uppy.on("upload-error", handleUploadError);
+
+    return () => {
+      uppy.off("file-added", handleFileAdded);
+      uppy.off("file-removed", reset);
+      uppy.off("preprocess-progress", handlePreprocessProgress);
+      uppy.off("preprocess-complete", handlePreprocessComplete);
+      uppy.off("upload-start", handleUploadStart);
+      uppy.off("upload-success", handleUploadSuccess);
+      uppy.off("upload-error", handleUploadError);
+    };
+  }, [uploader]);
+
+  const mediaFields = async () => {
+    if (!uploader || !fileId || !mediaURL) return {};
+    const processed = uploader.compressor.getResult(fileId);
+    const posterURL = posterRef.current
+      ? await withTimeout(posterRef.current, POSTER_WAIT_MS, null)
+      : null;
+    if (!processed) return posterURL ? { posterURL } : {};
+    const { compress, poster, originalFile } = processed;
+    const info = compress.output;
+    const width = info.width ?? poster?.width;
+    const height = info.height ?? poster?.height;
+    return {
+      ...(posterURL ? { posterURL } : {}),
+      durationSec: finiteOrUndefined(info.durationSec ?? poster?.durationSec),
+      width: width != null ? Math.round(width) : undefined,
+      height: height != null ? Math.round(height) : undefined,
+      sizeBytes: compress.file.size,
+      originalSizeBytes: originalFile.size,
+      compressed: compress.compressed,
+    };
+  };
 
   const handleSubmit = async () => {
     if (!mediaURL && !skipUpload) {
-      setResult({ success: false, message: "Please select a file to upload." });
+      if (!fileId) {
+        setResult({ success: false, message: "Please select a file to upload." });
+      } else if (fileStatus === "error") {
+        setResult({ success: false, message: "Upload failed. Retry the upload, or remove the file and try again." });
+      } else {
+        setResult({ success: false, message: "Upload still in progress. Please wait for it to finish." });
+      }
       return;
     }
 
@@ -146,12 +218,18 @@ export default function MediaUploadForm({
     setIsSubmitting(true);
     setResult(null);
     try {
+      const extra = await mediaFields();
       const res = await fetch(apiEndpoint, {
         method: 'POST',
+        headers: {
+          "Content-Type": "application/json",
+          ...(uploader && fileId ? { "x-attempt-id": uploader.attemptIdFor(fileId) } : {}),
+        },
         body: JSON.stringify({
           mediaURL,
           skipUpload,
           note,
+          ...extra,
           ...formData,
         })
       })
@@ -191,13 +269,12 @@ export default function MediaUploadForm({
     }
   };
 
-  const mediaURL = useMemo(() => {
-    const files = uppy.getFiles();
-    if (files.length === 0) {
-      return "";
-    }
-    return files[0].uploadURL || "";
-  }, [uppy, uploadComplete]);
+  const canSkipCompression =
+    uploader != null &&
+    fileId != null &&
+    preprocess?.mode === "determinate" &&
+    uploader.compressor.isCompressing(fileId);
+
   return (
       <VStack spacing={5} width="100%">
       
@@ -222,13 +299,42 @@ export default function MediaUploadForm({
             ".uppy-Dashboard-Item": { maxWidth: "100%" },
           }}
         >
-          <Dashboard
-            uppy={uppy}
-            proudlyDisplayPoweredByUppy={false}
-            width="100%"
-            doneButtonHandler={null}
-          />
+          {uploader ? (
+            <Dashboard
+              uppy={uploader.uppy}
+              proudlyDisplayPoweredByUppy={false}
+              width="100%"
+              doneButtonHandler={null}
+            />
+          ) : (
+            <HStack justify="center" py={16} borderWidth="1px" borderRadius="md" borderStyle="dashed">
+              <Spinner size="sm" color="gray.500" />
+              <Text fontSize="sm" color="gray.600">Loading uploader…</Text>
+            </HStack>
+          )}
         </Box>
+        {canSkipCompression && preprocess && (
+          <Box mt={3} width="100%">
+            <HStack justify="space-between" mb={1} spacing={3}>
+              <Text fontSize="sm" color="gray.700">
+                {preprocess.message ?? "Compressing"}… {Math.round((preprocess.value ?? 0) * 100)}%
+              </Text>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => fileId && uploader?.compressor.skip(fileId)}
+              >
+                Skip compression
+              </Button>
+            </HStack>
+            <Progress
+              value={(preprocess.value ?? 0) * 100}
+              size="xs"
+              colorScheme="blue"
+              borderRadius="full"
+            />
+          </Box>
+        )}
       </FormControl>
 
       {showSkipUpload && (
@@ -295,4 +401,3 @@ export default function MediaUploadForm({
     </VStack>
   );
 }
-

@@ -3,6 +3,10 @@ import { CompleteMultipartUploadCommand } from "@aws-sdk/client-s3";
 import { requireApiUser } from "../../../lib/auth";
 import { requireHuntStartedApi } from "../../../lib/time";
 import { getSpacesConfig } from "../../../lib/s3";
+import {
+  attemptIdFromHeaders,
+  logServerEvent,
+} from "../../../lib/serverTelemetry";
 
 type Part = {
   PartNumber: number;
@@ -37,6 +41,7 @@ export default async function handler(
     return res.status(500).json({ error: "Storage not configured on server" });
   }
 
+  const attemptId = attemptIdFromHeaders(req.headers);
   try {
     const cmd = new CompleteMultipartUploadCommand({
       Bucket: spaces.bucket,
@@ -49,10 +54,28 @@ export default async function handler(
         })),
       },
     });
+    const started = Date.now();
     await spaces.client.send(cmd);
+    void logServerEvent({
+      type: "multipart_completed",
+      userId: user.id,
+      teamId: user.teamId,
+      attemptId,
+      durationMs: Date.now() - started,
+      meta: { key, parts: parts.length },
+    });
     return res.status(200).json({ location: spaces.publicUrl(key) });
   } catch (err) {
     console.error("s3 multipart complete error", err);
+    void logServerEvent({
+      type: "multipart_completed",
+      level: "error",
+      userId: user.id,
+      teamId: user.teamId,
+      attemptId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+      meta: { key },
+    });
     return res
       .status(500)
       .json({ error: "Failed to complete multipart upload" });

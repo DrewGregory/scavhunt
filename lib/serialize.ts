@@ -3,6 +3,7 @@ import type {
   Submission,
   Team,
 } from "@prisma/client";
+import { toCdnUrl } from "./media";
 import type {
   SerializedChallenge,
   SerializedSubmission,
@@ -42,7 +43,13 @@ export function serializeSubmission(
     challengeId: submission.challengeId,
     accepted: submission.accepted,
     rejected: submission.rejected,
-    mediaURL: submission.mediaURL,
+    mediaURL: toCdnUrl(submission.mediaURL),
+    posterURL: toCdnUrl(submission.posterURL),
+    durationSec: submission.durationSec,
+    width: submission.width,
+    height: submission.height,
+    sizeBytes: submission.sizeBytes,
+    compressed: submission.compressed,
     note: submission.note,
     createdAt: submission.createdAt.toISOString(),
   };

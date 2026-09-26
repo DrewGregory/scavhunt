@@ -25,7 +25,7 @@ import {
   GiRuleBook,
   GiScrollUnfurled,
 } from "react-icons/gi";
-import { FaVideo } from "react-icons/fa";
+import { FaVideo, FaFlask, FaChartLine } from "react-icons/fa";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useSession } from "./useSession";
@@ -48,6 +48,18 @@ const LinkItems: Array<LinkItemProps> = [
   { name: "Map", icon: GiTreasureMap, url: "/map" },
   { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" },
   { name: "Admin", icon: GiNotebook, url: "/admin", adminOnly: true },
+  {
+    name: "Upload testing",
+    icon: FaFlask,
+    url: "/admin/upload-testing",
+    adminOnly: true,
+  },
+  {
+    name: "Telemetry",
+    icon: FaChartLine,
+    url: "/admin/telemetry",
+    adminOnly: true,
+  },
 ];
 
 const SIDEBAR_EXPANDED = "20vw";
