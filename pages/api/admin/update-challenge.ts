@@ -64,30 +64,71 @@ export default async function handler(
     try {
       const body = parseJsonBody(req.body) as Record<string, unknown>;
       const id = (body.id ?? body._id) as string | undefined;
-      const { title, prompt, pts, numWinners } = body;
-      const lat = parseOptionalCoord(body.lat);
-      const lng = parseOptionalCoord(body.lng);
+      if (!id) {
+        return res.status(400).json({ error: "Missing challenge id" });
+      }
 
-      if (
-        !id ||
-        !title ||
-        prompt === undefined ||
-        !pts ||
-        numWinners === undefined
-      ) {
-        return res.status(400).json({ error: "Missing required fields" });
+      const existing = await prisma.challenge.findUnique({ where: { id } });
+      if (!existing) {
+        return res.status(404).json({ error: "Challenge not found" });
+      }
+
+      const data: {
+        title?: string;
+        prompt?: string;
+        pts?: number;
+        lat?: number | null;
+        lng?: number | null;
+        numWinners?: number;
+      } = {};
+
+      if (body.title !== undefined) {
+        const title = String(body.title).trim();
+        if (!title) {
+          return res.status(400).json({ error: "Title cannot be empty" });
+        }
+        data.title = title;
+      }
+      if (body.prompt !== undefined) data.prompt = String(body.prompt);
+      if (body.pts !== undefined) {
+        const pts = Number(body.pts);
+        if (!Number.isFinite(pts) || pts <= 0) {
+          return res.status(400).json({ error: "Invalid points" });
+        }
+        data.pts = pts;
+      }
+      if (body.numWinners !== undefined) {
+        const numWinners = Number(body.numWinners);
+        if (!Number.isFinite(numWinners) || numWinners < 1) {
+          return res.status(400).json({ error: "Invalid winners" });
+        }
+        data.numWinners = numWinners;
+      }
+      if (body.lat !== undefined || body.lng !== undefined) {
+        // lat/lng edited together — missing side becomes null
+        data.lat =
+          body.lat !== undefined
+            ? (parseOptionalCoord(body.lat) ?? null)
+            : existing.lat;
+        data.lng =
+          body.lng !== undefined
+            ? (parseOptionalCoord(body.lng) ?? null)
+            : existing.lng;
+        if (body.lat !== undefined && body.lng === undefined && body.lat === null) {
+          data.lng = null;
+        }
+        if (body.lng !== undefined && body.lat === undefined && body.lng === null) {
+          data.lat = null;
+        }
+      }
+
+      if (Object.keys(data).length === 0) {
+        return res.status(400).json({ error: "No fields to update" });
       }
 
       const challenge = await prisma.challenge.update({
         where: { id },
-        data: {
-          title: String(title),
-          prompt: String(prompt),
-          pts: Number(pts),
-          lat: lat ?? null,
-          lng: lng ?? null,
-          numWinners: Number(numWinners),
-        },
+        data,
       });
 
       return res.status(200).json({

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Box,
@@ -7,16 +7,11 @@ import {
   HStack,
   Input,
   Switch,
-  Table,
-  Tbody,
-  Td,
   Text,
-  Th,
-  Thead,
-  Tr,
   VStack,
   useToast,
 } from "@chakra-ui/react";
+import AdminDataTable, { type AdminColumn } from "./AdminDataTable";
 
 type AdminNeighborhood = {
   id: string;
@@ -200,6 +195,169 @@ export default function AdminMapPanel({
     await loadDeposits();
   };
 
+  const neighborhoodColumns: AdminColumn<AdminNeighborhood>[] = useMemo(
+    () => [
+      {
+        id: "emoji",
+        header: "Emoji",
+        minW: "60px",
+        getSortValue: (n) => n.emoji ?? n.displayEmoji,
+        cell: (n) => (
+          <Input
+            size="sm"
+            defaultValue={n.emoji ?? ""}
+            placeholder={n.displayEmoji}
+            key={`emoji-${n.id}-${n.emoji ?? ""}`}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              const prev = n.emoji ?? "";
+              if (next !== prev) {
+                void patchNeighborhood(n.id, {
+                  emoji: next === "" ? null : next,
+                });
+              }
+            }}
+          />
+        ),
+      },
+      {
+        id: "name",
+        header: "Name",
+        getSortValue: (n) => n.name,
+        cell: (n) => (
+          <Input
+            size="sm"
+            defaultValue={n.name}
+            key={`name-${n.id}-${n.name}`}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              if (next && next !== n.name) {
+                void patchNeighborhood(n.id, { name: next });
+              }
+            }}
+          />
+        ),
+      },
+      {
+        id: "onMap",
+        header: "On map",
+        getSortValue: (n) => n.onMap,
+        cell: (n) => (
+          <Switch
+            isChecked={n.onMap}
+            isDisabled={busyId === n.id}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) =>
+              void patchNeighborhood(n.id, {
+                onMap: e.target.checked,
+              })
+            }
+            colorScheme="blue"
+          />
+        ),
+      },
+      {
+        id: "boundary",
+        header: "Boundary",
+        getSortValue: (n) => (n.hasBoundary ? 1 : 0),
+        cell: (n) => (n.hasBoundary ? "Yes" : "—"),
+      },
+      {
+        id: "select",
+        header: "",
+        disableSort: true,
+        cell: (n) => (
+          <Button
+            size="xs"
+            variant={n.id === selectedId ? "solid" : "outline"}
+            colorScheme={n.id === selectedId ? "blue" : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedId(n.id);
+            }}
+          >
+            {n.id === selectedId ? "Editing" : "Select"}
+          </Button>
+        ),
+      },
+    ],
+    [busyId, selectedId],
+  );
+
+  const depositColumns: AdminColumn<DepositRow>[] = useMemo(
+    () => [
+      {
+        id: "when",
+        header: "When",
+        getSortValue: (d) => d.createdAt,
+        cell: (d) => (
+          <Text fontSize="xs">{new Date(d.createdAt).toLocaleString()}</Text>
+        ),
+        whiteSpace: "nowrap",
+      },
+      {
+        id: "team",
+        header: "Team",
+        getSortValue: (d) => d.team.name,
+        getFilterValue: (d) => `${d.team.emoji} ${d.team.name}`,
+        cell: (d) => (
+          <Text opacity={d.voidedAt ? 0.5 : 1}>
+            {d.team.emoji} {d.team.name}
+          </Text>
+        ),
+      },
+      {
+        id: "neighborhood",
+        header: "Neighborhood",
+        getSortValue: (d) => d.neighborhood.name,
+        cell: (d) => (
+          <Text opacity={d.voidedAt ? 0.5 : 1}>{d.neighborhood.name}</Text>
+        ),
+      },
+      {
+        id: "points",
+        header: "Pts",
+        getSortValue: (d) => d.points,
+        cell: (d) => <Text opacity={d.voidedAt ? 0.5 : 1}>{d.points}</Text>,
+      },
+      {
+        id: "by",
+        header: "By",
+        getSortValue: (d) => d.user.name,
+        getFilterValue: (d) => `${d.user.name} ${d.user.email}`,
+        cell: (d) => (
+          <Text fontSize="xs" opacity={d.voidedAt ? 0.5 : 1}>
+            {d.user.name}
+          </Text>
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        disableSort: true,
+        cell: (d) =>
+          d.voidedAt ? (
+            <Text fontSize="xs" color="gray.500">
+              voided
+            </Text>
+          ) : (
+            <Button
+              size="xs"
+              colorScheme="red"
+              variant="outline"
+              onClick={() => void voidDeposit(d.id)}
+            >
+              Void
+            </Button>
+          ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   return (
     <VStack align="stretch" spacing={6}>
       <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
@@ -235,7 +393,6 @@ export default function AdminMapPanel({
           </HStack>
         </HStack>
 
-        {/* Persistent overview + edit map — never remount on selection */}
         <Box mb={4}>
           <BoundaryEditor
             selectedId={selectedId}
@@ -254,178 +411,62 @@ export default function AdminMapPanel({
           ) : null}
         </Box>
 
-        <Box overflowX="auto">
-          <HStack mb={3} flexWrap="wrap" gap={2} align="flex-end">
-            <Box>
-              <Text fontSize="xs" color="gray.500" mb={1}>
-                New neighborhood
-              </Text>
-              <HStack>
-                <Input
-                  size="sm"
-                  maxW="60px"
-                  placeholder="🗺️"
-                  value={newEmoji}
-                  onChange={(e) => setNewEmoji(e.target.value)}
-                />
-                <Input
-                  size="sm"
-                  placeholder="Name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-                <Button
-                  size="sm"
-                  colorScheme="blue"
-                  isLoading={creating}
-                  onClick={() => void handleCreateNeighborhood()}
-                >
-                  Add
-                </Button>
-              </HStack>
-            </Box>
-          </HStack>
-          <Table size="sm">
-            <Thead>
-              <Tr>
-                <Th>Emoji</Th>
-                <Th>Name</Th>
-                <Th>On map</Th>
-                <Th>Boundary</Th>
-                <Th></Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {neighborhoods.map((n) => (
-                <Tr
-                  key={n.id}
-                  bg={n.id === selectedId ? "blue.50" : undefined}
-                  cursor="pointer"
-                  onClick={() => setSelectedId(n.id)}
-                >
-                  <Td onClick={(e) => e.stopPropagation()} maxW="60px">
-                    <Input
-                      size="sm"
-                      defaultValue={n.emoji ?? ""}
-                      placeholder={n.displayEmoji}
-                      key={`emoji-${n.id}-${n.emoji ?? ""}`}
-                      onBlur={(e) => {
-                        const next = e.target.value.trim();
-                        const prev = n.emoji ?? "";
-                        if (next !== prev) {
-                          void patchNeighborhood(n.id, {
-                            emoji: next === "" ? null : next,
-                          });
-                        }
-                      }}
-                    />
-                  </Td>
-                  <Td onClick={(e) => e.stopPropagation()}>
-                    <Input
-                      size="sm"
-                      defaultValue={n.name}
-                      key={`name-${n.id}-${n.name}`}
-                      onBlur={(e) => {
-                        const next = e.target.value.trim();
-                        if (next && next !== n.name) {
-                          void patchNeighborhood(n.id, { name: next });
-                        }
-                      }}
-                    />
-                  </Td>
-                  <Td onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      isChecked={n.onMap}
-                      isDisabled={busyId === n.id}
-                      onChange={(e) =>
-                        void patchNeighborhood(n.id, {
-                          onMap: e.target.checked,
-                        })
-                      }
-                      colorScheme="blue"
-                    />
-                  </Td>
-                  <Td>{n.hasBoundary ? "Yes" : "—"}</Td>
-                  <Td>
-                    <Button
-                      size="xs"
-                      variant={n.id === selectedId ? "solid" : "outline"}
-                      colorScheme={n.id === selectedId ? "blue" : undefined}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedId(n.id);
-                      }}
-                    >
-                      {n.id === selectedId ? "Editing" : "Select"}
-                    </Button>
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        </Box>
+        <HStack mb={3} flexWrap="wrap" gap={2} align="flex-end">
+          <Box>
+            <Text fontSize="xs" color="gray.500" mb={1}>
+              New neighborhood
+            </Text>
+            <HStack>
+              <Input
+                size="sm"
+                maxW="60px"
+                placeholder="🗺️"
+                value={newEmoji}
+                onChange={(e) => setNewEmoji(e.target.value)}
+              />
+              <Input
+                size="sm"
+                placeholder="Name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+              <Button
+                size="sm"
+                colorScheme="blue"
+                isLoading={creating}
+                onClick={() => void handleCreateNeighborhood()}
+              >
+                Add
+              </Button>
+            </HStack>
+          </Box>
+        </HStack>
+
+        <AdminDataTable
+          tableId="admin-neighborhoods"
+          rows={neighborhoods}
+          columns={neighborhoodColumns}
+          getRowId={(n) => n.id}
+          emptyMessage="No neighborhoods yet"
+          onRowClick={(n) => setSelectedId(n.id)}
+          isRowSelected={(n) => n.id === selectedId}
+        />
       </Box>
 
-      <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
-        <Heading size="md" mb={2}>
+      <Box>
+        <Heading size="md" mb={1}>
           Recent deposits
         </Heading>
         <Text fontSize="sm" color="gray.600" mb={3}>
           Void a bad deposit to return those points to the team&apos;s score.
         </Text>
-        <Box overflowX="auto">
-          <Table size="sm">
-            <Thead>
-              <Tr>
-                <Th>When</Th>
-                <Th>Team</Th>
-                <Th>Neighborhood</Th>
-                <Th>Pts</Th>
-                <Th>By</Th>
-                <Th></Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {deposits.length === 0 ? (
-                <Tr>
-                  <Td colSpan={6}>
-                    <Text color="gray.500">No deposits yet</Text>
-                  </Td>
-                </Tr>
-              ) : (
-                deposits.map((d) => (
-                  <Tr key={d.id} opacity={d.voidedAt ? 0.5 : 1}>
-                    <Td fontSize="xs">
-                      {new Date(d.createdAt).toLocaleString()}
-                    </Td>
-                    <Td>
-                      {d.team.emoji} {d.team.name}
-                    </Td>
-                    <Td>{d.neighborhood.name}</Td>
-                    <Td>{d.points}</Td>
-                    <Td fontSize="xs">{d.user.name}</Td>
-                    <Td>
-                      {d.voidedAt ? (
-                        <Text fontSize="xs" color="gray.500">
-                          voided
-                        </Text>
-                      ) : (
-                        <Button
-                          size="xs"
-                          colorScheme="red"
-                          variant="outline"
-                          onClick={() => void voidDeposit(d.id)}
-                        >
-                          Void
-                        </Button>
-                      )}
-                    </Td>
-                  </Tr>
-                ))
-              )}
-            </Tbody>
-          </Table>
-        </Box>
+        <AdminDataTable
+          tableId="admin-deposits"
+          rows={deposits}
+          columns={depositColumns}
+          getRowId={(d) => d.id}
+          emptyMessage="No deposits yet"
+        />
       </Box>
     </VStack>
   );
