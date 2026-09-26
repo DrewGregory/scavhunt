@@ -28,7 +28,11 @@ export default async function handler(
       let created = 0;
 
       for (const record of records) {
-        const [title, prompt, pts, _full, lat, lng, numWinners] = record;
+        const row =
+          record.length >= 7
+            ? [record[0], record[1], record[2], record[4], record[5], record[6]]
+            : record;
+        const [title, prompt, pts, lat, lng, numWinners] = row;
         if (!title) continue;
 
         const existing = await prisma.challenge.findFirst({

@@ -33,6 +33,20 @@ import NavContainer from "../components/NavContainer";
 import { publicUser, requireAdminSSP } from "../lib/auth";
 import type { SerializedChallenge, SerializedTeam } from "../lib/types";
 import AdminMapPanel from "../components/AdminMapPanel";
+import dynamic from "next/dynamic";
+
+// react-leaflet touches `window` — must load client-side only.
+const ChallengeLocationPicker = dynamic(
+  () => import("../components/ChallengeLocationPicker"),
+  {
+    ssr: false,
+    loading: () => (
+      <Text fontSize="sm" color="gray.500">
+        Loading map picker…
+      </Text>
+    ),
+  },
+);
 
 type AdminUser = {
   id: string;
@@ -165,6 +179,7 @@ export default function AdminPage({
     null,
   );
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [newChallenge, setNewChallenge] = useState<Challenge | null>(null);
 
   const [pendingAdminToggle, setPendingAdminToggle] = useState<{
     user: AdminUser;
@@ -318,6 +333,35 @@ export default function AdminPage({
       alert("Challenge updated successfully!");
     } catch {
       alert("Failed to update challenge");
+    }
+  };
+
+  const handleCreateChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChallenge) return;
+
+    try {
+      const res = await fetch("/api/admin/update-challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newChallenge.title,
+          prompt: newChallenge.prompt,
+          pts: newChallenge.pts,
+          lat: newChallenge.lat,
+          lng: newChallenge.lng,
+          numWinners: newChallenge.numWinners,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to create challenge");
+        return;
+      }
+      setNewChallenge(null);
+      await loadChallenges();
+    } catch {
+      alert("Failed to create challenge");
     }
   };
 
@@ -1041,9 +1085,26 @@ export default function AdminPage({
         {activeTab === "challenges" && (
           <VStack align="stretch" spacing={6}>
             <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
-              <Heading size="md" mb={4}>
-                All Challenges
-              </Heading>
+              <HStack justify="space-between" mb={4} flexWrap="wrap" gap={2}>
+                <Heading size="md">All Challenges</Heading>
+                <Button
+                  size="sm"
+                  colorScheme="green"
+                  onClick={() =>
+                    setNewChallenge({
+                      id: "",
+                      title: "",
+                      prompt: "",
+                      pts: 10,
+                      lat: 37.7749,
+                      lng: -122.4194,
+                      numWinners: 1,
+                    })
+                  }
+                >
+                  New Challenge
+                </Button>
+              </HStack>
               <Box overflowX="auto">
                 <Table size="sm">
                   <Thead>
@@ -1115,7 +1176,9 @@ export default function AdminPage({
                 </Button>
               </HStack>
               <Text mt={2} fontSize="sm" color="gray.600">
-                CSV format: title, prompt, pts, (ignored), lat, lng, numWinners
+                CSV format: title, prompt, pts, lat, lng, numWinners (one
+                challenge per line; a legacy 7-column format with an extra
+                ignored column is still accepted)
               </Text>
             </Box>
           </VStack>
@@ -1553,6 +1616,13 @@ export default function AdminPage({
                       }
                     />
                   </FormControl>
+                  <ChallengeLocationPicker
+                    lat={editingChallenge.lat}
+                    lng={editingChallenge.lng}
+                    onChange={(lat, lng) =>
+                      setEditingChallenge({ ...editingChallenge, lat, lng })
+                    }
+                  />
                   <FormControl isRequired>
                     <FormLabel>Number of Winners</FormLabel>
                     <Input
@@ -1578,6 +1648,123 @@ export default function AdminPage({
                 </Button>
                 <Button type="submit" colorScheme="blue">
                   Save Changes
+                </Button>
+              </ModalFooter>
+            </form>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={!!newChallenge}
+        onClose={() => setNewChallenge(null)}
+        size="lg"
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>New Challenge</ModalHeader>
+          <ModalCloseButton />
+          {newChallenge && (
+            <form onSubmit={handleCreateChallenge}>
+              <ModalBody>
+                <VStack spacing={3} align="stretch">
+                  <FormControl isRequired>
+                    <FormLabel>Title</FormLabel>
+                    <Input
+                      value={newChallenge.title}
+                      onChange={(e) =>
+                        setNewChallenge({
+                          ...newChallenge,
+                          title: e.target.value,
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel>Prompt</FormLabel>
+                    <Textarea
+                      value={newChallenge.prompt}
+                      onChange={(e) =>
+                        setNewChallenge({
+                          ...newChallenge,
+                          prompt: e.target.value,
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Points</FormLabel>
+                    <Input
+                      type="number"
+                      value={newChallenge.pts}
+                      onChange={(e) =>
+                        setNewChallenge({
+                          ...newChallenge,
+                          pts: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Latitude</FormLabel>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={newChallenge.lat}
+                      onChange={(e) =>
+                        setNewChallenge({
+                          ...newChallenge,
+                          lat: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Longitude</FormLabel>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={newChallenge.lng}
+                      onChange={(e) =>
+                        setNewChallenge({
+                          ...newChallenge,
+                          lng: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                  <ChallengeLocationPicker
+                    lat={newChallenge.lat}
+                    lng={newChallenge.lng}
+                    onChange={(lat, lng) =>
+                      setNewChallenge({ ...newChallenge, lat, lng })
+                    }
+                  />
+                  <FormControl isRequired>
+                    <FormLabel>Number of Winners</FormLabel>
+                    <Input
+                      type="number"
+                      value={newChallenge.numWinners}
+                      onChange={(e) =>
+                        setNewChallenge({
+                          ...newChallenge,
+                          numWinners: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </FormControl>
+                </VStack>
+              </ModalBody>
+              <ModalFooter>
+                <Button
+                  variant="ghost"
+                  mr={3}
+                  onClick={() => setNewChallenge(null)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" colorScheme="green">
+                  Create Challenge
                 </Button>
               </ModalFooter>
             </form>

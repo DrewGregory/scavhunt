@@ -5,6 +5,9 @@ services:
       dockerfile: Dockerfile.development
     environment:
       DATABASE_URL: postgresql://scavhunt:scavhunt@db:5432/scavhunt?schema=public
+    env_file:
+      - path: .env.local
+        required: false
     ports:
       - 80:80
     depends_on: [db]
