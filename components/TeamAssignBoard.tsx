@@ -282,6 +282,8 @@ export default function TeamAssignBoard() {
       display="grid"
       gridTemplateColumns={{ base: "1fr", lg: "320px 1fr" }}
       gap={4}
+      alignItems="start"
+      // Left column can stick to the viewport; right side grows and page scrolls.
       height={{ base: "auto", lg: "calc(100dvh - 140px)" }}
       minH="480px"
     >
@@ -292,13 +294,15 @@ export default function TeamAssignBoard() {
         borderWidth="1px"
         display="flex"
         flexDirection="column"
+        h={{ base: "auto", lg: "100%" }}
+        maxH={{ base: "420px", lg: "100%" }}
         minH={0}
         overflow="hidden"
         outline={dragOver === "unassigned" ? "2px solid" : undefined}
         outlineColor={dragOver === "unassigned" ? "blue.400" : undefined}
         {...unassignedHandlers}
       >
-        <Box px={3} py={3} borderBottomWidth="1px" bg="white">
+        <Box px={3} py={3} borderBottomWidth="1px" bg="white" flexShrink={0}>
           <Heading size="sm" mb={2}>
             Unassigned{" "}
             <Text as="span" color="gray.500" fontWeight="normal">
@@ -360,13 +364,15 @@ export default function TeamAssignBoard() {
         </VStack>
       </Box>
 
-      {/* Right: new group + 2-col teams */}
+      {/* Right: new group + teams — grows with content, scrolls as a whole */}
       <Box
         display="flex"
         flexDirection="column"
-        minH={0}
-        overflow="hidden"
         gap={3}
+        h={{ base: "auto", lg: "100%" }}
+        minH={0}
+        overflowY="auto"
+        pr={1}
       >
         <Box
           borderWidth="2px"
@@ -389,14 +395,12 @@ export default function TeamAssignBoard() {
         </Box>
 
         <Box
-          flex="1"
-          minH={0}
-          overflowY="auto"
-          pr={1}
           display="grid"
           gridTemplateColumns={{ base: "1fr", md: "1fr 1fr" }}
           gap={3}
           alignItems="stretch"
+          alignContent="start"
+          pb={4}
         >
           {teams.map((team) => {
             const members = membersByTeam.get(team.id) ?? [];
@@ -413,7 +417,6 @@ export default function TeamAssignBoard() {
                 borderRadius="md"
                 boxShadow="sm"
                 minH="120px"
-                h="100%"
                 minW={0}
                 display="flex"
                 flexDirection="column"
@@ -460,7 +463,12 @@ export default function TeamAssignBoard() {
                 </HStack>
                 <VStack align="stretch" spacing={1} p={2}>
                   {members.length === 0 ? (
-                    <Text fontSize="xs" color="gray.400" textAlign="center" py={4}>
+                    <Text
+                      fontSize="xs"
+                      color="gray.400"
+                      textAlign="center"
+                      py={4}
+                    >
                       Drop players here
                     </Text>
                   ) : (

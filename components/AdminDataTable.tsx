@@ -237,22 +237,24 @@ export default function AdminDataTable<T>({
               Columns
             </MenuButton>
             <MenuList maxH="320px" overflowY="auto" zIndex={20}>
-              {columns.map((col) => (
-                <MenuItem
-                  key={col.id}
-                  closeOnSelect={false}
-                  onClick={(e) => e.preventDefault()}
-                >
-                  <Checkbox
-                    isChecked={visible[col.id] !== false}
-                    onChange={(e) =>
-                      setColumnVisible(col.id, e.target.checked)
-                    }
+              {columns.map((col) => {
+                const isOn = visible[col.id] !== false;
+                return (
+                  <MenuItem
+                    key={col.id}
+                    closeOnSelect={false}
+                    onClick={() => setColumnVisible(col.id, !isOn)}
                   >
-                    {col.header}
-                  </Checkbox>
-                </MenuItem>
-              ))}
+                    <Checkbox
+                      isChecked={isOn}
+                      pointerEvents="none"
+                      tabIndex={-1}
+                    >
+                      {col.header.trim() ? col.header : col.id}
+                    </Checkbox>
+                  </MenuItem>
+                );
+              })}
             </MenuList>
           </Menu>
         </HStack>
