@@ -1,18 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  GeoJSON,
   MapContainer,
   Marker,
   Popup,
-  TileLayer,
   useMap,
   useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Box, HStack, Switch, Text, VStack } from "@chakra-ui/react";
-import { SF_CENTER, type GeoGeometry } from "../lib/geo";
+import {
+  Box,
+  HStack,
+  Select,
+  Switch,
+  Text,
+  VStack,
+} from "@chakra-ui/react";
+import { SF_CENTER, centroidOf, type GeoGeometry } from "../lib/geo";
 import type { DraftChallenge } from "./ChallengeDraftCard";
+import {
+  BasemapSelect,
+  BasemapTileLayer,
+  InvalidateMapSize,
+  PlaceSearchControl,
+  QuietNeighborhoodLayers,
+  isGeoGeometry,
+  usePersistedBasemap,
+} from "./HuntMapShared";
 
 export type DraftMapNeighborhood = {
   id: string;
@@ -47,22 +61,6 @@ const selectedIcon = L.divIcon({
   iconAnchor: [15, 30],
 });
 
-function isGeometry(raw: unknown): raw is GeoGeometry {
-  if (!raw || typeof raw !== "object") return false;
-  const g = raw as { type?: string };
-  return g.type === "Polygon" || g.type === "MultiPolygon";
-}
-
-function InvalidateSize({ deps }: { deps: unknown[] }) {
-  const map = useMap();
-  useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, ...deps]);
-  return null;
-}
-
 function MapEvents({
   selectedId,
   onMapClickPlace,
@@ -84,11 +82,7 @@ function MapEvents({
   return null;
 }
 
-function FlyToSelected({
-  challenge,
-}: {
-  challenge: DraftChallenge | null;
-}) {
+function FlyToSelected({ challenge }: { challenge: DraftChallenge | null }) {
   const map = useMap();
   useEffect(() => {
     if (
@@ -102,6 +96,21 @@ function FlyToSelected({
       });
     }
   }, [map, challenge?.id, challenge?.lat, challenge?.lng]);
+  return null;
+}
+
+function FlyToNeighborhood({
+  target,
+}: {
+  target: { lat: number; lng: number; token: number } | null;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    map.setView([target.lat, target.lng], Math.max(map.getZoom(), 14), {
+      animate: true,
+    });
+  }, [map, target]);
   return null;
 }
 
@@ -125,6 +134,31 @@ export default function ChallengeDraftMap({
   const [showChallenges, setShowChallenges] = useState(true);
   const [showNeighborhoods, setShowNeighborhoods] = useState(true);
   const [hideDisabled, setHideDisabled] = useState(false);
+  const [basemap, setBasemap] = usePersistedBasemap(
+    "scavhunt.mapBasemap.draft",
+  );
+  const [jumpTarget, setJumpTarget] = useState<{
+    lat: number;
+    lng: number;
+    token: number;
+  } | null>(null);
+
+  const jumpOptions = useMemo(() => {
+    return neighborhoods
+      .filter((n) => n.onMap !== false)
+      .map((n) => {
+        let lat: number | null = null;
+        let lng: number | null = null;
+        if (isGeoGeometry(n.boundary)) {
+          const c = centroidOf(n.boundary as GeoGeometry);
+          lat = c.lat;
+          lng = c.lng;
+        }
+        return { id: n.id, name: n.name, lat, lng };
+      })
+      .filter((n) => n.lat != null && n.lng != null)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [neighborhoods]);
 
   const placed = useMemo(
     () =>
@@ -143,16 +177,6 @@ export default function ChallengeDraftMap({
     () => challenges.find((c) => c.id === selectedId) ?? null,
     [challenges, selectedId],
   );
-
-  const neighborhoodFeatures = useMemo(() => {
-    return neighborhoods
-      .filter((n) => n.onMap !== false && isGeometry(n.boundary))
-      .map((n) => ({
-        type: "Feature" as const,
-        properties: { id: n.id, name: n.name, emoji: n.emoji ?? null },
-        geometry: n.boundary as GeoGeometry,
-      }));
-  }, [neighborhoods]);
 
   return (
     <Box
@@ -174,7 +198,7 @@ export default function ChallengeDraftMap({
         gap={2}
         flexShrink={0}
       >
-        <HStack spacing={4} flexWrap="wrap">
+        <HStack spacing={3} flexWrap="wrap" align="center">
           <HStack spacing={2}>
             <Text fontSize="xs" fontWeight="medium">
               Challenges
@@ -208,9 +232,44 @@ export default function ChallengeDraftMap({
               colorScheme="blue"
             />
           </HStack>
+          <HStack spacing={2}>
+            <Text fontSize="xs" fontWeight="medium">
+              Basemap
+            </Text>
+            <BasemapSelect value={basemap} onChange={setBasemap} />
+          </HStack>
+          <HStack spacing={2}>
+            <Text fontSize="xs" fontWeight="medium">
+              Jump
+            </Text>
+            <Select
+              size="xs"
+              w="150px"
+              placeholder="Neighborhood…"
+              onChange={(e) => {
+                const id = e.target.value;
+                const hit = jumpOptions.find((n) => n.id === id);
+                if (hit?.lat != null && hit?.lng != null) {
+                  setJumpTarget({
+                    lat: hit.lat,
+                    lng: hit.lng,
+                    token: Date.now(),
+                  });
+                }
+                e.target.value = "";
+              }}
+            >
+              {jumpOptions.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name}
+                </option>
+              ))}
+            </Select>
+          </HStack>
         </HStack>
         <Text fontSize="xs" color="gray.500">
-          Right-click map to create · click map with a card selected to place
+          Search · right-click create · click nbhd to pan · select card then
+          click map to place
         </Text>
       </HStack>
 
@@ -221,40 +280,26 @@ export default function ChallengeDraftMap({
           style={{ height: "100%", width: "100%", minHeight: 280 }}
           scrollWheelZoom
         >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <BasemapTileLayer basemap={basemap} />
+          <PlaceSearchControl />
           <MapEvents
             selectedId={selectedId}
             onMapClickPlace={onMapClickPlace}
             onContextCreate={onContextCreate}
           />
           <FlyToSelected challenge={selected} />
-          <InvalidateSize
-            deps={[showChallenges, showNeighborhoods, hideDisabled, height]}
+          <FlyToNeighborhood target={jumpTarget} />
+          <InvalidateMapSize
+            deps={[showChallenges, showNeighborhoods, hideDisabled, height, basemap]}
           />
 
-          {showNeighborhoods &&
-            neighborhoodFeatures.map((f) => (
-              <GeoJSON
-                key={f.properties.id}
-                data={f as any}
-                style={() => ({
-                  color: "#4A5568",
-                  weight: 1,
-                  fillColor: "#A0AEC0",
-                  fillOpacity: 0.12,
-                })}
-                onEachFeature={(feature, layer) => {
-                  const name = feature.properties?.name ?? "";
-                  const emoji = feature.properties?.emoji;
-                  layer.bindTooltip(emoji ? `${emoji} ${name}` : name, {
-                    sticky: true,
-                  });
-                }}
-              />
-            ))}
+          {showNeighborhoods && (
+            <QuietNeighborhoodLayers
+              neighborhoods={neighborhoods}
+              fillOpacity={0.1}
+              showTooltip={false}
+            />
+          )}
 
           {showChallenges &&
             placed.map((c) => (
@@ -289,8 +334,9 @@ export default function ChallengeDraftMap({
 
       <VStack align="stretch" spacing={0} px={3} py={2} flexShrink={0}>
         <Text fontSize="xs" color="gray.500">
-          Blue = enabled, gray = disabled, orange = selected. Unplaced
-          challenges only appear in the side lists.
+          Blue = enabled, gray = disabled, orange = selected. Neighborhoods are
+          faint context — click one to zoom. Unplaced challenges stay in the
+          side lists.
         </Text>
       </VStack>
     </Box>
