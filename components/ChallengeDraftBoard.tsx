@@ -12,6 +12,11 @@ import {
   Heading,
   HStack,
   Input,
+  Menu,
+  MenuButton,
+  MenuItemOption,
+  MenuList,
+  MenuOptionGroup,
   Select,
   Text,
   useToast,
@@ -34,7 +39,7 @@ const ChallengeDraftMap = dynamic(() => import("./ChallengeDraftMap"), {
 });
 
 const PANEL_WIDTHS_KEY = "scavhunt.draftBoard.panelWidths";
-const DEFAULT_PANEL_WIDTHS = [22, 26, 52]; // % enabled / disabled / map
+const DEFAULT_PANEL_WIDTHS = [26, 22, 52]; // % disabled / enabled / map
 const MIN_PANEL_PCT = 12;
 
 function loadPanelWidths(): number[] {
@@ -214,6 +219,27 @@ export default function ChallengeDraftBoard() {
       return next;
     });
   }, []);
+
+  /** Resize between (disabled+enabled) group and the map. */
+  const resizeListGroupVsMap = useCallback(
+    (deltaPx: number, containerWidth: number) => {
+      if (containerWidth <= 0) return;
+      const deltaPct = (deltaPx / containerWidth) * 100;
+      setPanelWidths((prev) => {
+        const base = prev ?? DEFAULT_PANEL_WIDTHS;
+        const [a, b, c] = base;
+        const leftSum = a + b;
+        const newLeft = leftSum + deltaPct;
+        const newRight = c - deltaPct;
+        if (newLeft < MIN_PANEL_PCT * 2 || newRight < MIN_PANEL_PCT) {
+          return prev;
+        }
+        const scale = leftSum > 0 ? newLeft / leftSum : 1;
+        return [a * scale, b * scale, newRight];
+      });
+    },
+    [],
+  );
 
   const neighborhoodGeo = useMemo(
     () =>
@@ -660,36 +686,6 @@ export default function ChallengeDraftBoard() {
 
   return (
     <VStack align="stretch" spacing={3} height={{ base: "auto", lg: "calc(100dvh - 160px)" }} minH="480px">
-      <HStack flexWrap="wrap" gap={2} align="flex-end">
-        <Box flex="1" minW="160px">
-          <Text fontSize="xs" color="gray.500" mb={1}>
-            Search
-          </Text>
-          <Input
-            size="sm"
-            placeholder="Title or prompt…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-        </Box>
-        <Box>
-          <Text fontSize="xs" color="gray.500" mb={1}>
-            Sort
-          </Text>
-          <Select
-            size="sm"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            w="160px"
-          >
-            <option value="title">Title</option>
-            <option value="pts">Points</option>
-            <option value="neighborhood">Neighborhood</option>
-            <option value="created">Created</option>
-          </Select>
-        </Box>
-      </HStack>
-
       <Box
         display="flex"
         flexDirection={{ base: "column", lg: "row" }}
@@ -697,30 +693,134 @@ export default function ChallengeDraftBoard() {
         flex={1}
         minH={0}
       >
-        <Box
-          flex={{ base: "none", lg: `${widths[0]} 1 0` }}
+        {/* List columns + their toolbar (not over the map) */}
+        <VStack
+          align="stretch"
+          spacing={2}
+          flex={{ base: "none", lg: `${widths[0]! + widths[1]!} 1 0` }}
           w={{ base: "100%", lg: undefined }}
           minW={{ lg: 0 }}
-          minH={{ base: "280px", lg: 0 }}
-          display="flex"
-          flexDirection="column"
+          minH={{ base: "420px", lg: 0 }}
           overflow="hidden"
         >
-          {renderColumn("Enabled", enabledList, "enabled")}
-        </Box>
-        <PanelResizeHandle onDrag={(d, w) => resizePanels(0, d, w)} />
-        <Box
-          flex={{ base: "none", lg: `${widths[1]} 1 0` }}
-          w={{ base: "100%", lg: undefined }}
-          minW={{ lg: 0 }}
-          minH={{ base: "280px", lg: 0 }}
-          display="flex"
-          flexDirection="column"
-          overflow="hidden"
-        >
-          {renderColumn("Disabled", disabledList, "disabled", true)}
-        </Box>
-        <PanelResizeHandle onDrag={(d, w) => resizePanels(1, d, w)} />
+          <HStack flexWrap="wrap" gap={2} align="flex-end" flexShrink={0}>
+            <Box flex="1" minW="120px">
+              <Text fontSize="xs" color="gray.500" mb={1}>
+                Search
+              </Text>
+              <Input
+                size="sm"
+                placeholder="Title or prompt…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="gray.500" mb={1}>
+                Sort
+              </Text>
+              <Select
+                size="sm"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                w="140px"
+              >
+                <option value="title">Title</option>
+                <option value="pts">Points</option>
+                <option value="neighborhood">Neighborhood</option>
+                <option value="created">Created</option>
+              </Select>
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="gray.500" mb={1}>
+                Filter
+              </Text>
+              <Menu closeOnSelect={false}>
+                <MenuButton
+                  as={Button}
+                  size="sm"
+                  variant="outline"
+                  fontWeight="medium"
+                  minW="120px"
+                >
+                  {neighborhoodFilter.length === 0
+                    ? "All neighborhoods"
+                    : `${neighborhoodFilter.length} selected`}
+                </MenuButton>
+                <MenuList maxH="280px" overflowY="auto" minW="240px" zIndex={20}>
+                  <Box px={3} pt={2} pb={1}>
+                    <Text fontSize="xs" color="gray.500">
+                      Neighborhoods — multi-select
+                    </Text>
+                  </Box>
+                  <MenuOptionGroup
+                    type="checkbox"
+                    value={neighborhoodFilter}
+                    onChange={(v) =>
+                      setNeighborhoodFilter(
+                        typeof v === "string" ? [v] : [...v],
+                      )
+                    }
+                  >
+                    {neighborhoodOptions.map((o) => (
+                      <MenuItemOption key={o.id} value={o.id}>
+                        {o.label}
+                      </MenuItemOption>
+                    ))}
+                  </MenuOptionGroup>
+                  {neighborhoodFilter.length > 0 && (
+                    <Box px={3} py={2} borderTopWidth="1px">
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        w="100%"
+                        onClick={() => setNeighborhoodFilter([])}
+                      >
+                        Clear filter
+                      </Button>
+                    </Box>
+                  )}
+                </MenuList>
+              </Menu>
+            </Box>
+          </HStack>
+
+          <Box
+            display="flex"
+            flexDirection={{ base: "column", lg: "row" }}
+            gap={{ base: 3, lg: 0 }}
+            flex={1}
+            minH={0}
+            overflow="hidden"
+          >
+            <Box
+              flex={{ base: "none", lg: `${widths[0]} 1 0` }}
+              w={{ base: "100%", lg: undefined }}
+              minW={{ lg: 0 }}
+              minH={{ base: "240px", lg: 0 }}
+              display="flex"
+              flexDirection="column"
+              overflow="hidden"
+            >
+              {renderColumn("Disabled", disabledList, "disabled", true)}
+            </Box>
+            <PanelResizeHandle onDrag={(d, w) => resizePanels(0, d, w)} />
+            <Box
+              flex={{ base: "none", lg: `${widths[1]} 1 0` }}
+              w={{ base: "100%", lg: undefined }}
+              minW={{ lg: 0 }}
+              minH={{ base: "240px", lg: 0 }}
+              display="flex"
+              flexDirection="column"
+              overflow="hidden"
+            >
+              {renderColumn("Enabled", enabledList, "enabled")}
+            </Box>
+          </Box>
+        </VStack>
+
+        <PanelResizeHandle onDrag={(d, w) => resizeListGroupVsMap(d, w)} />
+
         <Box
           flex={{ base: "none", lg: `${widths[2]} 1 0` }}
           w={{ base: "100%", lg: undefined }}
@@ -736,9 +836,6 @@ export default function ChallengeDraftBoard() {
             selectedId={selectedId}
             editingId={editingId}
             panToken={panToken}
-            neighborhoodFilter={neighborhoodFilter}
-            neighborhoodOptions={neighborhoodOptions}
-            onNeighborhoodFilterChange={setNeighborhoodFilter}
             onSelect={(id) => {
               setSelectedId(id);
               setPanToken((t) => t + 1);

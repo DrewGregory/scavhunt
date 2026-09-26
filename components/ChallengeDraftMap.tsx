@@ -10,14 +10,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import {
   Box,
-  Button,
   HStack,
   IconButton,
-  Menu,
-  MenuButton,
-  MenuItemOption,
-  MenuList,
-  MenuOptionGroup,
   Switch,
   Text,
   VStack,
@@ -179,9 +173,6 @@ export default function ChallengeDraftMap({
   onMapClickPlace,
   onContextCreate,
   onMarkerMove,
-  neighborhoodFilter = [],
-  neighborhoodOptions = [],
-  onNeighborhoodFilterChange,
   height = "100%",
 }: {
   challenges: DraftChallenge[];
@@ -195,9 +186,6 @@ export default function ChallengeDraftMap({
   onMapClickPlace: (lat: number, lng: number) => void;
   onContextCreate: (lat: number, lng: number) => void;
   onMarkerMove: (id: string, lat: number, lng: number) => void;
-  neighborhoodFilter?: string[];
-  neighborhoodOptions?: Array<{ id: string; label: string }>;
-  onNeighborhoodFilterChange?: (ids: string[]) => void;
   height?: number | string;
 }) {
   const [showChallenges, setShowChallenges] = useState(true);
@@ -250,50 +238,6 @@ export default function ChallengeDraftMap({
           align="flex-start"
           spacing={2}
         >
-          {onNeighborhoodFilterChange && (
-            <Menu closeOnSelect={false}>
-              <MenuButton
-                as={Button}
-                size="sm"
-                bg="white"
-                boxShadow="md"
-                fontWeight="medium"
-              >
-                {neighborhoodFilter.length === 0
-                  ? "Neighborhoods"
-                  : `${neighborhoodFilter.length} neighborhoods`}
-              </MenuButton>
-              <MenuList maxH="280px" overflowY="auto" minW="220px">
-                <MenuOptionGroup
-                  type="checkbox"
-                  value={neighborhoodFilter}
-                  onChange={(v) =>
-                    onNeighborhoodFilterChange(
-                      typeof v === "string" ? [v] : [...v],
-                    )
-                  }
-                >
-                  {neighborhoodOptions.map((o) => (
-                    <MenuItemOption key={o.id} value={o.id}>
-                      {o.label}
-                    </MenuItemOption>
-                  ))}
-                </MenuOptionGroup>
-                {neighborhoodFilter.length > 0 && (
-                  <Box px={3} py={2} borderTopWidth="1px">
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      w="100%"
-                      onClick={() => onNeighborhoodFilterChange([])}
-                    >
-                      Clear filter
-                    </Button>
-                  </Box>
-                )}
-              </MenuList>
-            </Menu>
-          )}
           <Box>
             <IconButton
               aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
