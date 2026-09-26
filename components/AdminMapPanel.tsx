@@ -1,17 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
+  Badge,
   Box,
   Button,
   Heading,
   HStack,
+  IconButton,
   Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
+  Select,
   Switch,
   Text,
+  Tooltip,
   VStack,
+  useDisclosure,
   useToast,
 } from "@chakra-ui/react";
+import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import AdminDataTable, { type AdminColumn } from "./AdminDataTable";
+import EmojiInput from "./EmojiInput";
 
 type AdminNeighborhood = {
   id: string;
@@ -38,6 +52,12 @@ type DepositRow = {
   user: { id: string; name: string; email: string };
 };
 
+type TeamOption = {
+  id: string;
+  name: string;
+  emoji: string;
+};
+
 const NeighborhoodMap = dynamic(() => import("./AdminNeighborhoodMap"), {
   ssr: false,
   loading: () => (
@@ -46,6 +66,356 @@ const NeighborhoodMap = dynamic(() => import("./AdminNeighborhoodMap"), {
     </Text>
   ),
 });
+
+function NeighborhoodDepositsPanel({
+  neighborhood,
+  deposits,
+  teams,
+  onChanged,
+}: {
+  neighborhood: AdminNeighborhood;
+  deposits: DepositRow[];
+  teams: TeamOption[];
+  onChanged: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [editingDepositId, setEditingDepositId] = useState<string | null>(null);
+  const [pointsDraft, setPointsDraft] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [addTeamId, setAddTeamId] = useState("");
+  const [addPoints, setAddPoints] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<DepositRow | null>(null);
+  const deleteConfirm = useDisclosure();
+
+  const live = useMemo(
+    () => deposits.filter((d) => !d.deletedAt),
+    [deposits],
+  );
+
+  const byTeam = useMemo(() => {
+    const map = new Map<
+      string,
+      { team: DepositRow["team"]; deposits: DepositRow[]; total: number }
+    >();
+    for (const d of live) {
+      const prev = map.get(d.team.id);
+      if (prev) {
+        prev.deposits.push(d);
+        prev.total += d.points;
+      } else {
+        map.set(d.team.id, {
+          team: d.team,
+          deposits: [d],
+          total: d.points,
+        });
+      }
+    }
+    return [...map.values()].sort((a, b) => b.total - a.total);
+  }, [live]);
+
+  const startEditDeposit = (d: DepositRow) => {
+    setEditingDepositId(d.id);
+    setPointsDraft((prev) => ({ ...prev, [d.id]: String(d.points) }));
+  };
+
+  const saveDepositPoints = async (d: DepositRow) => {
+    const raw = pointsDraft[d.id] ?? String(d.points);
+    const next = Number(raw);
+    if (!Number.isFinite(next) || next < 1 || !Number.isInteger(next)) {
+      toast({ title: "Points must be a positive integer", status: "warning" });
+      return;
+    }
+    if (next === d.points) {
+      setEditingDepositId(null);
+      return;
+    }
+    setBusyId(d.id);
+    try {
+      const res = await fetch("/api/admin/deposits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", id: d.id, points: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error || "Update failed", status: "error" });
+        return;
+      }
+      toast({ title: "Deposit updated", status: "success" });
+      setEditingDepositId(null);
+      await onChanged();
+    } catch {
+      toast({ title: "Update failed", status: "error" });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const confirmDelete = (d: DepositRow) => {
+    setPendingDelete(d);
+    deleteConfirm.onOpen();
+  };
+
+  const voidDeposit = async () => {
+    if (!pendingDelete) return;
+    setBusyId(pendingDelete.id);
+    try {
+      const res = await fetch("/api/admin/deposits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "void", id: pendingDelete.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error || "Delete failed", status: "error" });
+        return;
+      }
+      toast({ title: "Deposit deleted", status: "success" });
+      deleteConfirm.onClose();
+      setPendingDelete(null);
+      await onChanged();
+    } catch {
+      toast({ title: "Delete failed", status: "error" });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const addDeposit = async () => {
+    if (!addTeamId) {
+      toast({ title: "Pick a team", status: "warning" });
+      return;
+    }
+    const pts = Number(addPoints);
+    if (!Number.isFinite(pts) || pts < 1 || !Number.isInteger(pts)) {
+      toast({ title: "Points must be a positive integer", status: "warning" });
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch("/api/admin/deposits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          teamId: addTeamId,
+          neighborhoodId: neighborhood.id,
+          points: pts,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error || "Create failed", status: "error" });
+        return;
+      }
+      toast({ title: "Deposit added", status: "success" });
+      setAddPoints("");
+      await onChanged();
+    } catch {
+      toast({ title: "Create failed", status: "error" });
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <VStack align="stretch" spacing={3} onClick={(e) => e.stopPropagation()}>
+      {byTeam.length === 0 ? (
+        <Text fontSize="sm" color="gray.500">
+          No live deposits in this neighborhood.
+        </Text>
+      ) : (
+        byTeam.map(({ team, deposits: teamDeposits, total }) => (
+          <Box
+            key={team.id}
+            borderWidth="1px"
+            borderRadius="md"
+            bg="white"
+            p={3}
+          >
+            <HStack justify="space-between" mb={2}>
+              <Text fontWeight="semibold" fontSize="sm">
+                {team.emoji} {team.name}
+              </Text>
+              <Badge colorScheme="purple">{total} pts</Badge>
+            </HStack>
+            <VStack align="stretch" spacing={1.5}>
+              {teamDeposits.map((d) => {
+                const editing = editingDepositId === d.id;
+                return (
+                  <HStack
+                    key={d.id}
+                    justify="space-between"
+                    align="center"
+                    flexWrap="wrap"
+                    gap={2}
+                    py={1}
+                    borderTopWidth="1px"
+                    borderColor="gray.100"
+                  >
+                    <HStack spacing={3} flex="1" minW="180px">
+                      <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">
+                        {new Date(d.createdAt).toLocaleString()}
+                      </Text>
+                      <Text fontSize="xs" color="gray.600">
+                        by {d.user.name}
+                      </Text>
+                    </HStack>
+                    {editing ? (
+                      <HStack>
+                        <Input
+                          size="xs"
+                          type="number"
+                          maxW="72px"
+                          value={pointsDraft[d.id] ?? String(d.points)}
+                          onChange={(e) =>
+                            setPointsDraft((prev) => ({
+                              ...prev,
+                              [d.id]: e.target.value,
+                            }))
+                          }
+                          autoFocus
+                        />
+                        <Button
+                          size="xs"
+                          colorScheme="blue"
+                          isLoading={busyId === d.id}
+                          onClick={() => void saveDepositPoints(d)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setEditingDepositId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </HStack>
+                    ) : (
+                      <HStack>
+                        <Text fontWeight="medium" fontSize="sm" minW="48px">
+                          {d.points} pts
+                        </Text>
+                        <Tooltip label="Edit points">
+                          <IconButton
+                            aria-label="Edit points"
+                            icon={<FiEdit2 />}
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => startEditDeposit(d)}
+                          />
+                        </Tooltip>
+                        <Tooltip label="Delete deposit">
+                          <IconButton
+                            aria-label="Delete deposit"
+                            icon={<FiTrash2 />}
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="red"
+                            onClick={() => confirmDelete(d)}
+                          />
+                        </Tooltip>
+                      </HStack>
+                    )}
+                  </HStack>
+                );
+              })}
+            </VStack>
+          </Box>
+        ))
+      )}
+
+      <Box borderWidth="1px" borderRadius="md" borderStyle="dashed" p={3} bg="white">
+        <Text fontSize="xs" fontWeight="semibold" color="gray.600" mb={2}>
+          Add deposit on behalf of a team
+        </Text>
+        <HStack flexWrap="wrap" gap={2} align="flex-end">
+          <Box minW="160px">
+            <Select
+              size="sm"
+              placeholder="Team…"
+              value={addTeamId}
+              onChange={(e) => setAddTeamId(e.target.value)}
+            >
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.emoji} {t.name}
+                </option>
+              ))}
+            </Select>
+          </Box>
+          <Input
+            size="sm"
+            type="number"
+            placeholder="Points"
+            maxW="100px"
+            value={addPoints}
+            onChange={(e) => setAddPoints(e.target.value)}
+          />
+          <Button
+            size="sm"
+            colorScheme="blue"
+            isLoading={adding}
+            onClick={() => void addDeposit()}
+          >
+            Add
+          </Button>
+        </HStack>
+      </Box>
+
+      <Modal
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => {
+          deleteConfirm.onClose();
+          setPendingDelete(null);
+        }}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Delete deposit?</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {pendingDelete ? (
+              <Text fontSize="sm">
+                Soft-delete{" "}
+                <strong>
+                  {pendingDelete.points} pts
+                </strong>{" "}
+                from{" "}
+                <strong>
+                  {pendingDelete.team.emoji} {pendingDelete.team.name}
+                </strong>{" "}
+                in {neighborhood.displayEmoji} {neighborhood.name}? Those points
+                return to the team&apos;s score.
+              </Text>
+            ) : null}
+          </ModalBody>
+          <ModalFooter gap={2}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                deleteConfirm.onClose();
+                setPendingDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              colorScheme="red"
+              isLoading={busyId === pendingDelete?.id}
+              onClick={() => void voidDeposit()}
+            >
+              Delete deposit
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </VStack>
+  );
+}
 
 export default function AdminMapPanel({
   neighborhoods,
@@ -56,17 +426,42 @@ export default function AdminMapPanel({
 }) {
   const toast = useToast();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingMapId, setEditingMapId] = useState<string | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [deposits, setDeposits] = useState<DepositRow[]>([]);
+  const [teams, setTeams] = useState<TeamOption[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("");
   const [creating, setCreating] = useState(false);
 
+  const [importing, setImporting] = useState<"topology" | "neighborhoods" | null>(
+    null,
+  );
+  const topologyConfirm = useDisclosure();
+  const neighborhoodsConfirm = useDisclosure();
+
   const selectedNeighborhoods = useMemo(
     () => neighborhoods.filter((n) => selectedIds.includes(n.id)),
     [neighborhoods, selectedIds],
   );
+
+  const liveDepositCount = useMemo(
+    () => deposits.filter((d) => !d.deletedAt).length,
+    [deposits],
+  );
+  const canResetNeighborhoods = liveDepositCount === 0;
+
+  const depositsByNeighborhood = useMemo(() => {
+    const map = new Map<string, DepositRow[]>();
+    for (const d of deposits) {
+      const list = map.get(d.neighborhood.id) ?? [];
+      list.push(d);
+      map.set(d.neighborhood.id, list);
+    }
+    return map;
+  }, [deposits]);
 
   const loadDeposits = useCallback(async () => {
     const res = await fetch("/api/admin/deposits?includeDeleted=1");
@@ -75,23 +470,82 @@ export default function AdminMapPanel({
     setDeposits(data.deposits ?? []);
   }, []);
 
+  const loadTeams = useCallback(async () => {
+    const res = await fetch("/api/admin/teams");
+    if (!res.ok) return;
+    const data = await res.json();
+    setTeams(
+      (data.teams ?? []).map((t: TeamOption) => ({
+        id: t.id,
+        name: t.name,
+        emoji: t.emoji,
+      })),
+    );
+  }, []);
+
   useEffect(() => {
     void loadDeposits();
-  }, [loadDeposits]);
+    void loadTeams();
+  }, [loadDeposits, loadTeams]);
 
   useEffect(() => {
     setSelectedIds((prev) =>
       prev.filter((id) => neighborhoods.some((n) => n.id === id)),
     );
-    if (editingId && !neighborhoods.some((n) => n.id === editingId)) {
-      setEditingId(null);
+    if (editingMapId && !neighborhoods.some((n) => n.id === editingMapId)) {
+      setEditingMapId(null);
     }
-  }, [neighborhoods, editingId]);
+    if (editingRowId && !neighborhoods.some((n) => n.id === editingRowId)) {
+      setEditingRowId(null);
+    }
+  }, [neighborhoods, editingMapId, editingRowId]);
 
   const handleEditorSaved = useCallback(async () => {
     await onReload();
     await loadDeposits();
   }, [onReload, loadDeposits]);
+
+  const runReset = async (action: "reset-topology" | "reset-neighborhoods") => {
+    setImporting(action === "reset-topology" ? "topology" : "neighborhoods");
+    try {
+      const res = await fetch("/api/admin/import-boundaries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error || "Reset failed", status: "error" });
+        return;
+      }
+      if (action === "reset-topology") {
+        toast({
+          title: `Topology reset (${data.matched} neighborhoods matched by name)`,
+          description:
+            data.missingInDb > 0
+              ? `${data.missingInDb} seed zone(s) had no matching neighborhood`
+              : undefined,
+          status: "success",
+        });
+      } else {
+        toast({
+          title: `Neighborhoods reset (${data.zoneCount} zones)`,
+          status: "success",
+        });
+      }
+      setSelectedIds([]);
+      setEditingMapId(null);
+      setEditingRowId(null);
+      await onReload();
+      await loadDeposits();
+    } catch {
+      toast({ title: "Reset failed", status: "error" });
+    } finally {
+      setImporting(null);
+      topologyConfirm.onClose();
+      neighborhoodsConfirm.onClose();
+    }
+  };
 
   const patchNeighborhood = async (
     id: string,
@@ -150,86 +604,105 @@ export default function AdminMapPanel({
     }
   };
 
-  const voidDeposit = async (id: string) => {
-    if (!confirm("Soft-delete this deposit? Points return to the team's score.")) {
-      return;
-    }
-    const res = await fetch("/api/admin/deposits", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "void", id }),
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-    const data = await res.json();
-    if (!res.ok) {
-      toast({ title: data.error || "Delete failed", status: "error" });
-      return;
-    }
-    toast({ title: "Deposit soft-deleted", status: "success" });
-    await loadDeposits();
   };
 
   const neighborhoodColumns: AdminColumn<AdminNeighborhood>[] = useMemo(
     () => [
       {
         id: "emoji",
-        header: "Emoji",
-        minW: "60px",
+        header: "",
+        minW: "44px",
+        maxW: "52px",
         getSortValue: (n) => n.emoji ?? n.displayEmoji,
-        cell: (n) => (
-          <Input
-            size="sm"
-            defaultValue={n.emoji ?? ""}
-            placeholder={n.displayEmoji}
-            key={`emoji-${n.id}-${n.emoji ?? ""}`}
-            onClick={(e) => e.stopPropagation()}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              const prev = n.emoji ?? "";
-              if (next !== prev) {
-                void patchNeighborhood(n.id, {
-                  emoji: next === "" ? null : next,
-                });
-              }
-            }}
-          />
-        ),
+        cell: (n) => {
+          const editing = editingRowId === n.id;
+          if (!editing) {
+            return (
+              <Text fontSize="lg" lineHeight={1} textAlign="center">
+                {n.emoji ?? n.displayEmoji}
+              </Text>
+            );
+          }
+          return (
+            <Box onClick={(e) => e.stopPropagation()}>
+              <EmojiInput
+                size="xs"
+                value={n.emoji ?? ""}
+                placeholder={n.displayEmoji}
+                onChange={(next) => {
+                  const normalized = next.trim() === "" ? null : next;
+                  if (normalized !== (n.emoji ?? null)) {
+                    void patchNeighborhood(n.id, { emoji: normalized });
+                  }
+                }}
+              />
+            </Box>
+          );
+        },
       },
       {
         id: "name",
         header: "Name",
         getSortValue: (n) => n.name,
-        cell: (n) => (
-          <Input
-            size="sm"
-            defaultValue={n.name}
-            key={`name-${n.id}-${n.name}`}
-            onClick={(e) => e.stopPropagation()}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              if (next && next !== n.name) {
-                void patchNeighborhood(n.id, { name: next });
-              }
-            }}
-          />
-        ),
+        cell: (n) => {
+          const editing = editingRowId === n.id;
+          if (!editing) {
+            return (
+              <Text fontWeight="medium" fontSize="sm">
+                {n.name}
+              </Text>
+            );
+          }
+          return (
+            <Input
+              size="sm"
+              defaultValue={n.name}
+              key={`name-${n.id}-${n.name}`}
+              onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                if (next && next !== n.name) {
+                  void patchNeighborhood(n.id, { name: next });
+                }
+              }}
+            />
+          );
+        },
       },
       {
         id: "onMap",
         header: "On map",
         getSortValue: (n) => n.onMap,
-        cell: (n) => (
-          <Switch
-            isChecked={n.onMap}
-            isDisabled={busyId === n.id}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) =>
-              void patchNeighborhood(n.id, {
-                onMap: e.target.checked,
-              })
-            }
-            colorScheme="blue"
-          />
-        ),
+        cell: (n) => {
+          const editing = editingRowId === n.id;
+          if (!editing) {
+            return n.onMap ? (
+              <Badge colorScheme="green">Yes</Badge>
+            ) : (
+              <Badge colorScheme="gray">No</Badge>
+            );
+          }
+          return (
+            <Switch
+              isChecked={n.onMap}
+              isDisabled={busyId === n.id}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) =>
+                void patchNeighborhood(n.id, {
+                  onMap: e.target.checked,
+                })
+              }
+              colorScheme="blue"
+            />
+          );
+        },
       },
       {
         id: "boundary",
@@ -238,110 +711,79 @@ export default function AdminMapPanel({
         cell: (n) => (n.hasBoundary ? "Yes" : "—"),
       },
       {
-        id: "select",
-        header: "",
-        disableSort: true,
+        id: "deposits",
+        header: "Deposits",
+        getSortValue: (n) => {
+          const list = depositsByNeighborhood.get(n.id) ?? [];
+          return list
+            .filter((d) => !d.deletedAt)
+            .reduce((s, d) => s + d.points, 0);
+        },
+        getFilterValue: (n) => {
+          const list = (depositsByNeighborhood.get(n.id) ?? []).filter(
+            (d) => !d.deletedAt,
+          );
+          return list
+            .map((d) => `${d.team.name} ${d.points}`)
+            .join(" ");
+        },
         cell: (n) => {
-          const selected = selectedIds.includes(n.id);
-          const editing = editingId === n.id;
+          const list = (depositsByNeighborhood.get(n.id) ?? []).filter(
+            (d) => !d.deletedAt,
+          );
+          if (list.length === 0) {
+            return (
+              <Text fontSize="sm" color="gray.400">
+                —
+              </Text>
+            );
+          }
+          const pts = list.reduce((s, d) => s + d.points, 0);
           return (
-            <Button
-              size="xs"
-              variant={selected ? "solid" : "outline"}
-              colorScheme={editing ? "orange" : selected ? "blue" : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (e.shiftKey) {
-                  setSelectedIds((prev) =>
-                    prev.includes(n.id)
-                      ? prev.filter((id) => id !== n.id)
-                      : [...prev, n.id],
-                  );
-                } else {
-                  setSelectedIds([n.id]);
-                  setEditingId(null);
-                }
-              }}
-            >
-              {editing ? "Editing" : selected ? "Selected" : "Select"}
-            </Button>
+            <Text fontSize="sm">
+              {pts} pts · {list.length}
+            </Text>
           );
         },
-      },
-    ],
-    [busyId, selectedIds, editingId],
-  );
-
-  const depositColumns: AdminColumn<DepositRow>[] = useMemo(
-    () => [
-      {
-        id: "when",
-        header: "When",
-        getSortValue: (d) => d.createdAt,
-        cell: (d) => (
-          <Text fontSize="xs">{new Date(d.createdAt).toLocaleString()}</Text>
-        ),
-        whiteSpace: "nowrap",
-      },
-      {
-        id: "team",
-        header: "Team",
-        getSortValue: (d) => d.team.name,
-        getFilterValue: (d) => `${d.team.emoji} ${d.team.name}`,
-        cell: (d) => (
-          <Text opacity={d.deletedAt ? 0.5 : 1}>
-            {d.team.emoji} {d.team.name}
-          </Text>
-        ),
-      },
-      {
-        id: "neighborhood",
-        header: "Neighborhood",
-        getSortValue: (d) => d.neighborhood.name,
-        cell: (d) => (
-          <Text opacity={d.deletedAt ? 0.5 : 1}>{d.neighborhood.name}</Text>
-        ),
-      },
-      {
-        id: "points",
-        header: "Pts",
-        getSortValue: (d) => d.points,
-        cell: (d) => <Text opacity={d.deletedAt ? 0.5 : 1}>{d.points}</Text>,
-      },
-      {
-        id: "by",
-        header: "By",
-        getSortValue: (d) => d.user.name,
-        getFilterValue: (d) => `${d.user.name} ${d.user.email}`,
-        cell: (d) => (
-          <Text fontSize="xs" opacity={d.deletedAt ? 0.5 : 1}>
-            {d.user.name}
-          </Text>
-        ),
       },
       {
         id: "actions",
         header: "",
         disableSort: true,
-        cell: (d) =>
-          d.deletedAt ? (
-            <Text fontSize="xs" color="gray.500">
-              deleted
-            </Text>
-          ) : (
-            <Button
-              size="xs"
-              colorScheme="red"
-              variant="outline"
-              onClick={() => void voidDeposit(d.id)}
-            >
-              Delete
-            </Button>
-          ),
+        cell: (n) => {
+          const editing = editingRowId === n.id;
+          return (
+            <HStack spacing={1} onClick={(e) => e.stopPropagation()}>
+              {editing ? (
+                <Button
+                  size="xs"
+                  colorScheme="blue"
+                  onClick={() => setEditingRowId(null)}
+                >
+                  Done
+                </Button>
+              ) : (
+                <Tooltip label="Edit neighborhood">
+                  <IconButton
+                    aria-label="Edit"
+                    icon={<FiEdit2 />}
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedIds([n.id]);
+                      setEditingMapId(null);
+                      setEditingRowId(n.id);
+                    }}
+                  />
+                </Tooltip>
+              )}
+            </HStack>
+          );
+        },
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [busyId, editingRowId, depositsByNeighborhood],
   );
 
   return (
@@ -351,19 +793,45 @@ export default function AdminMapPanel({
           <Box>
             <Heading size="md">Map neighborhoods</Heading>
             <Text fontSize="sm" color="gray.600">
-              Click a neighborhood (or pick from the list) to select it. Use
-              Edit to drag shared borders — neighbors update with it. Shoreline
-              edges stay locked.
+              Click a row to select it on the map. Expand to manage deposits.
+              Pencil edits name / emoji / on-map. Use Edit borders on the map
+              for shared edges.
             </Text>
           </Box>
+          <HStack flexWrap="wrap" gap={2}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={topologyConfirm.onOpen}
+              isLoading={importing === "topology"}
+              isDisabled={importing !== null}
+            >
+              Reset topology
+            </Button>
+            <Button
+              size="sm"
+              colorScheme="red"
+              variant="outline"
+              onClick={neighborhoodsConfirm.onOpen}
+              isLoading={importing === "neighborhoods"}
+              isDisabled={!canResetNeighborhoods || importing !== null}
+              title={
+                canResetNeighborhoods
+                  ? "Full curated neighborhood reseed"
+                  : `Blocked: ${liveDepositCount} live deposit(s)`
+              }
+            >
+              Reset neighborhoods
+            </Button>
+          </HStack>
         </HStack>
 
         <Box mb={4}>
           <NeighborhoodMap
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}
-            editingId={editingId}
-            onEditingIdChange={setEditingId}
+            editingId={editingMapId}
+            onEditingIdChange={setEditingMapId}
             deposits={deposits}
             onSaved={handleEditorSaved}
           />
@@ -380,7 +848,7 @@ export default function AdminMapPanel({
                 variant="ghost"
                 onClick={() => {
                   setSelectedIds([]);
-                  setEditingId(null);
+                  setEditingMapId(null);
                 }}
               >
                 Clear selection
@@ -395,12 +863,11 @@ export default function AdminMapPanel({
               New neighborhood
             </Text>
             <HStack>
-              <Input
-                size="sm"
-                maxW="60px"
-                placeholder="🗺️"
+              <EmojiInput
+                size="xs"
                 value={newEmoji}
-                onChange={(e) => setNewEmoji(e.target.value)}
+                placeholder="🗺️"
+                onChange={setNewEmoji}
               />
               <Input
                 size="sm"
@@ -428,27 +895,98 @@ export default function AdminMapPanel({
           emptyMessage="No neighborhoods yet"
           onRowClick={(n) => {
             setSelectedIds([n.id]);
-            setEditingId(null);
+            setEditingMapId(null);
           }}
           isRowSelected={(n) => selectedIds.includes(n.id)}
+          isRowExpanded={(n) => expandedIds.has(n.id)}
+          onToggleExpand={(n) => toggleExpand(n.id)}
+          renderExpandedRow={(n) => (
+            <NeighborhoodDepositsPanel
+              neighborhood={n}
+              deposits={depositsByNeighborhood.get(n.id) ?? []}
+              teams={teams}
+              onChanged={loadDeposits}
+            />
+          )}
         />
       </Box>
 
-      <Box>
-        <Heading size="md" mb={1}>
-          Recent deposits
-        </Heading>
-        <Text fontSize="sm" color="gray.600" mb={3}>
-          Void a bad deposit to return those points to the team&apos;s score.
-        </Text>
-        <AdminDataTable
-          tableId="admin-deposits"
-          rows={deposits}
-          columns={depositColumns}
-          getRowId={(d) => d.id}
-          emptyMessage="No deposits yet"
-        />
-      </Box>
+      <Modal
+        isOpen={topologyConfirm.isOpen}
+        onClose={topologyConfirm.onClose}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Reset topology?</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text fontSize="sm">
+              Re-applies the bundled gap-free shared-border topology to
+              neighborhoods that <strong>already exist</strong>, matched by{" "}
+              <strong>unique name</strong>. Updates their boundaries and the
+              shared-arc map. Does <strong>not</strong> create, delete, or
+              demote neighborhoods, and does not touch deposits.
+            </Text>
+            <Text fontSize="sm" mt={3} color="gray.600">
+              Custom / renamed / split zones that aren&apos;t in the seed will
+              keep their rows but may drop out of shared-edge editing until you
+              rebuild.
+            </Text>
+          </ModalBody>
+          <ModalFooter gap={2}>
+            <Button variant="ghost" onClick={topologyConfirm.onClose}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="blue"
+              isLoading={importing === "topology"}
+              onClick={() => void runReset("reset-topology")}
+            >
+              Reset topology
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={neighborhoodsConfirm.isOpen}
+        onClose={neighborhoodsConfirm.onClose}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Reset neighborhoods?</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text fontSize="sm">
+              Fully reseeds the curated gap-free SF neighborhood set: creates
+              missing zones, updates matching names, and demotes other on-map
+              neighborhoods.{" "}
+              <strong>Only allowed when there are no live deposits.</strong>
+            </Text>
+            {!canResetNeighborhoods && (
+              <Text fontSize="sm" mt={3} color="red.500">
+                Currently blocked — {liveDepositCount} live deposit(s). Soft-delete
+                them first.
+              </Text>
+            )}
+          </ModalBody>
+          <ModalFooter gap={2}>
+            <Button variant="ghost" onClick={neighborhoodsConfirm.onClose}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="red"
+              isDisabled={!canResetNeighborhoods}
+              isLoading={importing === "neighborhoods"}
+              onClick={() => void runReset("reset-neighborhoods")}
+            >
+              Reset neighborhoods
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </VStack>
   );
 }

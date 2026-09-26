@@ -25,8 +25,17 @@ type DatasfSeed = {
 };
 
 const bodySchema = z.object({
-  /** curated = gap-free shared-arc map; datasf = all 117 raw DataSF polygons */
-  source: z.enum(["curated", "datasf"]).default("curated"),
+  /**
+   * reset-topology: re-apply curated shared-arc topology + boundaries for
+   * neighborhoods that already exist (matched by unique name). No create/demote.
+   * reset-neighborhoods: full curated reseed (create/update/demote). Requires
+   * zero live deposits.
+   * source: legacy alias — curated → reset-neighborhoods, datasf still supported.
+   */
+  action: z
+    .enum(["reset-topology", "reset-neighborhoods"])
+    .optional(),
+  source: z.enum(["curated", "datasf"]).optional(),
 });
 
 async function demoteNotIn(importedNames: Set<string>): Promise<number> {
@@ -74,6 +83,7 @@ async function upsertNeighborhood(item: {
         centerLng,
         onMap: true,
         isIsland,
+        deletedAt: null,
       },
     });
     return { id: existing.id, created: false };
@@ -90,6 +100,104 @@ async function upsertNeighborhood(item: {
     },
   });
   return { id: row.id, created: true };
+}
+
+async function resetTopologyByName(res: NextApiResponse) {
+  const raw = topologySeed as unknown as TopologyFile;
+  if (!raw?.arcs?.length || !raw?.neighborhoods?.length) {
+    return res.status(500).json({
+      error:
+        "Bundled topology is empty — run pnpm topology:build and redeploy",
+    });
+  }
+
+  const existing = await prisma.neighborhood.findMany({
+    where: { deletedAt: null },
+    select: { id: true, name: true },
+  });
+  const byName = new Map(existing.map((n) => [n.name, n.id]));
+
+  let matched = 0;
+  let missing = 0;
+  const errors: string[] = [];
+  const objectsById: Record<string, ZoneObject> = {};
+
+  for (const item of raw.neighborhoods) {
+    if (!item?.name || !item.geometry) {
+      missing += 1;
+      continue;
+    }
+    const id = byName.get(item.name);
+    if (!id) {
+      missing += 1;
+      continue;
+    }
+
+    const zoneObj = raw.objectsByName[item.name];
+    const fromArcs = zoneObj
+      ? geometryFromObject(raw.arcs, zoneObj)
+      : item.geometry;
+
+    const validated = validateBoundary(fromArcs);
+    if (!validated.ok) {
+      errors.push(`${item.name}: ${validated.error}`);
+      continue;
+    }
+
+    await prisma.neighborhood.update({
+      where: { id },
+      data: {
+        boundary: validated.geometry as unknown as Prisma.InputJsonValue,
+        centerLat: item.centerLat ?? validated.center.lat,
+        centerLng: item.centerLng ?? validated.center.lng,
+        isIsland: Boolean(item.isIsland),
+        onMap: true,
+      },
+    });
+
+    matched += 1;
+    if (zoneObj) {
+      objectsById[id] = {
+        ...zoneObj,
+        isIsland: Boolean(item.isIsland),
+      };
+    }
+  }
+
+  if (matched === 0) {
+    return res.status(400).json({
+      error:
+        "No existing neighborhoods matched curated seed names — add/reset neighborhoods first",
+    });
+  }
+
+  await prisma.mapTopology.upsert({
+    where: { id: "default" },
+    create: {
+      id: "default",
+      transform: (raw.transform ?? Prisma.DbNull) as Prisma.InputJsonValue,
+      arcs: raw.arcs as unknown as Prisma.InputJsonValue,
+      objects: objectsById as unknown as Prisma.InputJsonValue,
+      lockedArcs: raw.lockedArcs as unknown as Prisma.InputJsonValue,
+      version: 1,
+    },
+    update: {
+      transform: (raw.transform ?? Prisma.DbNull) as Prisma.InputJsonValue,
+      arcs: raw.arcs as unknown as Prisma.InputJsonValue,
+      objects: objectsById as unknown as Prisma.InputJsonValue,
+      lockedArcs: raw.lockedArcs as unknown as Prisma.InputJsonValue,
+      version: { increment: 1 },
+    },
+  });
+
+  return res.status(200).json({
+    ok: true,
+    action: "reset-topology",
+    matched,
+    missingInDb: missing,
+    arcCount: raw.arcs.length,
+    errors: errors.slice(0, 20),
+  });
 }
 
 async function importCurated(res: NextApiResponse) {
@@ -265,6 +373,21 @@ export default async function handler(
   const parsed = bodySchema.safeParse(parseJsonBody(req.body) ?? {});
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid body" });
+  }
+
+  if (parsed.data.action === "reset-topology") {
+    return resetTopologyByName(res);
+  }
+
+  // reset-neighborhoods (default) or legacy source=curated|datasf
+  const liveDeposits = await prisma.neighborhoodDeposit.count({
+    where: { deletedAt: null },
+  });
+  if (liveDeposits > 0) {
+    return res.status(409).json({
+      error: `Can't reset neighborhoods while ${liveDeposits} live deposit(s) exist. Soft-delete them first.`,
+      liveDeposits,
+    });
   }
 
   if (parsed.data.source === "datasf") {

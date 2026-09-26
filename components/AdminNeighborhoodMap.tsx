@@ -2,11 +2,17 @@
  * Admin map for neighborhoods: multi-select, context menu (edit / rename /
  * split / combine), basemap + label overlays. Separate from the draft-board map.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import {
   MapContainer,
   Marker,
-  Polyline,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -229,36 +235,99 @@ function MapClickClear({
   return null;
 }
 
+/**
+ * Vertical cut for Split: Leaflet-managed marker + line so drag isn't interrupted
+ * by React re-renders (controlled Marker position was resetting each move).
+ */
 function SplitCutLine({
   cutLng,
   minLat,
   maxLat,
+  minLng,
+  maxLng,
   onChange,
 }: {
   cutLng: number;
   minLat: number;
   maxLat: number;
+  minLng: number;
+  maxLng: number;
   onChange: (lng: number) => void;
 }) {
-  return (
-    <Marker
-      position={[(minLat + maxLat) / 2, cutLng]}
-      draggable
-      zIndexOffset={3000}
-      eventHandlers={{
-        drag: (e) => {
-          const ll = (e.target as L.Marker).getLatLng();
-          onChange(ll.lng);
-        },
-      }}
-      icon={L.divIcon({
+  const map = useMap();
+  const cutLngRef = useRef(cutLng);
+  const onChangeRef = useRef(onChange);
+  const boundsRef = useRef({ minLat, maxLat, minLng, maxLng });
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  useEffect(() => {
+    boundsRef.current = { minLat, maxLat, minLng, maxLng };
+  }, [minLat, maxLat, minLng, maxLng]);
+
+  useEffect(() => {
+    const pad = 0.002;
+    const clamp = (lng: number) => {
+      const b = boundsRef.current;
+      return Math.min(b.maxLng - 1e-5, Math.max(b.minLng + 1e-5, lng));
+    };
+
+    const line = L.polyline(
+      [
+        [minLat - pad, cutLng],
+        [maxLat + pad, cutLng],
+      ],
+      { color: "#805AD5", weight: 3, dashArray: "6 4", interactive: false },
+    ).addTo(map);
+
+    const marker = L.marker([(minLat + maxLat) / 2, cutLng], {
+      draggable: true,
+      zIndexOffset: 3000,
+      autoPan: false,
+      icon: L.divIcon({
         className: "split-cut-handle",
         html: `<div style="width:18px;height:18px;border-radius:50%;background:#805AD5;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:ew-resize"></div>`,
         iconSize: [18, 18],
         iconAnchor: [9, 9],
-      })}
-    />
-  );
+      }),
+    }).addTo(map);
+
+    const syncLine = (lng: number) => {
+      const b = boundsRef.current;
+      line.setLatLngs([
+        [b.minLat - pad, lng],
+        [b.maxLat + pad, lng],
+      ]);
+    };
+
+    marker.on("drag", () => {
+      const lng = clamp(marker.getLatLng().lng);
+      cutLngRef.current = lng;
+      syncLine(lng);
+    });
+
+    marker.on("dragend", () => {
+      const lng = clamp(marker.getLatLng().lng);
+      cutLngRef.current = lng;
+      const midLat =
+        (boundsRef.current.minLat + boundsRef.current.maxLat) / 2;
+      marker.setLatLng([midLat, lng]);
+      syncLine(lng);
+      onChangeRef.current(lng);
+    });
+
+    cutLngRef.current = cutLng;
+
+    return () => {
+      map.removeLayer(marker);
+      map.removeLayer(line);
+    };
+    // Mount once per split session — initial cutLng/bounds only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+
+  return null;
 }
 
 function MapController({
@@ -270,6 +339,7 @@ function MapController({
   onContextMenu,
   onTopologyChange,
   setSaving,
+  mapFittedRef,
 }: {
   topology: TopologyPayload;
   selectedIds: string[];
@@ -279,6 +349,8 @@ function MapController({
   onContextMenu: (id: string, x: number, y: number) => void;
   onTopologyChange: (next: TopologyPayload) => void;
   setSaving: (v: boolean) => void;
+  /** Survives quiet topology reloads so we don't re-fit the whole city. */
+  mapFittedRef: MutableRefObject<boolean>;
 }) {
   const map = useMap();
   const toast = useToast();
@@ -290,7 +362,6 @@ function MapController({
   const objectsRef = useRef(topology.objects);
   const lockedRef = useRef(topology.lockedArcs);
   const savingRef = useRef(false);
-  const fittedRef = useRef(false);
   const selectedIdsRef = useRef(selectedIds);
   const editingIdRef = useRef(editingId);
   const onSelectClickRef = useRef(onSelectClick);
@@ -321,7 +392,7 @@ function MapController({
   }, [onTopologyChange]);
 
   useEffect(() => {
-    if (fittedRef.current) return;
+    if (mapFittedRef.current) return;
     const withBounds = topology.neighborhoods.filter((n) => isGeom(n.boundary));
     if (!withBounds.length) return;
     try {
@@ -331,11 +402,11 @@ function MapController({
         ),
       );
       map.fitBounds(group.getBounds(), { padding: [24, 24], maxZoom: 13 });
-      fittedRef.current = true;
+      mapFittedRef.current = true;
     } catch {
       /* ignore */
     }
-  }, [map, topology.neighborhoods]);
+  }, [map, topology.neighborhoods, mapFittedRef]);
 
   // Fills + selection styling
   useEffect(() => {
@@ -566,14 +637,18 @@ export default function AdminNeighborhoodMap({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const onSavedRef = useRef(onSaved);
+  const mapFittedRef = useRef(false);
 
   useEffect(() => {
     onSavedRef.current = onSaved;
   }, [onSaved]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMissing(false);
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    const quiet = opts?.quiet === true;
+    if (!quiet) {
+      setLoading(true);
+      setMissing(false);
+    }
     try {
       const res = await fetch("/api/admin/topology");
       if (res.status === 404) {
@@ -618,12 +693,14 @@ export default function AdminNeighborhoodMap({
         return;
       }
       if (!res.ok) {
-        toast({ title: "Failed to load map topology", status: "error" });
+        if (!quiet) {
+          toast({ title: "Failed to load map topology", status: "error" });
+        }
         return;
       }
       setTopology(await res.json());
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [toast]);
 
@@ -731,7 +808,7 @@ export default function AdminNeighborhoodMap({
       });
       setSplitCutLng(null);
       setSplitBounds(null);
-      await load();
+      await load({ quiet: true });
       await onSavedRef.current?.();
       onSelectedIdsChange([singleId, data.childId].filter(Boolean));
     } catch {
@@ -761,7 +838,7 @@ export default function AdminNeighborhoodMap({
         title: `Combined into ${data.survivorName}`,
         status: "success",
       });
-      await load();
+      await load({ quiet: true });
       await onSavedRef.current?.();
       onSelectedIdsChange([data.survivorId]);
       onEditingIdChange(null);
@@ -798,7 +875,7 @@ export default function AdminNeighborhoodMap({
         return;
       }
       setRenameOpen(false);
-      await load();
+      await load({ quiet: true });
       await onSavedRef.current?.();
     } catch {
       toast({ title: "Rename failed", status: "error" });
@@ -957,6 +1034,7 @@ export default function AdminNeighborhoodMap({
             onContextMenu={onContextMenu}
             onTopologyChange={handleTopologyChange}
             setSaving={setSaving}
+            mapFittedRef={mapFittedRef}
           />
 
           {showDeposits &&
@@ -975,31 +1053,15 @@ export default function AdminNeighborhoodMap({
             ))}
 
           {splitCutLng != null && splitBounds && (
-            <>
-              <Polyline
-                positions={[
-                  [splitBounds.minLat - 0.002, splitCutLng],
-                  [splitBounds.maxLat + 0.002, splitCutLng],
-                ]}
-                pathOptions={{
-                  color: "#805AD5",
-                  weight: 3,
-                  dashArray: "6 4",
-                }}
-              />
-              <SplitCutLine
-                cutLng={splitCutLng}
-                minLat={splitBounds.minLat}
-                maxLat={splitBounds.maxLat}
-                onChange={(lng) => {
-                  const clamped = Math.min(
-                    splitBounds.maxLng - 1e-5,
-                    Math.max(splitBounds.minLng + 1e-5, lng),
-                  );
-                  setSplitCutLng(clamped);
-                }}
-              />
-            </>
+            <SplitCutLine
+              key={`split-${singleId ?? "x"}-${splitBounds.minLng.toFixed(5)}`}
+              cutLng={splitCutLng}
+              minLat={splitBounds.minLat}
+              maxLat={splitBounds.maxLat}
+              minLng={splitBounds.minLng}
+              maxLng={splitBounds.maxLng}
+              onChange={setSplitCutLng}
+            />
           )}
         </MapContainer>
 
