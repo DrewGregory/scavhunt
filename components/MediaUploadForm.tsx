@@ -77,6 +77,12 @@ export default function MediaUploadForm({
         key: res.data.key,
       };
     },
+    listParts: async (file, { uploadId, key }) => {
+      const res = await axios.get("/api/s3/list-parts", {
+        params: { uploadId, key },
+      });
+      return res.data.parts;
+    },
     signPart: async (file, partData) => {
       const res = await axios.get("/api/s3/sign-part", {
         params: {
