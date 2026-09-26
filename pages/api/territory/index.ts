@@ -20,7 +20,7 @@ export default async function handler(
   const user = await requireApiUser(req, res);
   if (!user) return;
 
-  if (!(await assertTerritoryEnabled(res))) return;
+  if (!(await assertTerritoryEnabled(res, user))) return;
 
   const [standings, teams] = await Promise.all([
     getStandings({ onMapOnly: true, includeBoundary: true }),

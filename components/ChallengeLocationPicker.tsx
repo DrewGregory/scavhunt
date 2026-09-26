@@ -9,8 +9,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Box, Text } from "@chakra-ui/react";
-
-const SF_CENTER: [number, number] = [37.7749, -122.4194];
+import { SF_CENTER } from "../lib/geo";
 
 // Draggable default pin so the picker doesn't depend on external image assets.
 const pinIcon = L.divIcon({
@@ -34,9 +33,16 @@ function ClickHandler({
 }
 
 // Re-centers the map whenever the coordinates change (e.g. typed manually).
-function Recententer({ lat, lng }: { lat: number; lng: number }) {
+function Recententer({
+  lat,
+  lng,
+}: {
+  lat: number | null;
+  lng: number | null;
+}) {
   const map = useMap();
-  const valid = Number.isFinite(lat) && Number.isFinite(lng);
+  const valid =
+    lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
   useEffect(() => {
     if (valid) map.setView([lat, lng], map.getZoom(), { animate: true });
   }, [map, lat, lng, valid]);
@@ -60,12 +66,13 @@ export default function ChallengeLocationPicker({
   onChange,
   height = 260,
 }: {
-  lat: number;
-  lng: number;
-  onChange: (lat: number, lng: number) => void;
+  lat: number | null;
+  lng: number | null;
+  onChange: (lat: number | null, lng: number | null) => void;
   height?: number;
 }) {
-  const valid = Number.isFinite(lat) && Number.isFinite(lng);
+  const valid =
+    lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
   const center = useMemo<[number, number]>(
     () => (valid ? [lat, lng] : SF_CENTER),
     [lat, lng, valid],
@@ -101,7 +108,8 @@ export default function ChallengeLocationPicker({
         )}
       </MapContainer>
       <Text fontSize="xs" color="gray.500" px={2} py={1}>
-        Click the map or drag the pin to set the location
+        Optional — leave empty to draft without a location (shows at SF center
+        on the map). Click or drag to place.
       </Text>
     </Box>
   );

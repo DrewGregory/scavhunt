@@ -159,8 +159,8 @@ export function AuthModal({
           <Stack spacing={4}>
             <Text fontSize="sm" color="gray.600">
               {mode === "signup"
-                ? "Create an account to cast your neighborhood votes."
-                : "Log in to vote in the tournament."}
+                ? "Create an account to join the scavenger hunt."
+                : "Log in to continue the hunt."}
             </Text>
 
             {step === "identify" ? (

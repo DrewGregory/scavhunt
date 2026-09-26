@@ -64,7 +64,7 @@ type AdminUser = {
   timeCommitment: string | null;
   surveyCompletedAt: string | null;
   team: { id: string; name: string; emoji: string } | null;
-  _count: { submissions: number; votes: number };
+  _count: { submissions: number };
 };
 
 type AdminTeam = SerializedTeam & {
@@ -84,26 +84,12 @@ type AdminTeam = SerializedTeam & {
 
 type Challenge = SerializedChallenge;
 
-type TournamentMatchup = {
-  id: string;
-  round: number;
-  isOpen: boolean;
-  winnerId: string | null;
-  slotA: { id: string; name: string };
-  slotB: { id: string; name: string };
-  winner: { id: string; name: string } | null;
-  votes: Record<string, number>;
-  totalVotes: number;
-};
-
 type AdminNeighborhood = {
   id: string;
   name: string;
   emoji: string | null;
   displayEmoji: string;
   createdAt: string;
-  matchupCount: number;
-  voteCount: number;
   onMap?: boolean;
   hasBoundary?: boolean;
   boundary?: unknown;
@@ -111,7 +97,7 @@ type AdminNeighborhood = {
   centerLng?: number | null;
 };
 
-type Tab = "users" | "teams" | "challenges" | "tournament" | "map" | "settings";
+type Tab = "users" | "teams" | "challenges" | "map" | "settings";
 
 function toLocalInputValue(iso: string | null | undefined) {
   if (!iso) return "";
@@ -146,22 +132,7 @@ export default function AdminPage({
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [teams, setTeams] = useState<AdminTeam[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [matchups, setMatchups] = useState<TournamentMatchup[]>([]);
-  const [currentRound, setCurrentRound] = useState<number | null>(null);
-  const [tournamentComplete, setTournamentComplete] = useState(false);
-  const [tournamentNotStarted, setTournamentNotStarted] = useState(false);
-  const [roundSchedule, setRoundSchedule] = useState<Record<number, string>>(
-    {},
-  );
-  const [currentRoundEndsAt, setCurrentRoundEndsAt] = useState<string | null>(
-    null,
-  );
-  const [scheduleDrafts, setScheduleDrafts] = useState<Record<number, string>>(
-    {},
-  );
   const [neighborhoods, setNeighborhoods] = useState<AdminNeighborhood[]>([]);
-  const [newNeighborhoodName, setNewNeighborhoodName] = useState("");
-  const [newNeighborhoodEmoji, setNewNeighborhoodEmoji] = useState("");
   const [huntStartsAt, setHuntStartsAt] = useState("");
   const [huntEndsAt, setHuntEndsAt] = useState("");
   const [territoryEnabled, setTerritoryEnabled] = useState(false);
@@ -208,24 +179,6 @@ export default function AdminPage({
     setChallenges(data.challenges);
   };
 
-  const loadTournament = async () => {
-    const res = await fetch("/api/admin/tournament");
-    if (!res.ok) throw new Error("Failed to load tournament");
-    const data = await res.json();
-    setMatchups(data.matchups);
-    setCurrentRound(data.currentRound);
-    setTournamentComplete(Boolean(data.complete));
-    setTournamentNotStarted(Boolean(data.notStarted));
-    const schedule = (data.schedule || {}) as Record<number, string>;
-    setRoundSchedule(schedule);
-    setCurrentRoundEndsAt(data.currentRoundEndsAt ?? null);
-    const drafts: Record<number, string> = {};
-    for (const [k, v] of Object.entries(schedule)) {
-      drafts[Number(k)] = toLocalInputValue(v);
-    }
-    setScheduleDrafts(drafts);
-  };
-
   const loadNeighborhoods = async () => {
     const res = await fetch("/api/admin/neighborhoods");
     if (!res.ok) throw new Error("Failed to load neighborhoods");
@@ -249,7 +202,6 @@ export default function AdminPage({
           loadUsers(),
           loadTeams(),
           loadChallenges(),
-          loadTournament(),
           loadNeighborhoods(),
           loadSettings(),
         ]);
@@ -420,122 +372,6 @@ export default function AdminPage({
     }
   };
 
-  const handleCloseRound = async () => {
-    if (
-      !confirm(
-        "Close the current round and advance winners to the next round?",
-      )
-    ) {
-      return;
-    }
-    try {
-      const res = await fetch("/api/admin/tournament", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "closeRound" }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Failed to close round");
-        return;
-      }
-      await loadTournament();
-      if (data.complete) {
-        alert("Tournament complete!");
-      } else {
-        alert("Round closed. Next round matchups created.");
-      }
-    } catch {
-      alert("Failed to close round");
-    }
-  };
-
-  const handleInitializeTournament = async () => {
-    if (
-      !confirm(
-        "Ensure the 16 common SF neighborhoods exist and open Round 1 for those 16?",
-      )
-    ) {
-      return;
-    }
-    try {
-      const res = await fetch("/api/admin/tournament", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "initialize" }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Failed to initialize tournament");
-        return;
-      }
-      await loadTournament();
-      alert(
-        `Bracket ready — ${data.entrants ?? "?"} entrants, ${data.created} matchups` +
-          (data.byes ? `, ${data.byes} bye(s)` : ""),
-      );
-    } catch {
-      alert("Failed to initialize tournament");
-    }
-  };
-
-
-  const handleResetTournament = async () => {
-    if (
-      !confirm(
-        "Reset the tournament? This deletes all matchups and votes but keeps neighborhood names/emojis. You can re-initialize afterward.",
-      )
-    ) {
-      return;
-    }
-    try {
-      const res = await fetch("/api/admin/tournament", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset" }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Failed to reset tournament");
-        return;
-      }
-      await Promise.all([loadTournament(), loadNeighborhoods()]);
-      alert(
-        `Reset complete — removed ${data.deletedMatchups ?? 0} matchups and ${data.deletedVotes ?? 0} votes.`,
-      );
-    } catch {
-      alert("Failed to reset tournament");
-    }
-  };
-
-  const handleCreateNeighborhood = async () => {
-    const name = newNeighborhoodName.trim();
-    if (!name) {
-      alert("Name is required");
-      return;
-    }
-    try {
-      const res = await fetch("/api/admin/neighborhoods", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          emoji: newNeighborhoodEmoji.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Failed to create neighborhood");
-        return;
-      }
-      setNewNeighborhoodName("");
-      setNewNeighborhoodEmoji("");
-      await loadNeighborhoods();
-    } catch {
-      alert("Failed to create neighborhood");
-    }
-  };
-
   const handleUpdateNeighborhood = async (
     id: string,
     patch: { name?: string; emoji?: string | null },
@@ -558,56 +394,6 @@ export default function AdminPage({
     } catch {
       alert("Failed to update neighborhood");
       return false;
-    }
-  };
-
-  const handleDeleteNeighborhood = async (id: string, name: string) => {
-    if (!confirm(`Delete neighborhood “${name}”?`)) return;
-    try {
-      const res = await fetch(`/api/admin/neighborhoods?id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(data.error || "Failed to delete neighborhood");
-        return;
-      }
-      await loadNeighborhoods();
-    } catch {
-      alert("Failed to delete neighborhood");
-    }
-  };
-
-  const handleSaveRoundSchedule = async (round: number) => {
-    const local = scheduleDrafts[round];
-    if (!local) {
-      alert("Pick an end date/time first");
-      return;
-    }
-    const endsAt = new Date(local);
-    if (Number.isNaN(endsAt.getTime())) {
-      alert("Invalid datetime");
-      return;
-    }
-    try {
-      const res = await fetch("/api/admin/tournament", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "setRoundSchedule",
-          round,
-          endsAt: endsAt.toISOString(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Failed to save schedule");
-        return;
-      }
-      await loadTournament();
-      alert(`Round ${round} will auto-close at ${endsAt.toLocaleString()}`);
-    } catch {
-      alert("Failed to save schedule");
     }
   };
 
@@ -680,24 +466,40 @@ export default function AdminPage({
     }
   };
 
-  const handleTeamColorChange = async (teamId: string, color: string) => {
+  const handleTeamPatch = async (
+    teamId: string,
+    patch: { name?: string; emoji?: string; color?: string },
+  ) => {
     try {
       const res = await fetch("/api/admin/teams", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: teamId, color }),
+        body: JSON.stringify({ id: teamId, ...patch }),
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to update color");
+        alert(data.error || "Failed to update team");
         return;
       }
       setTeams((prev) =>
-        prev.map((t) => (t.id === teamId ? { ...t, color } : t)),
+        prev.map((t) =>
+          t.id === teamId
+            ? {
+                ...t,
+                ...(patch.name != null ? { name: patch.name } : {}),
+                ...(patch.emoji != null ? { emoji: patch.emoji } : {}),
+                ...(patch.color != null ? { color: patch.color } : {}),
+              }
+            : t,
+        ),
       );
     } catch {
-      alert("Failed to update color");
+      alert("Failed to update team");
     }
+  };
+
+  const handleTeamColorChange = async (teamId: string, color: string) => {
+    await handleTeamPatch(teamId, { color });
   };
 
   const handleAdjustPoints = async (teamId: string, sign: 1 | -1) => {
@@ -769,7 +571,6 @@ export default function AdminPage({
     { id: "users", label: "Users" },
     { id: "teams", label: "Teams" },
     { id: "challenges", label: "Challenges" },
-    { id: "tournament", label: "Tournament" },
     { id: "map", label: "Map" },
     { id: "settings", label: "Settings" },
   ];
@@ -817,7 +618,6 @@ export default function AdminPage({
                   <Th>Created</Th>
                   <Th>Last seen</Th>
                   <Th>Subs</Th>
-                  <Th>Votes</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -878,23 +678,71 @@ export default function AdminPage({
                         ))}
                       </Select>
                     </Td>
-                    <Td whiteSpace="nowrap">
-                      {u.intent || (u.surveyCompletedAt ? "—" : "not done")}
+                    <Td minW="110px">
+                      <Select
+                        size="sm"
+                        value={u.intent ?? ""}
+                        onChange={async (e) => {
+                          const value = e.target.value;
+                          await patchUser(u.id, {
+                            intent: value === "" ? null : value,
+                          });
+                        }}
+                      >
+                        <option value="">
+                          {u.surveyCompletedAt ? "—" : "not done"}
+                        </option>
+                        <option value="playing">playing</option>
+                        <option value="browsing">browsing</option>
+                      </Select>
                     </Td>
                     <Td maxW="180px">
-                      <Text fontSize="xs" noOfLines={2} title={u.teamPreferences || ""}>
-                        {u.teamPreferences || "—"}
-                      </Text>
+                      <Input
+                        size="sm"
+                        defaultValue={u.teamPreferences || ""}
+                        placeholder="—"
+                        onBlur={async (e) => {
+                          const next = e.target.value.trim();
+                          const prev = u.teamPreferences || "";
+                          if (next !== prev) {
+                            await patchUser(u.id, {
+                              teamPreferences: next === "" ? null : next,
+                            });
+                          }
+                        }}
+                      />
                     </Td>
                     <Td maxW="120px">
-                      <Text fontSize="xs" noOfLines={2} title={u.competitiveness || ""}>
-                        {u.competitiveness || "—"}
-                      </Text>
+                      <Input
+                        size="sm"
+                        defaultValue={u.competitiveness || ""}
+                        placeholder="—"
+                        onBlur={async (e) => {
+                          const next = e.target.value.trim();
+                          const prev = u.competitiveness || "";
+                          if (next !== prev) {
+                            await patchUser(u.id, {
+                              competitiveness: next === "" ? null : next,
+                            });
+                          }
+                        }}
+                      />
                     </Td>
                     <Td maxW="160px">
-                      <Text fontSize="xs" noOfLines={2} title={u.timeCommitment || ""}>
-                        {u.timeCommitment || "—"}
-                      </Text>
+                      <Input
+                        size="sm"
+                        defaultValue={u.timeCommitment || ""}
+                        placeholder="—"
+                        onBlur={async (e) => {
+                          const next = e.target.value.trim();
+                          const prev = u.timeCommitment || "";
+                          if (next !== prev) {
+                            await patchUser(u.id, {
+                              timeCommitment: next === "" ? null : next,
+                            });
+                          }
+                        }}
+                      />
                     </Td>
                     <Td>
                       <Switch
@@ -924,7 +772,6 @@ export default function AdminPage({
                     <Td whiteSpace="nowrap">{formatDate(u.createdAt)}</Td>
                     <Td whiteSpace="nowrap">{formatDate(u.lastSeenAt)}</Td>
                     <Td>{u._count.submissions}</Td>
-                    <Td>{u._count.votes}</Td>
                   </Tr>
                 ))}
               </Tbody>
@@ -952,11 +799,33 @@ export default function AdminPage({
                   <Tbody>
                     {teams.map((team) => (
                       <Tr key={team.id}>
-                        <Td>
-                          <Text fontWeight="semibold">
-                            {team.emoji} {team.name}
-                          </Text>
-                        </Td>
+                    <Td>
+                      <HStack spacing={1}>
+                        <Input
+                          size="sm"
+                          maxW="52px"
+                          defaultValue={team.emoji}
+                          aria-label={`Emoji for ${team.name}`}
+                          onBlur={async (e) => {
+                            const next = e.target.value.trim();
+                            if (next && next !== team.emoji) {
+                              await handleTeamPatch(team.id, { emoji: next });
+                            }
+                          }}
+                        />
+                        <Input
+                          size="sm"
+                          defaultValue={team.name}
+                          aria-label={`Name for ${team.name}`}
+                          onBlur={async (e) => {
+                            const next = e.target.value.trim();
+                            if (next && next !== team.name) {
+                              await handleTeamPatch(team.id, { name: next });
+                            }
+                          }}
+                        />
+                      </HStack>
+                    </Td>
                         <Td>
                           <HStack>
                             <input
@@ -1096,8 +965,8 @@ export default function AdminPage({
                       title: "",
                       prompt: "",
                       pts: 10,
-                      lat: 37.7749,
-                      lng: -122.4194,
+                      lat: null,
+                      lng: null,
                       numWinners: 1,
                     })
                   }
@@ -1122,8 +991,16 @@ export default function AdminPage({
                       <Tr key={challenge.id}>
                         <Td>{challenge.title}</Td>
                         <Td>{challenge.pts}</Td>
-                        <Td>{challenge.lat.toFixed(4)}</Td>
-                        <Td>{challenge.lng.toFixed(4)}</Td>
+                        <Td>
+                          {challenge.lat != null
+                            ? challenge.lat.toFixed(4)
+                            : "—"}
+                        </Td>
+                        <Td>
+                          {challenge.lng != null
+                            ? challenge.lng.toFixed(4)
+                            : "—"}
+                        </Td>
                         <Td>{challenge.numWinners}</Td>
                         <Td>
                           <HStack>
@@ -1184,258 +1061,6 @@ export default function AdminPage({
           </VStack>
         )}
 
-        {activeTab === "tournament" && (
-          <VStack align="stretch" spacing={4}>
-            <Flex
-              justify="space-between"
-              align="center"
-              flexWrap="wrap"
-              gap={3}
-            >
-              <Box>
-                <Heading size="md">
-                  {tournamentNotStarted
-                    ? "Tournament not started"
-                    : tournamentComplete
-                      ? "Tournament complete"
-                      : currentRound != null
-                        ? `Round ${currentRound}`
-                        : "No open matchups"}
-                </Heading>
-                <Text fontSize="sm" color="gray.600">
-                  {tournamentNotStarted
-                    ? "Prod has no matchups yet — initialize Round 1 to show the bracket on the home page."
-                    : currentRoundEndsAt
-                      ? `Will auto-close at ${new Date(currentRoundEndsAt).toLocaleString()} (lazy on page load / vote).`
-                      : "Vote tallies for current open matchups. Set a round end time below for auto-close."}
-                </Text>
-              </Box>
-              <HStack spacing={2} flexWrap="wrap">
-                {tournamentNotStarted ? (
-                  <Button colorScheme="green" onClick={handleInitializeTournament}>
-                    Initialize bracket
-                  </Button>
-                ) : (
-                  <Button
-                    colorScheme="orange"
-                    onClick={handleCloseRound}
-                    isDisabled={matchups.length === 0 || tournamentComplete}
-                  >
-                    Close round &amp; advance
-                  </Button>
-                )}
-                {!tournamentNotStarted ? (
-                  <Button
-                    colorScheme="red"
-                    variant="outline"
-                    onClick={handleResetTournament}
-                  >
-                    Reset bracket
-                  </Button>
-                ) : null}
-              </HStack>
-            </Flex>
-
-
-            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
-              <Heading size="sm" mb={2}>
-                Neighborhoods ({neighborhoods.length})
-              </Heading>
-              <Text fontSize="sm" color="gray.600" mb={3}>
-                Edit names and emojis anytime — changes show up on the live
-                bracket. To include newly added neighborhoods in the bracket,
-                reset then re-initialize.
-              </Text>
-              <HStack mb={4} flexWrap="wrap" spacing={3} align="flex-end">
-                <FormControl maxW="220px">
-                  <FormLabel fontSize="xs">Name</FormLabel>
-                  <Input
-                    size="sm"
-                    value={newNeighborhoodName}
-                    onChange={(e) => setNewNeighborhoodName(e.target.value)}
-                    placeholder="e.g. Mission"
-                  />
-                </FormControl>
-                <FormControl maxW="100px">
-                  <FormLabel fontSize="xs">Emoji</FormLabel>
-                  <Input
-                    size="sm"
-                    value={newNeighborhoodEmoji}
-                    onChange={(e) => setNewNeighborhoodEmoji(e.target.value)}
-                    placeholder="🌉"
-                  />
-                </FormControl>
-                <Button size="sm" colorScheme="blue" onClick={handleCreateNeighborhood}>
-                  Add neighborhood
-                </Button>
-              </HStack>
-              <Box overflowX="auto">
-                <Table size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>Emoji</Th>
-                      <Th>Name</Th>
-                      <Th>In bracket</Th>
-                      <Th></Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {neighborhoods.map((n) => (
-                      <Tr key={n.id}>
-                        <Td width="90px">
-                          <Input
-                            size="sm"
-                            defaultValue={n.emoji ?? ""}
-                            placeholder={n.displayEmoji}
-                            onBlur={async (e) => {
-                              const next = e.target.value.trim() || null;
-                              if ((n.emoji || null) !== next) {
-                                await handleUpdateNeighborhood(n.id, {
-                                  emoji: next,
-                                });
-                              }
-                            }}
-                          />
-                        </Td>
-                        <Td minW="180px">
-                          <Input
-                            size="sm"
-                            defaultValue={n.name}
-                            onBlur={async (e) => {
-                              const next = e.target.value.trim();
-                              if (next && next !== n.name) {
-                                await handleUpdateNeighborhood(n.id, {
-                                  name: next,
-                                });
-                              }
-                            }}
-                          />
-                        </Td>
-                        <Td whiteSpace="nowrap">
-                          {n.matchupCount > 0
-                            ? `${n.matchupCount} matchup(s)`
-                            : "—"}
-                        </Td>
-                        <Td>
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            colorScheme="red"
-                            isDisabled={n.matchupCount > 0}
-                            onClick={() =>
-                              handleDeleteNeighborhood(n.id, n.name)
-                            }
-                          >
-                            Delete
-                          </Button>
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
-            </Box>
-
-            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
-              <Heading size="sm" mb={3}>
-                Round end schedule
-              </Heading>
-              <Text fontSize="sm" color="gray.600" mb={3}>
-                When a round&apos;s end time passes, the next page load or vote
-                closes it and opens the next round. Admin can still close early.
-              </Text>
-              <VStack align="stretch" spacing={3}>
-                {Array.from(
-                  {
-                    length: Math.max(
-                      4,
-                      currentRound ?? 1,
-                      ...Object.keys(roundSchedule).map(Number),
-                      0,
-                    ),
-                  },
-                  (_, i) => i + 1,
-                ).map((round) => (
-                  <HStack key={round} flexWrap="wrap" spacing={3}>
-                    <Text minW="80px" fontWeight="medium">
-                      Round {round}
-                    </Text>
-                    <Input
-                      type="datetime-local"
-                      size="sm"
-                      maxW="240px"
-                      value={scheduleDrafts[round] ?? ""}
-                      onChange={(e) =>
-                        setScheduleDrafts((prev) => ({
-                          ...prev,
-                          [round]: e.target.value,
-                        }))
-                      }
-                    />
-                    <Button
-                      size="sm"
-                      colorScheme="blue"
-                      onClick={() => handleSaveRoundSchedule(round)}
-                    >
-                      Save
-                    </Button>
-                    {roundSchedule[round] ? (
-                      <Text fontSize="xs" color="gray.500">
-                        Saved: {new Date(roundSchedule[round]).toLocaleString()}
-                      </Text>
-                    ) : (
-                      <Text fontSize="xs" color="gray.400">
-                        Not scheduled
-                      </Text>
-                    )}
-                  </HStack>
-                ))}
-              </VStack>
-            </Box>
-
-            <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
-              {matchups.length === 0 ? (
-                <Text color="gray.500">
-                  {tournamentNotStarted
-                    ? "No matchups yet. Click “Initialize bracket” to seed the 16 common neighborhoods and Round 1."
-                    : tournamentComplete
-                      ? "No open matchups — tournament is finished."
-                      : "No open matchups yet."}
-                </Text>
-              ) : (
-                <Table size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>Matchup</Th>
-                      <Th>Votes A</Th>
-                      <Th>Votes B</Th>
-                      <Th>Total</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {matchups.map((m) => (
-                      <Tr key={m.id}>
-                        <Td>
-                          <Text fontWeight="medium">
-                            {m.slotA.name} vs {m.slotB.name}
-                          </Text>
-                        </Td>
-                        <Td>
-                          {m.slotA.name}: {m.votes[m.slotA.id] ?? 0}
-                        </Td>
-                        <Td>
-                          {m.slotB.name}: {m.votes[m.slotB.id] ?? 0}
-                        </Td>
-                        <Td>{m.totalVotes}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              )}
-            </Box>
-          </VStack>
-        )}
-
         {activeTab === "map" && (
           <AdminMapPanel
             neighborhoods={neighborhoods.map((n) => ({
@@ -1460,8 +1085,7 @@ export default function AdminPage({
                 Hunt window
               </Heading>
               <Text fontSize="sm" color="gray.600" mb={4}>
-                Controls when the home page switches from pre-hunt (tournament)
-                to the live hunt. Separate from tournament round deadlines.
+                Controls when the home page switches from pre-hunt countdown to the live hunt.
               </Text>
               <VStack align="stretch" spacing={4}>
                 <FormControl>
@@ -1588,30 +1212,38 @@ export default function AdminPage({
                       }
                     />
                   </FormControl>
-                  <FormControl isRequired>
-                    <FormLabel>Latitude</FormLabel>
+                  <FormControl>
+                    <FormLabel>Latitude (optional)</FormLabel>
                     <Input
                       type="number"
                       step="any"
-                      value={editingChallenge.lat}
+                      value={editingChallenge.lat ?? ""}
+                      placeholder="Leave empty to draft"
                       onChange={(e) =>
                         setEditingChallenge({
                           ...editingChallenge,
-                          lat: Number(e.target.value),
+                          lat:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
                         })
                       }
                     />
                   </FormControl>
-                  <FormControl isRequired>
-                    <FormLabel>Longitude</FormLabel>
+                  <FormControl>
+                    <FormLabel>Longitude (optional)</FormLabel>
                     <Input
                       type="number"
                       step="any"
-                      value={editingChallenge.lng}
+                      value={editingChallenge.lng ?? ""}
+                      placeholder="Leave empty to draft"
                       onChange={(e) =>
                         setEditingChallenge({
                           ...editingChallenge,
-                          lng: Number(e.target.value),
+                          lng:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
                         })
                       }
                     />
@@ -1705,30 +1337,38 @@ export default function AdminPage({
                       }
                     />
                   </FormControl>
-                  <FormControl isRequired>
-                    <FormLabel>Latitude</FormLabel>
+                  <FormControl>
+                    <FormLabel>Latitude (optional)</FormLabel>
                     <Input
                       type="number"
                       step="any"
-                      value={newChallenge.lat}
+                      value={newChallenge.lat ?? ""}
+                      placeholder="Leave empty to draft"
                       onChange={(e) =>
                         setNewChallenge({
                           ...newChallenge,
-                          lat: Number(e.target.value),
+                          lat:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
                         })
                       }
                     />
                   </FormControl>
-                  <FormControl isRequired>
-                    <FormLabel>Longitude</FormLabel>
+                  <FormControl>
+                    <FormLabel>Longitude (optional)</FormLabel>
                     <Input
                       type="number"
                       step="any"
-                      value={newChallenge.lng}
+                      value={newChallenge.lng ?? ""}
+                      placeholder="Leave empty to draft"
                       onChange={(e) =>
                         setNewChallenge({
                           ...newChallenge,
-                          lng: Number(e.target.value),
+                          lng:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
                         })
                       }
                     />

@@ -1,13 +1,10 @@
 import type {
   Challenge,
-  ChatMessage,
   Submission,
   Team,
-  User,
 } from "@prisma/client";
 import type {
   SerializedChallenge,
-  SerializedChatMessage,
   SerializedSubmission,
   SerializedTeam,
 } from "./types";
@@ -46,19 +43,6 @@ export function serializeSubmission(
     mediaURL: submission.mediaURL,
     note: submission.note,
     createdAt: submission.createdAt.toISOString(),
-  };
-}
-
-export function serializeChatMessage(
-  message: ChatMessage & { team: Team; user?: User },
-): SerializedChatMessage {
-  return {
-    id: message.id,
-    teamId: message.teamId,
-    teamName: `${message.team.emoji} ${message.team.name}`,
-    message: message.message,
-    isAdmin: message.isAdmin,
-    createdAt: message.createdAt.toISOString(),
   };
 }
 

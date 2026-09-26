@@ -3,6 +3,15 @@ import { prisma } from "../../../lib/prisma";
 import { requireApiAdmin } from "../../../lib/auth";
 import { parseJsonBody, serializeChallenge } from "../../../lib/serialize";
 
+/** Empty / null → null (draft, unplaced). Finite number → that value. */
+function parseOptionalCoord(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -13,9 +22,11 @@ export default async function handler(
   if (req.method === "POST") {
     try {
       const body = parseJsonBody(req.body) as Record<string, unknown>;
-      const { title, prompt, pts, lat, lng, numWinners } = body;
+      const { title, prompt, pts, numWinners } = body;
+      const lat = parseOptionalCoord(body.lat);
+      const lng = parseOptionalCoord(body.lng);
 
-      if (!title || !pts || lat === undefined || lng === undefined || !numWinners) {
+      if (!title || !pts || !numWinners) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
@@ -33,8 +44,8 @@ export default async function handler(
           title: String(title),
           prompt: String(prompt || " "),
           pts: Number(pts),
-          lat: Number(lat),
-          lng: Number(lng),
+          lat: lat ?? null,
+          lng: lng ?? null,
           numWinners: Number(numWinners),
         },
       });
@@ -53,15 +64,15 @@ export default async function handler(
     try {
       const body = parseJsonBody(req.body) as Record<string, unknown>;
       const id = (body.id ?? body._id) as string | undefined;
-      const { title, prompt, pts, lat, lng, numWinners } = body;
+      const { title, prompt, pts, numWinners } = body;
+      const lat = parseOptionalCoord(body.lat);
+      const lng = parseOptionalCoord(body.lng);
 
       if (
         !id ||
         !title ||
         prompt === undefined ||
         !pts ||
-        lat === undefined ||
-        lng === undefined ||
         numWinners === undefined
       ) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -73,8 +84,8 @@ export default async function handler(
           title: String(title),
           prompt: String(prompt),
           pts: Number(pts),
-          lat: Number(lat),
-          lng: Number(lng),
+          lat: lat ?? null,
+          lng: lng ?? null,
           numWinners: Number(numWinners),
         },
       });

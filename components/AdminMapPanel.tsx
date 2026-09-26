@@ -5,6 +5,7 @@ import {
   Button,
   Heading,
   HStack,
+  Input,
   Switch,
   Table,
   Tbody,
@@ -63,6 +64,9 @@ export default function AdminMapPanel({
   const [importing, setImporting] = useState<"curated" | "datasf" | null>(null);
   const [deposits, setDeposits] = useState<DepositRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newEmoji, setNewEmoji] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const selected = neighborhoods.find((n) => n.id === selectedId) ?? null;
 
@@ -145,6 +149,39 @@ export default function AdminMapPanel({
     await onReload();
   }, [onReload]);
 
+  const handleCreateNeighborhood = async () => {
+    const name = newName.trim();
+    if (!name) {
+      toast({ title: "Name is required", status: "warning" });
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await fetch("/api/admin/neighborhoods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          emoji: newEmoji.trim() || null,
+          onMap: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error || "Create failed", status: "error" });
+        return;
+      }
+      setNewName("");
+      setNewEmoji("");
+      toast({ title: "Neighborhood created", status: "success" });
+      await onReload();
+    } catch {
+      toast({ title: "Create failed", status: "error" });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const voidDeposit = async (id: string) => {
     if (!confirm("Void this deposit? Points return to the team's score.")) {
       return;
@@ -218,9 +255,40 @@ export default function AdminMapPanel({
         </Box>
 
         <Box overflowX="auto">
+          <HStack mb={3} flexWrap="wrap" gap={2} align="flex-end">
+            <Box>
+              <Text fontSize="xs" color="gray.500" mb={1}>
+                New neighborhood
+              </Text>
+              <HStack>
+                <Input
+                  size="sm"
+                  maxW="60px"
+                  placeholder="🗺️"
+                  value={newEmoji}
+                  onChange={(e) => setNewEmoji(e.target.value)}
+                />
+                <Input
+                  size="sm"
+                  placeholder="Name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  isLoading={creating}
+                  onClick={() => void handleCreateNeighborhood()}
+                >
+                  Add
+                </Button>
+              </HStack>
+            </Box>
+          </HStack>
           <Table size="sm">
             <Thead>
               <Tr>
+                <Th>Emoji</Th>
                 <Th>Name</Th>
                 <Th>On map</Th>
                 <Th>Boundary</Th>
@@ -235,8 +303,35 @@ export default function AdminMapPanel({
                   cursor="pointer"
                   onClick={() => setSelectedId(n.id)}
                 >
-                  <Td>
-                    {n.displayEmoji} {n.name}
+                  <Td onClick={(e) => e.stopPropagation()} maxW="60px">
+                    <Input
+                      size="sm"
+                      defaultValue={n.emoji ?? ""}
+                      placeholder={n.displayEmoji}
+                      key={`emoji-${n.id}-${n.emoji ?? ""}`}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim();
+                        const prev = n.emoji ?? "";
+                        if (next !== prev) {
+                          void patchNeighborhood(n.id, {
+                            emoji: next === "" ? null : next,
+                          });
+                        }
+                      }}
+                    />
+                  </Td>
+                  <Td onClick={(e) => e.stopPropagation()}>
+                    <Input
+                      size="sm"
+                      defaultValue={n.name}
+                      key={`name-${n.id}-${n.name}`}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim();
+                        if (next && next !== n.name) {
+                          void patchNeighborhood(n.id, { name: next });
+                        }
+                      }}
+                    />
                   </Td>
                   <Td onClick={(e) => e.stopPropagation()}>
                     <Switch

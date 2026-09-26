@@ -33,10 +33,7 @@ function serializeNeighborhood(n: {
   centerLat: number | null;
   centerLng: number | null;
   createdAt: Date;
-  _count?: { matchupsAsA: number; matchupsAsB: number; votes: number };
 }) {
-  const matchupCount =
-    (n._count?.matchupsAsA ?? 0) + (n._count?.matchupsAsB ?? 0);
   return {
     id: n.id,
     name: n.name,
@@ -49,16 +46,8 @@ function serializeNeighborhood(n: {
     hasBoundary: n.boundary != null,
     boundary: n.boundary,
     createdAt: n.createdAt.toISOString(),
-    matchupCount,
-    voteCount: n._count?.votes ?? 0,
   };
 }
-
-const includeCount = {
-  _count: {
-    select: { matchupsAsA: true, matchupsAsB: true, votes: true },
-  },
-} as const;
 
 export default async function handler(
   req: NextApiRequest,
@@ -70,7 +59,6 @@ export default async function handler(
   if (req.method === "GET") {
     const neighborhoods = await prisma.neighborhood.findMany({
       orderBy: { name: "asc" },
-      include: includeCount,
     });
     return res.status(200).json({
       neighborhoods: neighborhoods.map(serializeNeighborhood),
@@ -89,25 +77,29 @@ export default async function handler(
       return res.status(400).json({ error: "Invalid body" });
     }
 
-    const name = parsed.data.name.trim();
-    const emoji = parsed.data.emoji?.trim() || null;
-    const onMap = parsed.data.onMap ?? false;
-
-    const existing = await prisma.neighborhood.findUnique({ where: { name } });
-    if (existing) {
+    const { name, emoji, onMap } = parsed.data;
+    try {
+      const created = await prisma.neighborhood.create({
+        data: {
+          name,
+          emoji: emoji?.trim() || null,
+          onMap: onMap ?? false,
+        },
+      });
       return res
-        .status(409)
-        .json({ error: "A neighborhood with that name already exists" });
+        .status(201)
+        .json({ neighborhood: serializeNeighborhood(created) });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002"
+      ) {
+        return res
+          .status(409)
+          .json({ error: "A neighborhood with that name already exists" });
+      }
+      throw e;
     }
-
-    const created = await prisma.neighborhood.create({
-      data: { name, emoji, onMap },
-      include: includeCount,
-    });
-
-    return res
-      .status(200)
-      .json({ neighborhood: serializeNeighborhood(created) });
   }
 
   if (req.method === "PATCH") {
@@ -123,34 +115,9 @@ export default async function handler(
     }
 
     const { id, name, emoji, onMap, boundary, clearBoundary } = parsed.data;
-    const target = await prisma.neighborhood.findUnique({ where: { id } });
-    if (!target) {
+    const existing = await prisma.neighborhood.findUnique({ where: { id } });
+    if (!existing) {
       return res.status(404).json({ error: "Neighborhood not found" });
-    }
-
-    if (name && name !== target.name) {
-      const clash = await prisma.neighborhood.findUnique({ where: { name } });
-      if (clash) {
-        return res
-          .status(409)
-          .json({ error: "A neighborhood with that name already exists" });
-      }
-    }
-
-    // Topology-managed zones cannot be freehand-edited; use the arc editor.
-    if (boundary !== undefined || clearBoundary) {
-      const topo = await prisma.mapTopology.findUnique({
-        where: { id: "default" },
-      });
-      if (topo) {
-        const objects = topo.objects as Record<string, unknown>;
-        if (objects && objects[id]) {
-          return res.status(400).json({
-            error:
-              "This neighborhood is part of the shared topology. Drag shared arcs in the map editor instead of redrawing the polygon.",
-          });
-        }
-      }
     }
 
     let boundaryData: {
@@ -185,20 +152,31 @@ export default async function handler(
       }
     }
 
-    const updated = await prisma.neighborhood.update({
-      where: { id },
-      data: {
-        ...(name != null ? { name } : {}),
-        ...(emoji !== undefined ? { emoji: emoji?.trim() || null } : {}),
-        ...(onMap !== undefined ? { onMap } : {}),
-        ...boundaryData,
-      },
-      include: includeCount,
-    });
+    try {
+      const updated = await prisma.neighborhood.update({
+        where: { id },
+        data: {
+          ...(name != null ? { name } : {}),
+          ...(emoji !== undefined ? { emoji: emoji?.trim() || null } : {}),
+          ...(onMap !== undefined ? { onMap } : {}),
+          ...boundaryData,
+        },
+      });
 
-    return res
-      .status(200)
-      .json({ neighborhood: serializeNeighborhood(updated) });
+      return res
+        .status(200)
+        .json({ neighborhood: serializeNeighborhood(updated) });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002"
+      ) {
+        return res
+          .status(409)
+          .json({ error: "A neighborhood with that name already exists" });
+      }
+      throw e;
+    }
   }
 
   if (req.method === "DELETE") {
@@ -219,24 +197,9 @@ export default async function handler(
       return res.status(400).json({ error: "id is required" });
     }
 
-    const target = await prisma.neighborhood.findUnique({
-      where: { id },
-      include: includeCount,
-    });
+    const target = await prisma.neighborhood.findUnique({ where: { id } });
     if (!target) {
       return res.status(404).json({ error: "Neighborhood not found" });
-    }
-
-    const inUse =
-      target._count.matchupsAsA +
-        target._count.matchupsAsB +
-        target._count.votes >
-      0;
-    if (inUse) {
-      return res.status(400).json({
-        error:
-          "Neighborhood is used in the bracket. Reset the tournament first, then delete.",
-      });
     }
 
     await prisma.neighborhood.delete({ where: { id } });

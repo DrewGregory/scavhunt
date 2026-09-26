@@ -35,6 +35,9 @@ export const SF_BBOX: BBox = {
   maxLat: 37.84,
 };
 
+/** Downtown SF — used as map fallback for unplaced challenges. */
+export const SF_CENTER: [number, number] = [37.7749, -122.4194];
+
 /** Ray-casting point-in-ring. Ring is closed or open; holes not considered here. */
 export function pointInRing(lng: number, lat: number, ring: LinearRing): boolean {
   let inside = false;

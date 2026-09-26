@@ -10,10 +10,8 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 // import './FooterRight.css';
 import { Text } from "@chakra-ui/react";
-import { useRouter } from "next/router";
 
 function FooterRight({ likes, comments, saves, shares, profilePic }) {
-  const router = useRouter();
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [userAddIcon, setUserAddIcon] = useState(faCirclePlus);
@@ -76,7 +74,7 @@ function FooterRight({ likes, comments, saves, shares, profilePic }) {
           {formatLikesCount(parseLikesCount(likes) + (liked ? 1 : 0))}
         </p>
       </div>
-      <div className="sidebar-icon" onClick={() => router.push("/chat")} style={{ cursor: "pointer" }}>
+      <div className="sidebar-icon">
         {/* The comment icon */}
         <FontAwesomeIcon
           icon={faCommentDots}

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Challenge" ALTER COLUMN "lat" DROP NOT NULL;
+ALTER TABLE "Challenge" ALTER COLUMN "lng" DROP NOT NULL;

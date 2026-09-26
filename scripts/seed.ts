@@ -24,27 +24,6 @@ for (const file of [".env.local", ".env"]) {
 }
 
 import { prisma } from "../lib/prisma";
-import { SF_NEIGHBORHOODS } from "../lib/neighborhoods";
-import {
-  createOpeningRound,
-  ensureNeighborhoods,
-} from "../lib/tournament";
-
-async function seedNeighborhoods() {
-  const neighborhoods = await ensureNeighborhoods(SF_NEIGHBORHOODS);
-  console.log(`Ensured ${neighborhoods.length} SF neighborhoods`);
-
-  const anyMatchups = await prisma.matchup.count();
-  if (anyMatchups > 0) {
-    console.log(`Skipping bracket (${anyMatchups} matchups already exist)`);
-    return;
-  }
-
-  const result = await createOpeningRound(neighborhoods.map((n) => n.id));
-  console.log(
-    `Created Round 1: ${result.matchupsCreated} matchups, ${result.byes} bye(s), ${result.entrants} entrants`,
-  );
-}
 
 async function seedChallengesFromCsv() {
   const csvPath = resolve(process.cwd(), "scripts/sample_challenges.csv");
@@ -71,16 +50,18 @@ async function seedChallengesFromCsv() {
     const title = row.title || row.Title || row.name;
     const prompt = row.prompt || row.Prompt || row.description || title;
     if (!title) continue;
-    const lat = Number(row.lat || row.latitude || 37.7749);
-    const lng = Number(row.lng || row.longitude || -122.4194);
+    const latRaw = row.lat || row.latitude;
+    const lngRaw = row.lng || row.longitude;
+    const latN = latRaw != null && latRaw !== "" ? Number(latRaw) : null;
+    const lngN = lngRaw != null && lngRaw !== "" ? Number(lngRaw) : null;
     const pts = Number(row.pts || row.points || 100);
     const numWinners = Number(row.numWinners || row.winners || 1);
     await prisma.challenge.create({
       data: {
         title,
         prompt,
-        lat: Number.isFinite(lat) ? lat : 37.7749,
-        lng: Number.isFinite(lng) ? lng : -122.4194,
+        lat: latN != null && Number.isFinite(latN) ? latN : null,
+        lng: lngN != null && Number.isFinite(lngN) ? lngN : null,
         pts: Number.isFinite(pts) ? pts : 100,
         numWinners: Number.isFinite(numWinners) ? numWinners : 1,
       },
@@ -91,7 +72,6 @@ async function seedChallengesFromCsv() {
 }
 
 async function main() {
-  await seedNeighborhoods();
   await seedChallengesFromCsv();
   const { ensureHuntSettings } = await import("../lib/time");
   await ensureHuntSettings();

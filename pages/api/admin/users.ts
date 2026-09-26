@@ -17,6 +17,10 @@ const patchSchema = z.object({
   teamId: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
   isAdmin: z.boolean().optional(),
+  intent: z.enum(["playing", "browsing"]).nullable().optional(),
+  teamPreferences: z.string().nullable().optional(),
+  competitiveness: z.string().nullable().optional(),
+  timeCommitment: z.string().nullable().optional(),
 });
 
 export default async function handler(
@@ -33,7 +37,6 @@ export default async function handler(
         _count: {
           select: {
             submissions: true,
-            votes: true,
           },
         },
       },
@@ -76,7 +79,19 @@ export default async function handler(
       return res.status(400).json({ error: "Invalid request body" });
     }
 
-    const { id, name, email, phone, teamId, isActive, isAdmin } = parsed.data;
+    const {
+      id,
+      name,
+      email,
+      phone,
+      teamId,
+      isActive,
+      isAdmin,
+      intent,
+      teamPreferences,
+      competitiveness,
+      timeCommitment,
+    } = parsed.data;
 
     const target = await prisma.user.findUnique({ where: { id } });
     if (!target) {
@@ -96,6 +111,11 @@ export default async function handler(
       teamId?: string | null;
       isActive?: boolean;
       isAdmin?: boolean;
+      intent?: string | null;
+      teamPreferences?: string | null;
+      competitiveness?: string | null;
+      timeCommitment?: string | null;
+      surveyCompletedAt?: Date | null;
     } = {};
 
     if (name !== undefined) data.name = name.trim();
@@ -117,6 +137,45 @@ export default async function handler(
     if (isActive !== undefined) data.isActive = isActive;
     if (isAdmin !== undefined) data.isAdmin = isAdmin;
 
+    const surveyTouched =
+      intent !== undefined ||
+      teamPreferences !== undefined ||
+      competitiveness !== undefined ||
+      timeCommitment !== undefined;
+
+    if (intent !== undefined) data.intent = intent;
+    if (teamPreferences !== undefined) {
+      data.teamPreferences =
+        teamPreferences === null ? null : teamPreferences.trim() || null;
+    }
+    if (competitiveness !== undefined) {
+      data.competitiveness =
+        competitiveness === null ? null : competitiveness.trim() || null;
+    }
+    if (timeCommitment !== undefined) {
+      data.timeCommitment =
+        timeCommitment === null ? null : timeCommitment.trim() || null;
+    }
+
+    if (surveyTouched && !target.surveyCompletedAt) {
+      const nextIntent = intent !== undefined ? intent : target.intent;
+      const nextPrefs =
+        teamPreferences !== undefined
+          ? data.teamPreferences
+          : target.teamPreferences;
+      const nextCompete =
+        competitiveness !== undefined
+          ? data.competitiveness
+          : target.competitiveness;
+      const nextTime =
+        timeCommitment !== undefined
+          ? data.timeCommitment
+          : target.timeCommitment;
+      if (nextIntent || nextPrefs || nextCompete || nextTime) {
+        data.surveyCompletedAt = new Date();
+      }
+    }
+
     try {
       const updated = await prisma.user.update({
         where: { id },
@@ -126,7 +185,6 @@ export default async function handler(
           _count: {
             select: {
               submissions: true,
-              votes: true,
             },
           },
         },
