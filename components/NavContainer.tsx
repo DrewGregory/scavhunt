@@ -353,7 +353,10 @@ const SidebarContent = ({
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               icon={collapsed ? <FiChevronRight /> : <FiChevronLeft />}
               size="sm"
-              variant="ghost"
+              variant="outline"
+              borderColor="gray.300"
+              bg="white"
+              _hover={{ bg: "gray.50" }}
               onClick={onToggleCollapse}
             />
           </Tooltip>
