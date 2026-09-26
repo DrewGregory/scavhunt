@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 import {
   IconButton,
   Box,
@@ -14,8 +14,9 @@ import {
   FlexProps,
   Divider,
   Button,
+  Tooltip,
 } from "@chakra-ui/react";
-import { FiMenu } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiMenu } from "react-icons/fi";
 import {
   GiTreasureMap,
   GiPodium,
@@ -49,6 +50,10 @@ const LinkItems: Array<LinkItemProps> = [
   { name: "Admin", icon: GiNotebook, url: "/admin", adminOnly: true },
 ];
 
+const SIDEBAR_EXPANDED = "20vw";
+const SIDEBAR_COLLAPSED = "72px";
+const STORAGE_KEY = "scavhunt.sidebarCollapsed";
+
 export default function NavContainer({
   title,
   children,
@@ -70,9 +75,33 @@ export default function NavContainer({
   const [surveyDoneOverride, setSurveyDoneOverride] = useState<boolean | null>(
     null,
   );
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setCollapsed(window.localStorage.getItem(STORAGE_KEY) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        window.localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   const surveyDone =
     surveyDoneOverride ?? Boolean(session?.user.surveyCompletedAt);
   const surveyLabel = surveyDone ? "Edit survey" : "Player survey";
+  const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
+
   return (
     <Box
       height="100dvh"
@@ -84,6 +113,9 @@ export default function NavContainer({
         display={{ base: "none", md: "block" }}
         onOpenSurvey={() => setSurveyOpen(true)}
         surveyLabel={surveyLabel}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapsed}
+        w={sidebarW}
       />
       <Drawer
         isOpen={isOpen}
@@ -99,6 +131,7 @@ export default function NavContainer({
             onClose={onClose}
             onOpenSurvey={() => setSurveyOpen(true)}
             surveyLabel={surveyLabel}
+            collapsed={false}
           />
         </DrawerContent>
       </Drawer>
@@ -131,14 +164,15 @@ export default function NavContainer({
       {!hideTopBar && (
         <Flex
           display={{ base: "none", md: "flex" }}
-          width="80vw"
-          ml="20vw"
+          width={`calc(100vw - ${sidebarW})`}
+          ml={sidebarW}
           p={4}
           height="10dvh"
           alignItems="center"
           flexDirection="row"
           backgroundColor={bgColor ? bgColor : "white"}
           gap={3}
+          transition="margin-left 0.2s ease, width 0.2s ease"
         >
           <Text flex={1} fontSize="2xl" fontFamily="monospace" fontWeight="bold">
             {title}
@@ -152,15 +186,16 @@ export default function NavContainer({
         </Flex>
       )}
       <Box
-        ml={{ base: 0, md: "20vw" }}
+        ml={{ base: 0, md: sidebarW }}
         p={fullScreen ? 0 : 4}
-        width={{ base: "100vw", md: "80vw" }}
-        height={hgt ? hgt : (hideTopBar ? "100dvh" : "90dvh")}
+        width={{ base: "100vw", md: `calc(100vw - ${sidebarW})` }}
+        height={hgt ? hgt : hideTopBar ? "100dvh" : "90dvh"}
         overflow={fullScreen ? "hidden" : "scroll"}
         background={bgColor ? bgColor : "white"}
         pb={fullScreen ? 0 : "150px"}
         display={fullScreen ? "flex" : "block"}
         flexDirection={fullScreen ? "column" : undefined}
+        transition="margin-left 0.2s ease, width 0.2s ease"
       >
         {children}
       </Box>
@@ -179,6 +214,8 @@ interface SidebarProps extends BoxProps {
   onClose: () => void;
   onOpenSurvey?: () => void;
   surveyLabel?: string;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const SidebarContent = ({
@@ -186,6 +223,8 @@ const SidebarContent = ({
   title,
   onOpenSurvey,
   surveyLabel = "Player survey",
+  collapsed = false,
+  onToggleCollapse,
   ...rest
 }: SidebarProps & { title: string }) => {
   const router = useRouter();
@@ -201,13 +240,21 @@ const SidebarContent = ({
       bg={useColorModeValue("white", "gray.900")}
       borderRight="1px"
       borderRightColor={useColorModeValue("gray.200", "gray.700")}
-      w={{ base: "full", md: "20vw" }}
+      w={{ base: "full", md: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
       pos="fixed"
       h="full"
       overflowY="auto"
+      overflowX="hidden"
+      transition="width 0.2s ease"
       {...rest}
     >
-      <Flex h="20" alignItems="center" mx="8" justifyContent="space-between">
+      <Flex
+        h="20"
+        alignItems="center"
+        mx={collapsed ? 2 : 8}
+        justifyContent={collapsed ? "center" : "space-between"}
+        gap={2}
+      >
         <Box position="relative" width="32px" height="32px" flexShrink={0}>
           <Image
             src="/favicon.ico"
@@ -217,19 +264,20 @@ const SidebarContent = ({
             style={{ objectFit: "contain" }}
           />
         </Box>
-        <Text
-          fontSize="2xl"
-          ml="2"
-          fontFamily="monospace"
-          fontWeight="bold"
-          flex={1}
-        >
-          {title}
-        </Text>
-
+        {!collapsed && (
+          <Text
+            fontSize="2xl"
+            ml="2"
+            fontFamily="monospace"
+            fontWeight="bold"
+            flex={1}
+          >
+            {title}
+          </Text>
+        )}
         <CloseButton display={{ base: "flex", md: "none" }} onClick={onClose} />
       </Flex>
-      {session && (
+      {session && !collapsed && (
         <Flex px={4} mx={4} mb={4} direction="column" gap={1}>
           <Text fontWeight="bold" fontSize="sm">
             {session.user.name}
@@ -261,13 +309,24 @@ const SidebarContent = ({
           </Button>
         </Flex>
       )}
+      {session && collapsed && (
+        <Flex direction="column" align="center" gap={2} mb={3} px={1}>
+          {session.team && (
+            <Text fontSize="lg" title={session.team.name}>
+              {session.team.emoji}
+            </Text>
+          )}
+        </Flex>
+      )}
       <Divider />
       {LinkItems.filter(
-        (link) => !link.adminOnly || session?.user.isAdmin
+        (link) => !link.adminOnly || session?.user.isAdmin,
       ).map((link) => (
         <NavItem
           key={link.name}
           icon={link.icon}
+          collapsed={collapsed}
+          label={link.name}
           onClick={() => {
             router.push(`${link.url}`);
           }}
@@ -275,6 +334,27 @@ const SidebarContent = ({
           {link.name}
         </NavItem>
       ))}
+      {onToggleCollapse && (
+        <Flex
+          display={{ base: "none", md: "flex" }}
+          justify="center"
+          mt={4}
+          mb={4}
+        >
+          <Tooltip
+            label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            placement="right"
+          >
+            <IconButton
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              icon={collapsed ? <FiChevronRight /> : <FiChevronLeft />}
+              size="sm"
+              variant="ghost"
+              onClick={onToggleCollapse}
+            />
+          </Tooltip>
+        </Flex>
+      )}
     </Box>
   );
 };
@@ -290,8 +370,42 @@ const colors = {
 interface NavItemProps extends FlexProps {
   icon: IconType;
   children: string;
+  collapsed?: boolean;
+  label?: string;
 }
-const NavItem = ({ icon, children, ...rest }: NavItemProps) => {
+const NavItem = ({
+  icon,
+  children,
+  collapsed,
+  label,
+  ...rest
+}: NavItemProps) => {
+  const content = (
+    <Flex
+      align="center"
+      justify={collapsed ? "center" : "flex-start"}
+      p="4"
+      mx={collapsed ? 1 : 4}
+      borderRadius="lg"
+      role="group"
+      cursor="pointer"
+      _hover={{
+        bg: colors.green,
+      }}
+      {...rest}
+    >
+      {icon && (
+        <Icon
+          mr={collapsed ? 0 : 4}
+          fontSize="16"
+          color="black"
+          as={icon}
+        />
+      )}
+      {!collapsed && children}
+    </Flex>
+  );
+
   return (
     <Box
       as="a"
@@ -299,21 +413,13 @@ const NavItem = ({ icon, children, ...rest }: NavItemProps) => {
       style={{ textDecoration: "none" }}
       _focus={{ boxShadow: "none" }}
     >
-      <Flex
-        align="center"
-        p="4"
-        mx="4"
-        borderRadius="lg"
-        role="group"
-        cursor="pointer"
-        _hover={{
-          bg: colors.green,
-        }}
-        {...rest}
-      >
-        {icon && <Icon mr="4" fontSize="16" color="black" as={icon} />}
-        {children}
-      </Flex>
+      {collapsed ? (
+        <Tooltip label={label ?? children} placement="right">
+          {content}
+        </Tooltip>
+      ) : (
+        content
+      )}
     </Box>
   );
 };
@@ -333,7 +439,7 @@ const MobileNav = ({
   const session = useSession();
   return (
     <Flex
-      ml={{ base: 0, md: "20vw" }}
+      ml={{ base: 0, md: SIDEBAR_EXPANDED }}
       px={{ base: 4, md: 24 }}
       pr={4}
       height="20"

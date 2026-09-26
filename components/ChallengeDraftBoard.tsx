@@ -101,8 +101,9 @@ export default function ChallengeDraftBoard() {
   const [neighborhoodFilter, setNeighborhoodFilter] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("title");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [panToken, setPanToken] = useState(0);
   const [dragOver, setDragOver] = useState<DropTarget | null>(null);
-  const [placingId, setPlacingId] = useState<string | null>(null);
   const focusTitleId = useRef<string | null>(null);
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -338,6 +339,8 @@ export default function ChallengeDraftBoard() {
       focusTitleId.current = created.id;
       setChallenges((list) => [created, ...list]);
       setSelectedId(created.id);
+      setEditingId(created.id);
+      setPanToken((t) => t + 1);
     } catch {
       toast({ title: "Create failed", status: "error" });
     }
@@ -503,11 +506,18 @@ export default function ChallengeDraftBoard() {
           <ChallengeDraftCard
             key={c.id}
             challenge={c}
-            selected={selectedId === c.id || placingId === c.id}
+            selected={selectedId === c.id}
+            editing={editingId === c.id}
             onSelect={() => {
               setSelectedId(c.id);
-              setPlacingId(null);
+              setPanToken((t) => t + 1);
             }}
+            onStartEdit={() => {
+              setSelectedId(c.id);
+              setEditingId(c.id);
+              setPanToken((t) => t + 1);
+            }}
+            onStopEdit={() => setEditingId(null)}
             onDragStart={onCardDragStart(c.id)}
             onChange={(patch) => {
               const body: Record<string, unknown> = {};
@@ -518,15 +528,6 @@ export default function ChallengeDraftBoard() {
                 body.numWinners = patch.numWinners;
               }
               schedulePatch(c.id, body, patch);
-            }}
-            onPlaceOnMap={() => {
-              setSelectedId(c.id);
-              setPlacingId(c.id);
-              toast({
-                title: "Click the map to place this challenge",
-                status: "info",
-                duration: 2500,
-              });
             }}
             onClearLocation={() => {
               void patchChallenge(
@@ -626,19 +627,23 @@ export default function ChallengeDraftBoard() {
           <ChallengeDraftMap
             challenges={filteredSorted}
             neighborhoods={mapNeighborhoods}
-            selectedId={placingId ?? selectedId}
+            selectedId={selectedId}
+            editingId={editingId}
+            panToken={panToken}
             onSelect={(id) => {
               setSelectedId(id);
-              setPlacingId(null);
+              setPanToken((t) => t + 1);
               document
                 .querySelector(`[data-challenge-id="${id}"]`)
                 ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
             }}
             onMapClickPlace={(lat, lng) => {
-              const id = placingId ?? selectedId;
+              const id = editingId;
               if (!id) return;
               void patchChallenge(id, { lat, lng }, { lat, lng });
-              setPlacingId(null);
+            }}
+            onMarkerMove={(id, lat, lng) => {
+              void patchChallenge(id, { lat, lng }, { lat, lng });
             }}
             onContextCreate={(lat, lng) => {
               void createChallenge({ lat, lng });

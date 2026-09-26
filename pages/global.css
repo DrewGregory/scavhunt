@@ -68,3 +68,13 @@ body {
   pointer-events: none;
   line-height: 1.2;
 }
+
+/* Clicking GeoJSON paths focuses them; browser draws a blue bbox outline — hide it. */
+.leaflet-container path.leaflet-interactive:focus,
+.leaflet-container .leaflet-interactive:focus {
+  outline: none !important;
+}
+.leaflet-container svg:focus,
+.leaflet-container:focus {
+  outline: none !important;
+}

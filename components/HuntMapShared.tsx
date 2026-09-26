@@ -182,11 +182,18 @@ export function QuietNeighborhoodLayers({
               style={() => ({ ...BASE_NBH_STYLE })}
               onEachFeature={(_feature, layer) => {
                 const baseStyle = { ...BASE_NBH_STYLE };
-                layer.bindTooltip(label, { sticky: true, opacity: 0.9 });
+                // Name comes from center pill — no sticky tooltip (avoids duplicates).
                 layer.on({
                   click: (e) => {
                     L.DomEvent.stopPropagation(e);
                     const path = e.target as L.Polygon;
+                    const el = (e.originalEvent?.target ?? null) as
+                      | HTMLElement
+                      | null;
+                    el?.blur?.();
+                    if (typeof (document.activeElement as HTMLElement | null)?.blur === "function") {
+                      (document.activeElement as HTMLElement).blur();
+                    }
                     if (typeof path.getBounds === "function") {
                       const b = path.getBounds();
                       if (b.isValid()) {
