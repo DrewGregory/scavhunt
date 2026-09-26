@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdminApiKey } from "../../../../../lib/agentAuth";
 import { prisma } from "../../../../../lib/prisma";
 import { parseJsonBody, serializeChallenge } from "../../../../../lib/serialize";
+import { firstEmoji } from "../../../../../lib/emoji";
 
 const patchSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -62,7 +63,10 @@ export default async function handler(
     if (parsed.data.title !== undefined) data.title = parsed.data.title;
     if (parsed.data.prompt !== undefined) data.prompt = parsed.data.prompt;
     if (parsed.data.emoji !== undefined) {
-      data.emoji = parsed.data.emoji?.trim() || null;
+      data.emoji =
+        parsed.data.emoji === null
+          ? null
+          : firstEmoji(parsed.data.emoji) ?? null;
     }
     if (parsed.data.pts !== undefined) data.pts = parsed.data.pts;
     if (parsed.data.numWinners !== undefined) {

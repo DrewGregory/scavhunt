@@ -4,6 +4,7 @@ import { requireAdminApiKey, wantsIncludeDeleted } from "../../../../lib/agentAu
 import { includeDeletedWhere } from "../../../../lib/softDelete";
 import { prisma } from "../../../../lib/prisma";
 import { parseJsonBody, serializeChallenge } from "../../../../lib/serialize";
+import { firstEmoji } from "../../../../lib/emoji";
 
 const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -59,7 +60,7 @@ export default async function handler(
         emoji:
           parsed.data.emoji === undefined
             ? null
-            : parsed.data.emoji?.trim() || null,
+            : firstEmoji(parsed.data.emoji ?? "") ?? null,
         pts: parsed.data.pts,
         numWinners: parsed.data.numWinners,
         lat: parsed.data.lat ?? null,

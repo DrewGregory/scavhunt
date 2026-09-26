@@ -28,6 +28,7 @@ import { publicUser, requireAdminSSP } from "../../lib/auth";
 import type { SerializedChallenge, SerializedTeam } from "../../lib/types";
 import AdminMapPanel from "../../components/AdminMapPanel";
 import AdminDataTable, { type AdminColumn } from "../../components/AdminDataTable";
+import EmojiInput from "../../components/EmojiInput";
 import dynamic from "next/dynamic";
 
 // react-leaflet touches `window` — must load client-side only.
@@ -982,20 +983,13 @@ export default function AdminPage({
         minW: "64px",
         getSortValue: (c) => c.emoji ?? "",
         cell: (c) => (
-          <Input
-            size="sm"
-            maxW="56px"
-            textAlign="center"
-            placeholder="🎯"
-            key={`emoji-${c.id}-${c.emoji ?? ""}`}
-            defaultValue={c.emoji ?? ""}
-            onBlur={async (e) => {
-              const next = e.target.value.trim();
-              const prev = c.emoji ?? "";
-              if (next !== prev) {
-                await patchChallenge(c.id, {
-                  emoji: next === "" ? null : next,
-                });
+          <EmojiInput
+            size="xs"
+            value={c.emoji ?? ""}
+            onChange={(next) => {
+              const normalized = next.trim() === "" ? null : next;
+              if (normalized !== (c.emoji ?? null)) {
+                void patchChallenge(c.id, { emoji: normalized });
               }
             }}
           />

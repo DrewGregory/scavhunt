@@ -158,7 +158,7 @@ export default function ChallengeDraftCard({
               <EmojiInput
                 value={challenge.emoji ?? ""}
                 onChange={(next) =>
-                  onChange({ emoji: next.trim() === "" ? null : next.trim() })
+                  onChange({ emoji: next.trim() === "" ? null : next })
                 }
               />
               <Input

@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../lib/prisma";
 import { requireApiAdmin } from "../../../lib/auth";
 import { parseJsonBody, serializeChallenge } from "../../../lib/serialize";
+import { firstEmoji } from "../../../lib/emoji";
 
 /** Empty / null → null (draft, unplaced). Finite number → that value. */
 function parseOptionalCoord(value: unknown): number | null | undefined {
@@ -34,12 +35,13 @@ export default async function handler(
       const lat = parseOptionalCoord(body.lat);
       const lng = parseOptionalCoord(body.lng);
       const enabled = parseOptionalEnabled(body.enabled) ?? true;
-      const emoji =
+      const emojiRaw =
         body.emoji === undefined
           ? undefined
           : body.emoji === null || String(body.emoji).trim() === ""
             ? null
-            : String(body.emoji).trim();
+            : firstEmoji(String(body.emoji));
+      const emoji = emojiRaw;
 
       if (!title || pts == null || numWinners == null) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -122,7 +124,7 @@ export default async function handler(
         data.emoji =
           body.emoji === null || String(body.emoji).trim() === ""
             ? null
-            : String(body.emoji).trim();
+            : firstEmoji(String(body.emoji));
       }
       if (body.pts !== undefined) {
         const pts = Number(body.pts);

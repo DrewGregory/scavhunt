@@ -6,6 +6,9 @@ node_modules
 tsconfig.tsbuildinfo
 backup/*
 
-# Local challenge dumps / one-off prod import (keep off git)
+# Local challenge dumps
 challenges.csv
-scripts/import-2026-challenges.ts
+
+# Local-only scripts (folder kept via .gitkeep)
+scripts/*
+!scripts/.gitkeep
