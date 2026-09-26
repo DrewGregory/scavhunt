@@ -18,6 +18,11 @@ export const getServerSideProps = async (
   if (auth.redirect) return { redirect: auth.redirect };
 
   const submissionsRaw = await prisma.submission.findMany({
+    where: {
+      deletedAt: null,
+      team: { deletedAt: null },
+      challenge: { deletedAt: null, enabled: true },
+    },
     orderBy: { createdAt: "desc" },
     include: {
       team: true,

@@ -52,6 +52,11 @@ export const getServerSideProps = async (
 
   const user = auth.user!;
   const submissionsRaw = await prisma.submission.findMany({
+    where: {
+      deletedAt: null,
+      team: { deletedAt: null },
+      challenge: { deletedAt: null, enabled: true },
+    },
     orderBy: { createdAt: "desc" },
     include: { team: true, challenge: true },
   });

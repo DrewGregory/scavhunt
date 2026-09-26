@@ -31,7 +31,9 @@ export default async function handler(
   if (!admin) return;
 
   if (req.method === "GET") {
+    const includeDeleted = req.query.includeDeleted === "1";
     const users = await prisma.user.findMany({
+      where: includeDeleted ? undefined : { deletedAt: null },
       include: {
         team: true,
         _count: {
@@ -54,6 +56,7 @@ export default async function handler(
         teamId: u.teamId,
         createdAt: u.createdAt.toISOString(),
         lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
+        deletedAt: u.deletedAt?.toISOString() ?? null,
         intent: u.intent,
         teamPreferences: u.teamPreferences,
         competitiveness: u.competitiveness,

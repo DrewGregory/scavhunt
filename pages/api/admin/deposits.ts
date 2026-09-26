@@ -17,9 +17,9 @@ export default async function handler(
   if (!admin) return;
 
   if (req.method === "GET") {
-    const includeVoided = req.query.includeVoided === "1";
+    const includeDeleted = req.query.includeDeleted === "1";
     const deposits = await prisma.neighborhoodDeposit.findMany({
-      where: includeVoided ? undefined : { voidedAt: null },
+      where: includeDeleted ? undefined : { deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 200,
       include: {
@@ -36,7 +36,7 @@ export default async function handler(
         lat: d.lat,
         lng: d.lng,
         accuracy: d.accuracy,
-        voidedAt: d.voidedAt?.toISOString() ?? null,
+        deletedAt: d.deletedAt?.toISOString() ?? null,
         createdAt: d.createdAt.toISOString(),
         team: d.team,
         neighborhood: d.neighborhood,
@@ -67,20 +67,20 @@ export default async function handler(
     if (!deposit) {
       return res.status(404).json({ error: "Deposit not found" });
     }
-    if (deposit.voidedAt) {
-      return res.status(200).json({ ok: true, alreadyVoided: true });
+    if (deposit.deletedAt) {
+      return res.status(200).json({ ok: true, alreadyDeleted: true });
     }
 
     const updated = await prisma.neighborhoodDeposit.update({
       where: { id: deposit.id },
-      data: { voidedAt: new Date() },
+      data: { deletedAt: new Date() },
     });
 
     return res.status(200).json({
       ok: true,
       deposit: {
         id: updated.id,
-        voidedAt: updated.voidedAt?.toISOString() ?? null,
+        deletedAt: updated.deletedAt?.toISOString() ?? null,
       },
     });
   }

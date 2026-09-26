@@ -37,16 +37,26 @@ export default async function handler(
       });
     }
 
-    await prisma.submission.delete({ where: { id: submissionId } });
+    if (submission.deletedAt) {
+      return res.status(200).json({
+        success: true,
+        message: "Submission already archived",
+      });
+    }
+
+    await prisma.submission.update({
+      where: { id: submissionId },
+      data: { deletedAt: new Date() },
+    });
 
     return res.status(200).json({
       success: true,
-      message: "Submission deleted successfully",
+      message: "Submission archived successfully",
     });
   } catch (error) {
-    console.error("Error deleting submission:", error);
+    console.error("Error archiving submission:", error);
     return res.status(500).json({
-      error: "Failed to delete submission",
+      error: "Failed to archive submission",
     });
   }
 }

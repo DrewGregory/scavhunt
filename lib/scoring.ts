@@ -1,18 +1,18 @@
 import { prisma } from "./prisma";
 
-/** Sum of challenge.pts over accepted submissions for a team. */
+/** Sum of challenge.pts over accepted (non-deleted) submissions for a team. */
 export async function getEarnedPoints(teamId: string): Promise<number> {
   const accepted = await prisma.submission.findMany({
-    where: { teamId, accepted: true },
+    where: { teamId, accepted: true, deletedAt: null },
     select: { challenge: { select: { pts: true } } },
   });
   return accepted.reduce((sum, s) => sum + s.challenge.pts, 0);
 }
 
-/** Sum of non-voided neighborhood deposits for a team. */
+/** Sum of non-deleted neighborhood deposits for a team. */
 export async function getDepositedPoints(teamId: string): Promise<number> {
   const agg = await prisma.neighborhoodDeposit.aggregate({
-    where: { teamId, voidedAt: null },
+    where: { teamId, deletedAt: null },
     _sum: { points: true },
   });
   return agg._sum.points ?? 0;

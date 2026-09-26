@@ -25,6 +25,7 @@ export default async function handler(
   const [standings, teams] = await Promise.all([
     getStandings({ onMapOnly: true, includeBoundary: true }),
     prisma.team.findMany({
+      where: { deletedAt: null },
       select: { id: true, name: true, emoji: true, color: true },
       orderBy: { name: "asc" },
     }),

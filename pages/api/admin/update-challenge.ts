@@ -12,6 +12,14 @@ function parseOptionalCoord(value: unknown): number | null | undefined {
   return n;
 }
 
+function parseOptionalEnabled(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  return undefined;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -25,13 +33,23 @@ export default async function handler(
       const { title, prompt, pts, numWinners } = body;
       const lat = parseOptionalCoord(body.lat);
       const lng = parseOptionalCoord(body.lng);
+      const enabled = parseOptionalEnabled(body.enabled) ?? true;
 
-      if (!title || !pts || !numWinners) {
+      if (!title || pts == null || numWinners == null) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
+      const ptsN = Number(pts);
+      const winnersN = Number(numWinners);
+      if (!Number.isFinite(ptsN) || ptsN <= 0) {
+        return res.status(400).json({ error: "Invalid points" });
+      }
+      if (!Number.isFinite(winnersN) || winnersN < 1) {
+        return res.status(400).json({ error: "Invalid winners" });
+      }
+
       const existing = await prisma.challenge.findFirst({
-        where: { title: String(title) },
+        where: { title: String(title).trim(), deletedAt: null },
       });
       if (existing) {
         return res
@@ -41,12 +59,13 @@ export default async function handler(
 
       const challenge = await prisma.challenge.create({
         data: {
-          title: String(title),
+          title: String(title).trim(),
           prompt: String(prompt || " "),
-          pts: Number(pts),
+          pts: ptsN,
           lat: lat ?? null,
           lng: lng ?? null,
-          numWinners: Number(numWinners),
+          numWinners: winnersN,
+          enabled,
         },
       });
 
@@ -80,6 +99,7 @@ export default async function handler(
         lat?: number | null;
         lng?: number | null;
         numWinners?: number;
+        enabled?: boolean;
       } = {};
 
       if (body.title !== undefined) {
@@ -104,8 +124,10 @@ export default async function handler(
         }
         data.numWinners = numWinners;
       }
+      const enabled = parseOptionalEnabled(body.enabled);
+      if (enabled !== undefined) data.enabled = enabled;
+
       if (body.lat !== undefined || body.lng !== undefined) {
-        // lat/lng edited together — missing side becomes null
         data.lat =
           body.lat !== undefined
             ? (parseOptionalCoord(body.lat) ?? null)
@@ -114,10 +136,18 @@ export default async function handler(
           body.lng !== undefined
             ? (parseOptionalCoord(body.lng) ?? null)
             : existing.lng;
-        if (body.lat !== undefined && body.lng === undefined && body.lat === null) {
+        if (
+          body.lat !== undefined &&
+          body.lng === undefined &&
+          body.lat === null
+        ) {
           data.lng = null;
         }
-        if (body.lng !== undefined && body.lat === undefined && body.lng === null) {
+        if (
+          body.lng !== undefined &&
+          body.lat === undefined &&
+          body.lng === null
+        ) {
           data.lat = null;
         }
       }

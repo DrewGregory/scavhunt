@@ -31,7 +31,7 @@ type DepositRow = {
   lat: number;
   lng: number;
   accuracy: number | null;
-  voidedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
   team: { id: string; name: string; emoji: string; color: string };
   neighborhood: { id: string; name: string; emoji: string | null };
@@ -66,7 +66,7 @@ export default function AdminMapPanel({
   const selected = neighborhoods.find((n) => n.id === selectedId) ?? null;
 
   const loadDeposits = useCallback(async () => {
-    const res = await fetch("/api/admin/deposits?includeVoided=1");
+    const res = await fetch("/api/admin/deposits?includeDeleted=1");
     if (!res.ok) return;
     const data = await res.json();
     setDeposits(data.deposits ?? []);
@@ -178,7 +178,7 @@ export default function AdminMapPanel({
   };
 
   const voidDeposit = async (id: string) => {
-    if (!confirm("Void this deposit? Points return to the team's score.")) {
+    if (!confirm("Soft-delete this deposit? Points return to the team's score.")) {
       return;
     }
     const res = await fetch("/api/admin/deposits", {
@@ -188,10 +188,10 @@ export default function AdminMapPanel({
     });
     const data = await res.json();
     if (!res.ok) {
-      toast({ title: data.error || "Void failed", status: "error" });
+      toast({ title: data.error || "Delete failed", status: "error" });
       return;
     }
-    toast({ title: "Deposit voided", status: "success" });
+    toast({ title: "Deposit soft-deleted", status: "success" });
     await loadDeposits();
   };
 
@@ -303,7 +303,7 @@ export default function AdminMapPanel({
         getSortValue: (d) => d.team.name,
         getFilterValue: (d) => `${d.team.emoji} ${d.team.name}`,
         cell: (d) => (
-          <Text opacity={d.voidedAt ? 0.5 : 1}>
+          <Text opacity={d.deletedAt ? 0.5 : 1}>
             {d.team.emoji} {d.team.name}
           </Text>
         ),
@@ -313,14 +313,14 @@ export default function AdminMapPanel({
         header: "Neighborhood",
         getSortValue: (d) => d.neighborhood.name,
         cell: (d) => (
-          <Text opacity={d.voidedAt ? 0.5 : 1}>{d.neighborhood.name}</Text>
+          <Text opacity={d.deletedAt ? 0.5 : 1}>{d.neighborhood.name}</Text>
         ),
       },
       {
         id: "points",
         header: "Pts",
         getSortValue: (d) => d.points,
-        cell: (d) => <Text opacity={d.voidedAt ? 0.5 : 1}>{d.points}</Text>,
+        cell: (d) => <Text opacity={d.deletedAt ? 0.5 : 1}>{d.points}</Text>,
       },
       {
         id: "by",
@@ -328,7 +328,7 @@ export default function AdminMapPanel({
         getSortValue: (d) => d.user.name,
         getFilterValue: (d) => `${d.user.name} ${d.user.email}`,
         cell: (d) => (
-          <Text fontSize="xs" opacity={d.voidedAt ? 0.5 : 1}>
+          <Text fontSize="xs" opacity={d.deletedAt ? 0.5 : 1}>
             {d.user.name}
           </Text>
         ),
@@ -338,9 +338,9 @@ export default function AdminMapPanel({
         header: "",
         disableSort: true,
         cell: (d) =>
-          d.voidedAt ? (
+          d.deletedAt ? (
             <Text fontSize="xs" color="gray.500">
-              voided
+              deleted
             </Text>
           ) : (
             <Button
@@ -349,7 +349,7 @@ export default function AdminMapPanel({
               variant="outline"
               onClick={() => void voidDeposit(d.id)}
             >
-              Void
+              Delete
             </Button>
           ),
       },

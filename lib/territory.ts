@@ -47,7 +47,10 @@ export async function getStandings(opts?: {
   const includeBoundary = opts?.includeBoundary ?? true;
 
   const neighborhoods = await prisma.neighborhood.findMany({
-    where: onMapOnly ? { onMap: true } : undefined,
+    where: {
+      deletedAt: null,
+      ...(onMapOnly ? { onMap: true } : {}),
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -63,8 +66,8 @@ export async function getStandings(opts?: {
   const deposits = await prisma.neighborhoodDeposit.groupBy({
     by: ["neighborhoodId", "teamId"],
     where: {
-      voidedAt: null,
-      ...(onMapOnly ? { neighborhood: { onMap: true } } : {}),
+      deletedAt: null,
+      ...(onMapOnly ? { neighborhood: { onMap: true, deletedAt: null } } : {}),
     },
     _sum: { points: true },
   });
@@ -72,7 +75,7 @@ export async function getStandings(opts?: {
   const teamIds = [...new Set(deposits.map((d) => d.teamId))];
   const teams = teamIds.length
     ? await prisma.team.findMany({
-        where: { id: { in: teamIds } },
+        where: { id: { in: teamIds }, deletedAt: null },
         select: { id: true, name: true, emoji: true, color: true },
       })
     : [];

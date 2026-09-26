@@ -27,6 +27,7 @@ export function serializeChallenge(challenge: Challenge): SerializedChallenge {
     lng: challenge.lng,
     pts: challenge.pts,
     numWinners: challenge.numWinners,
+    enabled: challenge.enabled,
   };
 }
 

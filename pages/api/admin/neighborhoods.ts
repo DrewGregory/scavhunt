@@ -57,7 +57,9 @@ export default async function handler(
   if (!admin) return;
 
   if (req.method === "GET") {
+    const includeDeleted = req.query.includeDeleted === "1";
     const neighborhoods = await prisma.neighborhood.findMany({
+      where: includeDeleted ? undefined : { deletedAt: null },
       orderBy: { name: "asc" },
     });
     return res.status(200).json({
@@ -202,7 +204,14 @@ export default async function handler(
       return res.status(404).json({ error: "Neighborhood not found" });
     }
 
-    await prisma.neighborhood.delete({ where: { id } });
+    if (target.deletedAt) {
+      return res.status(200).json({ ok: true, alreadyDeleted: true });
+    }
+
+    await prisma.neighborhood.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     return res.status(200).json({ ok: true });
   }
 
