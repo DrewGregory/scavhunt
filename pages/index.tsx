@@ -116,9 +116,6 @@ export default function HomePage({
                 <Heading size={{ base: "lg", md: "xl" }} letterSpacing="tight">
                   {scavengerHuntName}
                 </Heading>
-                <Text color="whiteAlpha.800" fontSize="sm">
-                  Scavenger hunt · get ready before it starts
-                </Text>
               </VStack>
 
               <HStack spacing={3}>
@@ -197,24 +194,18 @@ export default function HomePage({
 
                   {user ? (
                     surveyDone ? (
-                      <VStack spacing={2}>
-                        <Text fontSize="sm" color="whiteAlpha.900">
-                          Thanks — your player survey is in.
-                        </Text>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          color="white"
-                          onClick={() => setSurveyOpen(true)}
-                        >
-                          Edit survey
-                        </Button>
-                      </VStack>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        color="white"
+                        onClick={() => setSurveyOpen(true)}
+                      >
+                        Edit survey
+                      </Button>
                     ) : (
                       <VStack spacing={3}>
                         <Text fontSize="md" color="whiteAlpha.950" px={2}>
-                          Tell us how you want to play so we can place you on a
-                          team.
+                          Please fill out the player survey to register!
                         </Text>
                         <Button
                           size="lg"

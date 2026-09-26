@@ -12,11 +12,6 @@ import {
   Heading,
   HStack,
   Input,
-  Menu,
-  MenuButton,
-  MenuItemOption,
-  MenuList,
-  MenuOptionGroup,
   Select,
   Text,
   useToast,
@@ -440,7 +435,10 @@ export default function ChallengeDraftBoard() {
         id: n.id,
         label: `${neighborhoodEmoji(n.name, n.emoji)} ${n.name}`,
       }));
-    return [{ id: UNPLACED_FILTER, label: "Unplaced" }, ...opts];
+    return [
+      { id: UNPLACED_FILTER, label: "No location" },
+      ...opts,
+    ];
   }, [neighborhoods]);
 
   if (loading) {
@@ -573,42 +571,6 @@ export default function ChallengeDraftBoard() {
             <option value="created">Created</option>
           </Select>
         </Box>
-        <Box>
-          <Text fontSize="xs" color="gray.500" mb={1}>
-            Neighborhoods
-          </Text>
-          <Menu closeOnSelect={false}>
-            <MenuButton as={Button} size="sm" variant="outline">
-              {neighborhoodFilter.length === 0
-                ? "All neighborhoods"
-                : `${neighborhoodFilter.length} selected`}
-            </MenuButton>
-            <MenuList maxH="280px" overflowY="auto" minW="220px">
-              <MenuOptionGroup
-                type="checkbox"
-                value={neighborhoodFilter}
-                onChange={(v) =>
-                  setNeighborhoodFilter(typeof v === "string" ? [v] : [...v])
-                }
-              >
-                {neighborhoodOptions.map((o) => (
-                  <MenuItemOption key={o.id} value={o.id}>
-                    {o.label}
-                  </MenuItemOption>
-                ))}
-              </MenuOptionGroup>
-            </MenuList>
-          </Menu>
-        </Box>
-        {neighborhoodFilter.length > 0 && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setNeighborhoodFilter([])}
-          >
-            Clear filters
-          </Button>
-        )}
       </HStack>
 
       <Box
@@ -630,6 +592,9 @@ export default function ChallengeDraftBoard() {
             selectedId={selectedId}
             editingId={editingId}
             panToken={panToken}
+            neighborhoodFilter={neighborhoodFilter}
+            neighborhoodOptions={neighborhoodOptions}
+            onNeighborhoodFilterChange={setNeighborhoodFilter}
             onSelect={(id) => {
               setSelectedId(id);
               setPanToken((t) => t + 1);

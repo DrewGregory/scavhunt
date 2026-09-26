@@ -10,8 +10,14 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import {
   Box,
+  Button,
   HStack,
   IconButton,
+  Menu,
+  MenuButton,
+  MenuItemOption,
+  MenuList,
+  MenuOptionGroup,
   Switch,
   Text,
   VStack,
@@ -119,6 +125,9 @@ export default function ChallengeDraftMap({
   onMapClickPlace,
   onContextCreate,
   onMarkerMove,
+  neighborhoodFilter = [],
+  neighborhoodOptions = [],
+  onNeighborhoodFilterChange,
   height = "100%",
 }: {
   challenges: DraftChallenge[];
@@ -130,6 +139,9 @@ export default function ChallengeDraftMap({
   onMapClickPlace: (lat: number, lng: number) => void;
   onContextCreate: (lat: number, lng: number) => void;
   onMarkerMove: (id: string, lat: number, lng: number) => void;
+  neighborhoodFilter?: string[];
+  neighborhoodOptions?: Array<{ id: string; label: string }>;
+  onNeighborhoodFilterChange?: (ids: string[]) => void;
   height?: number | string;
 }) {
   const [showChallenges, setShowChallenges] = useState(true);
@@ -171,68 +183,121 @@ export default function ChallengeDraftMap({
       position="relative"
     >
       <Box flex={1} minH={0} position="relative">
-        <Box position="absolute" top={3} right={3} zIndex={1000}>
-          <IconButton
-            aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
-            icon={<FiLayers />}
-            size="sm"
-            bg="white"
-            boxShadow="md"
-            onClick={() => setLayersOpen((o) => !o)}
-          />
-          {layersOpen && (
-            <Box
-              mt={2}
-              bg="white"
-              p={3}
-              borderRadius="md"
-              boxShadow="lg"
-              minW="200px"
-            >
-              <VStack align="stretch" spacing={3}>
-                <HStack justify="space-between">
-                  <Text fontSize="sm" fontWeight="medium">
-                    Challenges
-                  </Text>
-                  <Switch
-                    size="sm"
-                    isChecked={showChallenges}
-                    onChange={(e) => setShowChallenges(e.target.checked)}
-                    colorScheme="blue"
-                  />
-                </HStack>
-                <HStack justify="space-between">
-                  <Text fontSize="sm" fontWeight="medium">
-                    Neighborhoods
-                  </Text>
-                  <Switch
-                    size="sm"
-                    isChecked={showNeighborhoods}
-                    onChange={(e) => setShowNeighborhoods(e.target.checked)}
-                    colorScheme="blue"
-                  />
-                </HStack>
-                <HStack justify="space-between">
-                  <Text fontSize="sm" fontWeight="medium">
-                    Hide disabled
-                  </Text>
-                  <Switch
-                    size="sm"
-                    isChecked={hideDisabled}
-                    onChange={(e) => setHideDisabled(e.target.checked)}
-                    colorScheme="blue"
-                  />
-                </HStack>
-                <HStack justify="space-between">
-                  <Text fontSize="sm" fontWeight="medium">
-                    Basemap
-                  </Text>
-                  <BasemapSelect value={basemap} onChange={setBasemap} />
-                </HStack>
-              </VStack>
-            </Box>
+        <HStack
+          position="absolute"
+          top={3}
+          right={3}
+          zIndex={1000}
+          align="flex-start"
+          spacing={2}
+        >
+          {onNeighborhoodFilterChange && (
+            <Menu closeOnSelect={false}>
+              <MenuButton
+                as={Button}
+                size="sm"
+                bg="white"
+                boxShadow="md"
+                fontWeight="medium"
+              >
+                {neighborhoodFilter.length === 0
+                  ? "Neighborhoods"
+                  : `${neighborhoodFilter.length} neighborhoods`}
+              </MenuButton>
+              <MenuList maxH="280px" overflowY="auto" minW="220px">
+                <MenuOptionGroup
+                  type="checkbox"
+                  value={neighborhoodFilter}
+                  onChange={(v) =>
+                    onNeighborhoodFilterChange(
+                      typeof v === "string" ? [v] : [...v],
+                    )
+                  }
+                >
+                  {neighborhoodOptions.map((o) => (
+                    <MenuItemOption key={o.id} value={o.id}>
+                      {o.label}
+                    </MenuItemOption>
+                  ))}
+                </MenuOptionGroup>
+                {neighborhoodFilter.length > 0 && (
+                  <Box px={3} py={2} borderTopWidth="1px">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      w="100%"
+                      onClick={() => onNeighborhoodFilterChange([])}
+                    >
+                      Clear filter
+                    </Button>
+                  </Box>
+                )}
+              </MenuList>
+            </Menu>
           )}
-        </Box>
+          <Box>
+            <IconButton
+              aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
+              icon={<FiLayers />}
+              size="sm"
+              bg="white"
+              boxShadow="md"
+              onClick={() => setLayersOpen((o) => !o)}
+            />
+            {layersOpen && (
+              <Box
+                mt={2}
+                bg="white"
+                p={3}
+                borderRadius="md"
+                boxShadow="lg"
+                minW="200px"
+              >
+                <VStack align="stretch" spacing={3}>
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium">
+                      Challenges
+                    </Text>
+                    <Switch
+                      size="sm"
+                      isChecked={showChallenges}
+                      onChange={(e) => setShowChallenges(e.target.checked)}
+                      colorScheme="blue"
+                    />
+                  </HStack>
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium">
+                      Neighborhood overlays
+                    </Text>
+                    <Switch
+                      size="sm"
+                      isChecked={showNeighborhoods}
+                      onChange={(e) => setShowNeighborhoods(e.target.checked)}
+                      colorScheme="blue"
+                    />
+                  </HStack>
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium">
+                      Hide disabled
+                    </Text>
+                    <Switch
+                      size="sm"
+                      isChecked={hideDisabled}
+                      onChange={(e) => setHideDisabled(e.target.checked)}
+                      colorScheme="blue"
+                    />
+                  </HStack>
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium">
+                      Basemap
+                    </Text>
+                    <BasemapSelect value={basemap} onChange={setBasemap} />
+                  </HStack>
+                </VStack>
+              </Box>
+            )}
+          </Box>
+        </HStack>
 
         <MapContainer
           center={SF_CENTER}

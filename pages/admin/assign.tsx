@@ -21,21 +21,16 @@ export const getServerSideProps = async (
 };
 
 export default function AdminAssignPage({
-  user,
+  user: _user,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   return (
     <NavContainer title="Assign teams">
       <VStack align="stretch" spacing={4} width="100%">
         <HStack justify="space-between" flexWrap="wrap" gap={2}>
           <Heading size="lg">Assign teams</Heading>
-          <HStack>
-            <Text fontSize="sm" color="gray.500">
-              {user.name}
-            </Text>
-            <Button as={Link} href="/admin" size="sm" variant="outline">
-              ← Admin
-            </Button>
-          </HStack>
+          <Button as={Link} href="/admin" size="sm" variant="outline">
+            ← Admin
+          </Button>
         </HStack>
         <Text fontSize="sm" color="gray.600">
           Drag players from Unassigned into a team, or onto{" "}

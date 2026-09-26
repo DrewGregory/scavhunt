@@ -177,12 +177,6 @@ export default function NavContainer({
           <Text flex={1} fontSize="2xl" fontFamily="monospace" fontWeight="bold">
             {title}
           </Text>
-          {session?.user ? (
-            <Button size="sm" variant="outline" onClick={() => setSurveyOpen(true)}>
-              {surveyLabel}
-            </Button>
-          ) : null}
-          {session?.team && <Text>{session.team.emoji}</Text>}
         </Flex>
       )}
       <Box
@@ -432,11 +426,8 @@ interface MobileProps extends FlexProps {
 const MobileNav = ({
   onOpen,
   title,
-  onOpenSurvey,
-  surveyLabel = "Player survey",
   ...rest
 }: MobileProps) => {
-  const session = useSession();
   return (
     <Flex
       ml={{ base: 0, md: SIDEBAR_EXPANDED }}
@@ -466,12 +457,6 @@ const MobileNav = ({
       >
         {title}
       </Text>
-      {session?.user && onOpenSurvey ? (
-        <Button size="sm" mr={2} variant="outline" onClick={onOpenSurvey}>
-          {surveyLabel}
-        </Button>
-      ) : null}
-      {session?.team && <Text>{session.team.emoji}</Text>}
     </Flex>
   );
 };

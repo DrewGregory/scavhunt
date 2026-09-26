@@ -1,4 +1,4 @@
-import { Button, Heading, HStack, Text, VStack } from "@chakra-ui/react";
+import { Button, Heading, HStack, VStack } from "@chakra-ui/react";
 import type {
   GetServerSidePropsContext,
   InferGetServerSidePropsType,
@@ -21,21 +21,16 @@ export const getServerSideProps = async (
 };
 
 export default function AdminChallengesDraftPage({
-  user,
+  user: _user,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   return (
     <NavContainer title="Challenge draft">
       <VStack align="stretch" spacing={4} width="100%">
         <HStack justify="space-between" flexWrap="wrap" gap={2}>
           <Heading size="lg">Challenge draft board</Heading>
-          <HStack>
-            <Text fontSize="sm" color="gray.500">
-              {user.name}
-            </Text>
-            <Button as={Link} href="/admin" size="sm" variant="outline">
-              ← Admin
-            </Button>
-          </HStack>
+          <Button as={Link} href="/admin" size="sm" variant="outline">
+            ← Admin
+          </Button>
         </HStack>
         <Text fontSize="sm" color="gray.600">
           Dump prior-year challenges into <strong>Disabled</strong>, edit
