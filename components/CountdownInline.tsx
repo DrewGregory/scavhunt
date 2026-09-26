@@ -44,7 +44,6 @@ function Renderer({
         color="white"
         fontWeight="800"
         textAlign="center"
-        fontVariantNumeric="tabular-nums"
       >
         {days > 0 ? `${days}d ` : ""}
         {String(hours).padStart(2, "0")}:
