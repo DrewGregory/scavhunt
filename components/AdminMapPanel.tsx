@@ -16,7 +16,6 @@ import {
   ModalHeader,
   ModalOverlay,
   Select,
-  Switch,
   Text,
   Tooltip,
   VStack,
@@ -431,7 +430,6 @@ export default function AdminMapPanel({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [deposits, setDeposits] = useState<DepositRow[]>([]);
   const [teams, setTeams] = useState<TeamOption[]>([]);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("");
   const [creating, setCreating] = useState(false);
@@ -551,7 +549,6 @@ export default function AdminMapPanel({
     id: string,
     patch: Record<string, unknown>,
   ) => {
-    setBusyId(id);
     try {
       const res = await fetch("/api/admin/neighborhoods", {
         method: "PATCH",
@@ -566,8 +563,6 @@ export default function AdminMapPanel({
       await onReload();
     } catch {
       toast({ title: "Update failed", status: "error" });
-    } finally {
-      setBusyId(null);
     }
   };
 
@@ -677,40 +672,6 @@ export default function AdminMapPanel({
         },
       },
       {
-        id: "onMap",
-        header: "On map",
-        getSortValue: (n) => n.onMap,
-        cell: (n) => {
-          const editing = editingRowId === n.id;
-          if (!editing) {
-            return n.onMap ? (
-              <Badge colorScheme="green">Yes</Badge>
-            ) : (
-              <Badge colorScheme="gray">No</Badge>
-            );
-          }
-          return (
-            <Switch
-              isChecked={n.onMap}
-              isDisabled={busyId === n.id}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) =>
-                void patchNeighborhood(n.id, {
-                  onMap: e.target.checked,
-                })
-              }
-              colorScheme="blue"
-            />
-          );
-        },
-      },
-      {
-        id: "boundary",
-        header: "Boundary",
-        getSortValue: (n) => (n.hasBoundary ? 1 : 0),
-        cell: (n) => (n.hasBoundary ? "Yes" : "—"),
-      },
-      {
         id: "deposits",
         header: "Deposits",
         getSortValue: (n) => {
@@ -783,7 +744,7 @@ export default function AdminMapPanel({
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busyId, editingRowId, depositsByNeighborhood],
+    [editingRowId, depositsByNeighborhood],
   );
 
   return (
@@ -794,8 +755,8 @@ export default function AdminMapPanel({
             <Heading size="md">Map neighborhoods</Heading>
             <Text fontSize="sm" color="gray.600">
               Click a row to select it on the map. Expand to manage deposits.
-              Pencil edits name / emoji / on-map. Use Edit borders on the map
-              for shared edges.
+              Pencil edits name / emoji. Use Edit borders on the map for shared
+              edges.
             </Text>
           </Box>
           <HStack flexWrap="wrap" gap={2}>
