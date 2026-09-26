@@ -272,31 +272,28 @@ export default function ChallengeDraftCard({
         onStartEdit={onStartEdit}
       >
         <VStack align="stretch" spacing={1}>
-          <HStack align="flex-start" justify="space-between" spacing={2}>
-            <Text fontSize="sm" fontWeight="semibold" noOfLines={2} flex={1}>
-              {challenge.title}
-            </Text>
-            <Text
-              fontSize="xs"
-              color="gray.600"
-              whiteSpace="nowrap"
-              fontWeight="medium"
-              flexShrink={0}
-            >
-              {challenge.pts} pts · {challenge.numWinners} win
-              {challenge.numWinners === 1 ? "" : "s"}
-            </Text>
-          </HStack>
+          <Text fontSize="sm" fontWeight="semibold" whiteSpace="normal">
+            {challenge.title}
+          </Text>
           {promptPreview && (
             <Text fontSize="xs" color="gray.600" noOfLines={2}>
               {promptPreview}
             </Text>
           )}
-          <HStack justify="flex-end" pt={0.5}>
+          <HStack justify="space-between" align="center" pt={0.5} spacing={2}>
+            <Text
+              fontSize="xs"
+              color="gray.600"
+              fontWeight="medium"
+              flexShrink={0}
+              title="points / winners"
+            >
+              {challenge.pts} / {challenge.numWinners}
+            </Text>
             <Badge
               fontSize="2xs"
               colorScheme={badge.colorScheme}
-              maxW="100%"
+              maxW="70%"
               isTruncated
             >
               {badge.label}

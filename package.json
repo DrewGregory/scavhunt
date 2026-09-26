@@ -63,8 +63,7 @@
     "postinstall": "prisma generate",
     "topology:build": "tsx scripts/build-sf-topology.ts",
     "topology:verify": "tsx scripts/verify-sf-topology.ts",
-    "datasf:build": "tsx scripts/build-datasf-117.ts",
-    "import:2026": "tsx scripts/import-2026-challenges.ts"
+    "datasf:build": "tsx scripts/build-datasf-117.ts"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.87.1",

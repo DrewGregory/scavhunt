@@ -33,6 +33,87 @@ const ChallengeDraftMap = dynamic(() => import("./ChallengeDraftMap"), {
   ssr: false,
 });
 
+const PANEL_WIDTHS_KEY = "scavhunt.draftBoard.panelWidths";
+const DEFAULT_PANEL_WIDTHS = [22, 26, 52]; // % enabled / disabled / map
+const MIN_PANEL_PCT = 12;
+
+function loadPanelWidths(): number[] {
+  if (typeof window === "undefined") return DEFAULT_PANEL_WIDTHS;
+  try {
+    const raw = localStorage.getItem(PANEL_WIDTHS_KEY);
+    if (!raw) return DEFAULT_PANEL_WIDTHS;
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length !== 3 ||
+      !parsed.every((n) => typeof n === "number" && Number.isFinite(n))
+    ) {
+      return DEFAULT_PANEL_WIDTHS;
+    }
+    const sum = (parsed as number[]).reduce((a, b) => a + b, 0);
+    if (sum <= 0) return DEFAULT_PANEL_WIDTHS;
+    return (parsed as number[]).map((n) => (n / sum) * 100);
+  } catch {
+    return DEFAULT_PANEL_WIDTHS;
+  }
+}
+
+function PanelResizeHandle({
+  onDrag,
+}: {
+  onDrag: (deltaPx: number, containerWidth: number) => void;
+}) {
+  return (
+    <Box
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panels"
+      flexShrink={0}
+      w="10px"
+      mx="-2px"
+      cursor="col-resize"
+      display={{ base: "none", lg: "flex" }}
+      alignItems="center"
+      justifyContent="center"
+      zIndex={2}
+      userSelect="none"
+      onMouseDown={(e) => {
+        e.preventDefault();
+        const container = e.currentTarget.parentElement as HTMLElement | null;
+        const containerWidth = container?.getBoundingClientRect().width ?? 1;
+        let lastX = e.clientX;
+        const onMove = (ev: MouseEvent) => {
+          const delta = ev.clientX - lastX;
+          lastX = ev.clientX;
+          onDrag(delta, containerWidth);
+        };
+        const onUp = () => {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+        };
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      }}
+      _hover={{ bg: "purple.100" }}
+      sx={{
+        "&::after": {
+          content: '""',
+          display: "block",
+          w: "3px",
+          h: "36px",
+          borderRadius: "full",
+          bg: "gray.300",
+        },
+        "&:hover::after": { bg: "purple.400" },
+      }}
+    />
+  );
+}
+
 type ApiChallenge = {
   id: string;
   title: string;
@@ -99,10 +180,40 @@ export default function ChallengeDraftBoard() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [panToken, setPanToken] = useState(0);
   const [dragOver, setDragOver] = useState<DropTarget | null>(null);
+  const [panelWidths, setPanelWidths] = useState<number[] | null>(null);
   const focusTitleId = useRef<string | null>(null);
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  const widths = panelWidths ?? DEFAULT_PANEL_WIDTHS;
+
+  useEffect(() => {
+    setPanelWidths(loadPanelWidths());
+  }, []);
+
+  useEffect(() => {
+    if (panelWidths == null) return;
+    try {
+      localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(panelWidths));
+    } catch {
+      /* ignore */
+    }
+  }, [panelWidths]);
+
+  const resizePanels = useCallback((index: number, deltaPx: number, containerWidth: number) => {
+    if (containerWidth <= 0) return;
+    const deltaPct = (deltaPx / containerWidth) * 100;
+    setPanelWidths((prev) => {
+      const base = prev ?? DEFAULT_PANEL_WIDTHS;
+      const next = [...base];
+      const left = next[index]! + deltaPct;
+      const right = next[index + 1]! - deltaPct;
+      if (left < MIN_PANEL_PCT || right < MIN_PANEL_PCT) return prev;
+      next[index] = left;
+      next[index + 1] = right;
+      return next;
+    });
+  }, []);
 
   const neighborhoodGeo = useMemo(
     () =>
@@ -458,6 +569,8 @@ export default function ChallengeDraftBoard() {
       display="flex"
       flexDirection="column"
       minH={0}
+      height="100%"
+      flex={1}
       outline={dragOver === target ? "2px solid" : undefined}
       outlineColor={dragOver === target ? "purple.400" : undefined}
       {...makeDropHandlers(target)}
@@ -578,18 +691,45 @@ export default function ChallengeDraftBoard() {
       </HStack>
 
       <Box
-        display="grid"
-        gridTemplateColumns={{
-          base: "1fr",
-          lg: "minmax(220px,260px) minmax(220px,260px) 1fr",
-        }}
-        gap={3}
+        display="flex"
+        flexDirection={{ base: "column", lg: "row" }}
+        gap={{ base: 3, lg: 0 }}
         flex={1}
         minH={0}
       >
-        {renderColumn("Enabled", enabledList, "enabled")}
-        {renderColumn("Disabled", disabledList, "disabled", true)}
-        <Box minH={{ base: "360px", lg: 0 }} minW={0}>
+        <Box
+          flex={{ base: "none", lg: `${widths[0]} 1 0` }}
+          w={{ base: "100%", lg: undefined }}
+          minW={{ lg: 0 }}
+          minH={{ base: "280px", lg: 0 }}
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+        >
+          {renderColumn("Enabled", enabledList, "enabled")}
+        </Box>
+        <PanelResizeHandle onDrag={(d, w) => resizePanels(0, d, w)} />
+        <Box
+          flex={{ base: "none", lg: `${widths[1]} 1 0` }}
+          w={{ base: "100%", lg: undefined }}
+          minW={{ lg: 0 }}
+          minH={{ base: "280px", lg: 0 }}
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+        >
+          {renderColumn("Disabled", disabledList, "disabled", true)}
+        </Box>
+        <PanelResizeHandle onDrag={(d, w) => resizePanels(1, d, w)} />
+        <Box
+          flex={{ base: "none", lg: `${widths[2]} 1 0` }}
+          w={{ base: "100%", lg: undefined }}
+          minW={{ lg: 0 }}
+          minH={{ base: "360px", lg: 0 }}
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+        >
           <ChallengeDraftMap
             challenges={filteredSorted}
             neighborhoods={mapNeighborhoods}

@@ -5,3 +5,7 @@ node_modules
 .env.local
 tsconfig.tsbuildinfo
 backup/*
+
+# Local challenge dumps / one-off prod import (keep off git)
+challenges.csv
+scripts/import-2026-challenges.ts

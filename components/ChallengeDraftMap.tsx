@@ -358,7 +358,7 @@ export default function ChallengeDraftMap({
           </Box>
         </HStack>
 
-        {selectedId && (
+        {selected && (
           <Box
             position="absolute"
             bottom={3}
@@ -369,14 +369,19 @@ export default function ChallengeDraftMap({
             color="white"
             px={3}
             py={1.5}
-            borderRadius="full"
+            borderRadius="lg"
             boxShadow="md"
             fontSize="xs"
-            fontWeight="semibold"
             pointerEvents="none"
-            whiteSpace="nowrap"
+            textAlign="center"
+            maxW="90%"
           >
-            Drag pin to place · click map to drop · Esc / dbl-click to clear
+            <Text fontWeight="semibold" whiteSpace="nowrap">
+              Click map to move. Press escape to stop editing
+            </Text>
+            <Text fontWeight="medium" opacity={0.95} noOfLines={1} mt={0.5}>
+              Editing {selected.title}
+            </Text>
           </Box>
         )}
 
