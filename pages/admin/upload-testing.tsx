@@ -52,6 +52,7 @@ import {
 import { savedPayload, viewFromOutcome, viewFromSaved, type TestView } from "../../lib/uploadTesting/view";
 import type { SerializedUploadTestRun } from "../../lib/uploadTesting/storage";
 import { fmtBytes, fmtMbps, fmtMs, fmtPct, savedPct } from "../../lib/uploadTesting/format";
+import * as dbg from "../../lib/uploadTesting/debug";
 
 export const getServerSideProps = async (context: GetServerSidePropsContext) => {
   const auth = await requireAdminSSP(context);
@@ -140,11 +141,18 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
   const [variants, setVariants] = useState<Variant[]>([]);
   const [compareSel, setCompareSel] = useState<string[]>(["current", "480p"]);
   const [variantName, setVariantName] = useState("");
+  // Accordion indexes: 0 Settings, 1 Chaos, 2 Preview, 3 Compression, 4 Upload, 5 Downloads, 6 Compare, 7 History
+  const [openSections, setOpenSections] = useState<number[]>([0, 2]);
+
+  const revealResults = useCallback(() => {
+    setOpenSections((prev) => Array.from(new Set([...prev, 2, 3, 4, 5, 7])));
+  }, []);
 
   const history = useSWR<{ runs: SerializedUploadTestRun[] }>("/api/admin/upload-tests", jsonFetcher);
   const prod = useSWR<{ overrides: unknown; config: UploadConfig }>("/api/admin/upload-config", jsonFetcher);
 
   useEffect(() => {
+    dbg.info("Upload testing page mounted — filter console by upload-testing");
     detectCodecSupport().then(setCodecSupport).catch(() => setCodecSupport(null));
     try {
       const saved = JSON.parse(localStorage.getItem(VARIANTS_KEY) ?? "[]");
@@ -211,6 +219,7 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
     setLiveEvents([]);
     setCompressProgress(0);
     setUploadProgress({});
+    revealResults();
     const outcome = await runFullTest({
       file,
       config: cfg,
@@ -223,9 +232,17 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
       onUploadProgress: (l, f) => setUploadProgress((p) => ({ ...p, [l]: f })),
       onSkipAvailable: (fn) => setSkipFn(() => fn),
       onPartEvent: (_l, e) => liveRef.current.push(e),
+      onSnapshot: (o) => {
+        const v = viewFromOutcome(o);
+        dbg.setLastView(v);
+        setView(v);
+      },
     });
     outcomesRef.current.push(outcome);
     const v = viewFromOutcome(outcome);
+    dbg.setLastView(v);
+    dbg.setLastOutcome(outcome);
+    setView(v);
     if (autoSave) await saveRun(v, label);
     return v;
   };
@@ -235,8 +252,13 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
     setRunning(true);
     try {
       const v = await execute(config, configLabel(config));
-      if (v) setView(v);
+      if (v) {
+        setView(v);
+        revealResults();
+      }
     } catch (e) {
+      dbg.error("runSingle failed", e);
+      dbg.setLastError(e);
       toast({ status: "error", title: "Run failed", description: e instanceof Error ? e.message : String(e) });
     } finally {
       setRunning(false);
@@ -271,6 +293,10 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
         }
       }
       setComparePick([0, Math.min(1, cols.length - 1)]);
+      if (cols[0]) {
+        setView(cols[0].view);
+        setOpenSections((prev) => Array.from(new Set([...prev, 2, 3, 4, 5, 6, 7])));
+      }
     } finally {
       setRunning(false);
       setSkipFn(null);
@@ -286,6 +312,7 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
     setView(v);
     setConfig(v.config);
     if (v.chaos) setChaos(v.chaos);
+    revealResults();
   };
 
   const deleteHistory = async (run: SerializedUploadTestRun) => {
@@ -317,8 +344,10 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
           </Button>
         </HStack>
         <Text fontSize="sm" color="gray.600">
-          Sandbox uploads go to <code>sandbox/&lt;you&gt;/&lt;run&gt;/</code> (expired by a 14-day lifecycle rule) and never create
-          submissions.
+          Sandbox uploads go to <code>sandbox/&lt;you&gt;/&lt;run&gt;/</code> and never create submissions. Open DevTools
+          console and filter <code>upload-testing</code> — every compress/part/lifecycle/download step is logged. After a
+          run: <code>window.__uploadTesting.lastOutcome</code> (key + cdnUrl) and{" "}
+          <code>window.__uploadTesting.events</code>. Upload section also shows the Spaces key + CDN link + Verify HEAD.
         </Text>
 
         <Box borderWidth="1px" borderRadius="md" p={3}>
@@ -397,7 +426,7 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
           )}
         </Box>
 
-        <Accordion allowMultiple defaultIndex={[0, 2]}>
+        <Accordion allowMultiple index={openSections} onChange={(idx) => setOpenSections(Array.isArray(idx) ? idx : [idx])}>
           <Section title="Settings" badge={<Badge>{presetIdFor(config) ?? "custom"}</Badge>}>
             <VStack align="stretch" spacing={4}>
               <ConfigPanel
@@ -449,8 +478,25 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
             )}
           </Section>
 
-          <Section title="Download benchmarks">
-            <DownloadBench downloads={view?.downloads ?? {}} />
+          <Section title="Download benchmarks" badge={runDownloads ? undefined : <Badge>off</Badge>}>
+            {!runDownloads ? (
+              <Text fontSize="sm" color="gray.500">
+                Turn on &quot;Download benchmarks&quot; above the Run button, then run again. Results appear here after
+                the upload finishes (they do not block the Preview).
+              </Text>
+            ) : view && Object.keys(view.downloads).length === 0 ? (
+              <Text fontSize="sm" color="gray.500">
+                {running
+                  ? "Waiting for upload to finish, then download benches run automatically…"
+                  : view.uploads.compressed && !view.uploads.compressed.ok
+                    ? `Upload failed, so there is nothing to download. ${view.uploads.compressed.error ?? ""}`
+                    : view.uploads.compressed?.ok && !view.uploads.compressed.cdnUrl
+                      ? "Upload finished but no CDN URL was returned — download benches need that URL."
+                      : "No download benchmarks yet. Run a test with this checkbox on."}
+              </Text>
+            ) : (
+              <DownloadBench downloads={view?.downloads ?? {}} />
+            )}
           </Section>
 
           <Section title="Compare configs">
@@ -529,12 +575,18 @@ export default function UploadTestingPage(_props: InferGetServerSidePropsType<ty
                 Could not load history.
               </Alert>
             ) : (
-              <RunHistory
-                runs={history.data?.runs ?? []}
-                onLoad={loadHistory}
-                onDelete={deleteHistory}
-                activeId={view?.source === "history" ? view.runId : null}
-              />
+              <VStack align="stretch" spacing={2}>
+                <Text fontSize="sm" color="gray.600">
+                  Runs are saved when &quot;Save to history&quot; is checked (on by default). Click <strong>Load</strong> to
+                  refill Preview / Compression / Upload / Downloads from a past run.
+                </Text>
+                <RunHistory
+                  runs={history.data?.runs ?? []}
+                  onLoad={loadHistory}
+                  onDelete={deleteHistory}
+                  activeId={view?.source === "history" ? view.runId : null}
+                />
+              </VStack>
             )}
           </Section>
         </Accordion>

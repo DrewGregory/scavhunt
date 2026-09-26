@@ -1,7 +1,10 @@
 import {
   Badge,
   Box,
+  Button,
+  Code,
   Heading,
+  Link,
   SimpleGrid,
   Stat,
   StatHelpText,
@@ -16,9 +19,12 @@ import {
   Thead,
   Tr,
   VStack,
+  useToast,
 } from "@chakra-ui/react";
+import { useState } from "react";
 import type { UploadView } from "../../lib/uploadTesting/view";
 import { fmtBytes, fmtMBps, fmtMs, fmtPct } from "../../lib/uploadTesting/format";
+import * as dbg from "../../lib/uploadTesting/debug";
 import PartWaterfall from "./PartWaterfall";
 import ConcurrencyLanes from "./ConcurrencyLanes";
 import ThroughputChart from "./ThroughputChart";
@@ -94,6 +100,74 @@ export function LifecycleLog({ upload }: { upload: UploadView }) {
   );
 }
 
+function BucketLinks({ upload }: { upload: UploadView }) {
+  const toast = useToast();
+  const [checking, setChecking] = useState(false);
+  if (!upload.key && !upload.cdnUrl) {
+    return (
+      <Text fontSize="sm" color="orange.600">
+        No Spaces key / CDN URL — createMultipartUpload or complete likely never finished. Check the console for
+        <Code mx={1}>[upload-testing]</Code> lifecycle logs.
+      </Text>
+    );
+  }
+  const verify = async () => {
+    if (!upload.cdnUrl) return;
+    setChecking(true);
+    dbg.info("HEAD verify start", { url: upload.cdnUrl });
+    try {
+      const res = await fetch(upload.cdnUrl, { method: "HEAD", mode: "cors", cache: "no-store" });
+      const info = {
+        status: res.status,
+        ok: res.ok,
+        contentLength: res.headers.get("content-length"),
+        contentType: res.headers.get("content-type"),
+        etag: res.headers.get("etag"),
+        cacheControl: res.headers.get("cache-control"),
+      };
+      dbg.info("HEAD verify result", info);
+      toast({
+        status: res.ok ? "success" : "error",
+        title: res.ok ? "Object exists on CDN" : `HEAD ${res.status}`,
+        description: res.ok
+          ? `${info.contentType ?? "?"} · ${info.contentLength ?? "?"} bytes`
+          : "CORS may block HEAD — try opening the CDN URL in a new tab.",
+        duration: 6000,
+      });
+    } catch (err) {
+      dbg.error("HEAD verify failed (often CORS)", err);
+      toast({
+        status: "warning",
+        title: "HEAD failed (likely CORS)",
+        description: "Open the CDN URL in a new tab, or check the object in the Spaces console by key.",
+        duration: 8000,
+      });
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <VStack align="stretch" spacing={1} fontSize="sm">
+      {upload.key && (
+        <Text>
+          Spaces key: <Code fontSize="xs">{upload.key}</Code>
+        </Text>
+      )}
+      {upload.cdnUrl && (
+        <Text>
+          CDN:{" "}
+          <Link href={upload.cdnUrl} isExternal color="purple.600" fontSize="xs">
+            {upload.cdnUrl}
+          </Link>
+        </Text>
+      )}
+      <Button size="xs" alignSelf="start" onClick={verify} isLoading={checking} isDisabled={!upload.cdnUrl}>
+        Verify object (HEAD)
+      </Button>
+    </VStack>
+  );
+}
+
 export default function UploadMetrics({ label, upload }: { label: string; upload: UploadView }) {
   return (
     <VStack align="stretch" spacing={4}>
@@ -106,6 +180,7 @@ export default function UploadMetrics({ label, upload }: { label: string; upload
           {upload.error}
         </Text>
       )}
+      <BucketLinks upload={upload} />
       <UploadSummaryStats upload={upload} />
       <Box>
         <Text fontWeight="semibold" fontSize="sm" mb={1}>

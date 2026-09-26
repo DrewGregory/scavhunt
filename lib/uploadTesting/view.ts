@@ -131,9 +131,14 @@ export function viewFromOutcome(o: TestOutcome): TestView {
     uploads,
     downloads: o.downloads,
     media: {
+      // Prefer the local compressed blob for instant side-by-side; fall back to
+      // the CDN object once uploaded (and for history reloads).
       original: o.localUrls.original,
-      compressed: o.localUrls.compressed ?? o.localUrls.original,
-      poster: o.localUrls.poster,
+      compressed:
+        o.localUrls.compressed ??
+        o.uploads.compressed?.cdnUrl ??
+        o.localUrls.original,
+      poster: o.localUrls.poster ?? null,
     },
   };
 }
