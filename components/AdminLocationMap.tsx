@@ -29,6 +29,7 @@ import {
 export type LocationMapChallenge = {
   id: string;
   title: string;
+  emoji?: string | null;
   lat: number | null;
   lng: number | null;
 };
@@ -219,7 +220,9 @@ export default function AdminLocationMap({
               icon={otherPinIcon}
               opacity={0.85}
             >
-              <Popup>{c.title}</Popup>
+              <Popup>
+                {c.emoji ? `${c.emoji} ${c.title}` : c.title}
+              </Popup>
             </Marker>
           ))}
 

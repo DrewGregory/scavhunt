@@ -213,7 +213,7 @@ export default function Page({
                 }}
               >
                 <Heading size="md" flex={1} color="gray.800">
-                  {c.title}
+                  {c.emoji ? `${c.emoji} ${c.title}` : c.title}
                 </Heading>
                 <Flex alignItems="center" gap={2}>
                   <Text fontWeight="semibold" color="gray.700" fontSize="md">

@@ -21,6 +21,7 @@ export default async function handler(
         challenges: challenges.map((c) => ({
           ...serializeChallenge(c),
           createdAt: c.createdAt.toISOString(),
+          updatedAt: c.updatedAt.toISOString(),
           deletedAt: c.deletedAt?.toISOString() ?? null,
         })),
       });

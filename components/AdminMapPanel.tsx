@@ -38,7 +38,7 @@ type DepositRow = {
   user: { id: string; name: string; email: string };
 };
 
-const BoundaryEditor = dynamic(() => import("./AdminBoundaryEditor"), {
+const NeighborhoodMap = dynamic(() => import("./AdminNeighborhoodMap"), {
   ssr: false,
   loading: () => (
     <Text fontSize="sm" color="gray.500">
@@ -55,15 +55,18 @@ export default function AdminMapPanel({
   onReload: () => Promise<void>;
 }) {
   const toast = useToast();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [importing, setImporting] = useState<"curated" | "datasf" | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [deposits, setDeposits] = useState<DepositRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const selected = neighborhoods.find((n) => n.id === selectedId) ?? null;
+  const selectedNeighborhoods = useMemo(
+    () => neighborhoods.filter((n) => selectedIds.includes(n.id)),
+    [neighborhoods, selectedIds],
+  );
 
   const loadDeposits = useCallback(async () => {
     const res = await fetch("/api/admin/deposits?includeDeleted=1");
@@ -76,45 +79,19 @@ export default function AdminMapPanel({
     void loadDeposits();
   }, [loadDeposits]);
 
-  // Keep selection valid if the list reloads; don't auto-pick so the overview stays browseable
   useEffect(() => {
-    if (selectedId && !neighborhoods.some((n) => n.id === selectedId)) {
-      setSelectedId(null);
+    setSelectedIds((prev) =>
+      prev.filter((id) => neighborhoods.some((n) => n.id === id)),
+    );
+    if (editingId && !neighborhoods.some((n) => n.id === editingId)) {
+      setEditingId(null);
     }
-  }, [neighborhoods, selectedId]);
+  }, [neighborhoods, editingId]);
 
-  const handleImport = async (source: "curated" | "datasf") => {
-    setImporting(source);
-    try {
-      const res = await fetch("/api/admin/import-boundaries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast({ title: data.error || "Import failed", status: "error" });
-        return;
-      }
-      toast({
-        title:
-          source === "datasf"
-            ? `Loaded DataSF map (${data.zoneCount} zones)`
-            : `Loaded gap-free map (${data.zoneCount} zones)`,
-        description:
-          source === "datasf"
-            ? "Raw DataSF breakup — shared-border editing is off until you re-import the curated map."
-            : undefined,
-        status: "success",
-        duration: source === "datasf" ? 6000 : 4000,
-      });
-      await onReload();
-    } catch {
-      toast({ title: "Import failed", status: "error" });
-    } finally {
-      setImporting(null);
-    }
-  };
+  const handleEditorSaved = useCallback(async () => {
+    await onReload();
+    await loadDeposits();
+  }, [onReload, loadDeposits]);
 
   const patchNeighborhood = async (
     id: string,
@@ -139,10 +116,6 @@ export default function AdminMapPanel({
       setBusyId(null);
     }
   };
-
-  const handleEditorSaved = useCallback(async () => {
-    await onReload();
-  }, [onReload]);
 
   const handleCreateNeighborhood = async () => {
     const name = newName.trim();
@@ -268,22 +241,35 @@ export default function AdminMapPanel({
         id: "select",
         header: "",
         disableSort: true,
-        cell: (n) => (
-          <Button
-            size="xs"
-            variant={n.id === selectedId ? "solid" : "outline"}
-            colorScheme={n.id === selectedId ? "blue" : undefined}
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedId(n.id);
-            }}
-          >
-            {n.id === selectedId ? "Editing" : "Select"}
-          </Button>
-        ),
+        cell: (n) => {
+          const selected = selectedIds.includes(n.id);
+          const editing = editingId === n.id;
+          return (
+            <Button
+              size="xs"
+              variant={selected ? "solid" : "outline"}
+              colorScheme={editing ? "orange" : selected ? "blue" : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (e.shiftKey) {
+                  setSelectedIds((prev) =>
+                    prev.includes(n.id)
+                      ? prev.filter((id) => id !== n.id)
+                      : [...prev, n.id],
+                  );
+                } else {
+                  setSelectedIds([n.id]);
+                  setEditingId(null);
+                }
+              }}
+            >
+              {editing ? "Editing" : selected ? "Selected" : "Select"}
+            </Button>
+          );
+        },
       },
     ],
-    [busyId, selectedId],
+    [busyId, selectedIds, editingId],
   );
 
   const depositColumns: AdminColumn<DepositRow>[] = useMemo(
@@ -365,46 +351,38 @@ export default function AdminMapPanel({
           <Box>
             <Heading size="md">Map neighborhoods</Heading>
             <Text fontSize="sm" color="gray.600">
-              All neighborhoods stay on the map. Click one (or pick from the
-              list) to drag its shared borders — neighbors update with it.
-              Shoreline edges stay locked. Switch seeds anytime; the other set
-              is demoted off the map, not deleted.
+              Click a neighborhood (or pick from the list) to select it. Use
+              Edit to drag shared borders — neighbors update with it. Shoreline
+              edges stay locked.
             </Text>
           </Box>
-          <HStack flexWrap="wrap" gap={2}>
-            <Button
-              colorScheme="blue"
-              onClick={() => void handleImport("curated")}
-              isLoading={importing === "curated"}
-              isDisabled={importing !== null}
-              size="sm"
-            >
-              Import gap-free SF map
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void handleImport("datasf")}
-              isLoading={importing === "datasf"}
-              isDisabled={importing !== null}
-              size="sm"
-            >
-              Import DataSF 117 zones
-            </Button>
-          </HStack>
         </HStack>
 
         <Box mb={4}>
-          <BoundaryEditor
-            selectedId={selectedId}
-            onSelect={setSelectedId}
+          <NeighborhoodMap
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
+            editingId={editingId}
+            onEditingIdChange={setEditingId}
+            deposits={deposits}
             onSaved={handleEditorSaved}
           />
-          {selected ? (
+          {selectedNeighborhoods.length > 0 ? (
             <HStack mt={2} justify="space-between" flexWrap="wrap" gap={2}>
               <Text fontSize="sm" fontWeight="medium">
-                Selected: {selected.displayEmoji} {selected.name}
+                Selected:{" "}
+                {selectedNeighborhoods
+                  .map((n) => `${n.displayEmoji} ${n.name}`)
+                  .join(", ")}
               </Text>
-              <Button size="xs" variant="ghost" onClick={() => setSelectedId(null)}>
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  setSelectedIds([]);
+                  setEditingId(null);
+                }}
+              >
                 Clear selection
               </Button>
             </HStack>
@@ -448,8 +426,11 @@ export default function AdminMapPanel({
           columns={neighborhoodColumns}
           getRowId={(n) => n.id}
           emptyMessage="No neighborhoods yet"
-          onRowClick={(n) => setSelectedId(n.id)}
-          isRowSelected={(n) => n.id === selectedId}
+          onRowClick={(n) => {
+            setSelectedIds([n.id]);
+            setEditingId(null);
+          }}
+          isRowSelected={(n) => selectedIds.includes(n.id)}
         />
       </Box>
 

@@ -1,6 +1,7 @@
 import {
   Badge,
   Box,
+  Button,
   HStack,
   IconButton,
   Input,
@@ -10,7 +11,9 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import type { DragEvent } from "react";
-import { FiEdit2, FiMenu, FiTrash2, FiX } from "react-icons/fi";
+import { FiEdit2, FiMenu, FiTrash2 } from "react-icons/fi";
+import { challengeHeading } from "../lib/challengeDisplay";
+import EmojiInput from "./EmojiInput";
 
 export type DraftNeighborhood = {
   id: string;
@@ -22,12 +25,14 @@ export type DraftChallenge = {
   id: string;
   title: string;
   prompt: string;
+  emoji: string | null;
   lat: number | null;
   lng: number | null;
   pts: number;
   numWinners: number;
   enabled: boolean;
   createdAt: string;
+  updatedAt?: string;
   neighborhood: DraftNeighborhood | null;
 };
 
@@ -149,18 +154,27 @@ export default function ChallengeDraftCard({
           onStartEdit={undefined}
         >
           <VStack align="stretch" spacing={2}>
-            <Input
-              size="sm"
-              fontWeight="semibold"
-              value={challenge.title}
-              onChange={(e) => onChange({ title: e.target.value })}
-              onBlur={(e) => {
-                const t = e.target.value.trim();
-                if (!t) onChange({ title: "Untitled" });
-              }}
-              placeholder="Title"
-              autoFocus
-            />
+            <HStack align="flex-start" spacing={2}>
+              <EmojiInput
+                value={challenge.emoji ?? ""}
+                onChange={(next) =>
+                  onChange({ emoji: next.trim() === "" ? null : next.trim() })
+                }
+              />
+              <Input
+                size="sm"
+                fontWeight="semibold"
+                value={challenge.title}
+                onChange={(e) => onChange({ title: e.target.value })}
+                onBlur={(e) => {
+                  const t = e.target.value.trim();
+                  if (!t) onChange({ title: "Untitled" });
+                }}
+                placeholder="Title"
+                autoFocus
+                flex={1}
+              />
+            </HStack>
             <Textarea
               size="sm"
               rows={3}
@@ -225,13 +239,13 @@ export default function ChallengeDraftCard({
               )}
             </Text>
             <HStack justify="space-between">
-              <IconButton
-                aria-label="Done editing"
-                icon={<FiX />}
+              <Button
                 size="xs"
                 variant="outline"
                 onClick={() => onStopEdit?.()}
-              />
+              >
+                Done
+              </Button>
               {onArchive && (
                 <IconButton
                   aria-label="Archive"
@@ -273,7 +287,7 @@ export default function ChallengeDraftCard({
       >
         <VStack align="stretch" spacing={1}>
           <Text fontSize="sm" fontWeight="semibold" whiteSpace="normal">
-            {challenge.title}
+            {challengeHeading(challenge)}
           </Text>
           {promptPreview && (
             <Text fontSize="xs" color="gray.600" noOfLines={2}>

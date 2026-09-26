@@ -74,6 +74,8 @@ model Challenge {
   id         String   @id @default(cuid())
   title      String
   prompt     String
+  /// Optional leading emoji shown before the title in lists/maps.
+  emoji      String?
   /// Null = unplaced draft; map falls back to SF center for display.
   lat        Float?
   lng        Float?

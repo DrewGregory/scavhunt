@@ -43,6 +43,7 @@ export type SerializedChallenge = {
   id: string;
   title: string;
   prompt: string;
+  emoji: string | null;
   lat: number | null;
   lng: number | null;
   pts: number;

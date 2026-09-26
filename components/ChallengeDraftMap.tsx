@@ -18,6 +18,7 @@ import {
 } from "@chakra-ui/react";
 import { FiLayers } from "react-icons/fi";
 import { SF_CENTER } from "../lib/geo";
+import { challengeHeading } from "../lib/challengeDisplay";
 import type { DraftChallenge } from "./ChallengeDraftCard";
 import {
   BasemapSelect,
@@ -417,7 +418,7 @@ export default function ChallengeDraftMap({
                     opacity={0.95}
                     permanent={isSelected}
                   >
-                    <strong>{c.title}</strong>
+                    <strong>{challengeHeading(c)}</strong>
                     <br />
                     {unplaced ? "No location · " : ""}
                     {c.enabled ? "Enabled" : "Disabled"} · {c.pts} pts

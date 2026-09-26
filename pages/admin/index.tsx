@@ -977,6 +977,31 @@ export default function AdminPage({
   const challengeColumns: AdminColumn<Challenge>[] = useMemo(
     () => [
       {
+        id: "emoji",
+        header: "Emoji",
+        minW: "64px",
+        getSortValue: (c) => c.emoji ?? "",
+        cell: (c) => (
+          <Input
+            size="sm"
+            maxW="56px"
+            textAlign="center"
+            placeholder="🎯"
+            key={`emoji-${c.id}-${c.emoji ?? ""}`}
+            defaultValue={c.emoji ?? ""}
+            onBlur={async (e) => {
+              const next = e.target.value.trim();
+              const prev = c.emoji ?? "";
+              if (next !== prev) {
+                await patchChallenge(c.id, {
+                  emoji: next === "" ? null : next,
+                });
+              }
+            }}
+          />
+        ),
+      },
+      {
         id: "title",
         header: "Title",
         minW: "160px",

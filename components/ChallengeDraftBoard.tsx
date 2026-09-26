@@ -123,12 +123,14 @@ type ApiChallenge = {
   id: string;
   title: string;
   prompt: string;
+  emoji: string | null;
   lat: number | null;
   lng: number | null;
   pts: number;
   numWinners: number;
   enabled: boolean;
   createdAt: string;
+  updatedAt?: string;
 };
 
 type ApiNeighborhood = {
@@ -169,6 +171,7 @@ function hydrate(
   }
   return {
     ...c,
+    emoji: c.emoji ?? null,
     neighborhood,
   };
 }
@@ -305,6 +308,69 @@ export default function ChallengeDraftBoard() {
     })();
   }, [load, toast]);
 
+  // Live updates: poll while the tab is focused. Pending local edits win.
+  useEffect(() => {
+    if (loading) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const [cRes, nRes] = await Promise.all([
+          fetch("/api/admin/challenges"),
+          fetch("/api/admin/neighborhoods"),
+        ]);
+        if (!cRes.ok || !nRes.ok || cancelled) return;
+        const cData = await cRes.json();
+        const nData = await nRes.json();
+        const ns = (nData.neighborhoods ?? []) as ApiNeighborhood[];
+        const geo = ns.map((n) => ({
+          id: n.id,
+          name: n.name,
+          emoji: n.emoji,
+          boundary: n.boundary,
+          centerLat: n.centerLat,
+          centerLng: n.centerLng,
+        })) as (NeighborhoodWithBoundary & { emoji: string | null })[];
+        const remote = ((cData.challenges ?? []) as ApiChallenge[]).map((c) =>
+          hydrate(
+            {
+              ...c,
+              emoji: c.emoji ?? null,
+            },
+            geo,
+          ),
+        );
+        if (cancelled) return;
+        setNeighborhoods(ns);
+        setChallenges((prev) => {
+          const pending = new Set(saveTimers.current.keys());
+          if (editingId) pending.add(editingId);
+          const prevById = new Map(prev.map((p) => [p.id, p]));
+          const remoteIds = new Set(remote.map((r) => r.id));
+          const merged = remote.map((r) =>
+            pending.has(r.id) ? (prevById.get(r.id) ?? r) : r,
+          );
+          for (const p of prev) {
+            if (pending.has(p.id) && !remoteIds.has(p.id)) merged.push(p);
+          }
+          return merged;
+        });
+      } catch {
+        /* ignore poll errors */
+      }
+    };
+    const id = window.setInterval(() => void tick(), 2000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [loading, editingId]);
+
   useEffect(() => {
     if (!focusTitleId.current) return;
     const id = focusTitleId.current;
@@ -333,12 +399,14 @@ export default function ChallengeDraftBoard() {
             id: next.id,
             title: next.title,
             prompt: next.prompt,
+            emoji: next.emoji ?? null,
             lat: next.lat,
             lng: next.lng,
             pts: next.pts,
             numWinners: next.numWinners,
             enabled: next.enabled,
             createdAt: next.createdAt,
+            updatedAt: next.updatedAt,
           },
           neighborhoodGeo,
         );
@@ -393,12 +461,14 @@ export default function ChallengeDraftBoard() {
             id: next.id,
             title: next.title,
             prompt: next.prompt,
+            emoji: next.emoji ?? null,
             lat: next.lat,
             lng: next.lng,
             pts: next.pts,
             numWinners: next.numWinners,
             enabled: next.enabled,
             createdAt: next.createdAt,
+            updatedAt: next.updatedAt,
           },
           neighborhoodGeo,
         );
@@ -664,6 +734,7 @@ export default function ChallengeDraftBoard() {
               const body: Record<string, unknown> = {};
               if (patch.title !== undefined) body.title = patch.title;
               if (patch.prompt !== undefined) body.prompt = patch.prompt;
+              if (patch.emoji !== undefined) body.emoji = patch.emoji;
               if (patch.pts !== undefined) body.pts = patch.pts;
               if (patch.numWinners !== undefined) {
                 body.numWinners = patch.numWinners;

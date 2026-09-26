@@ -8,6 +8,7 @@ import { parseJsonBody, serializeChallenge } from "../../../../lib/serialize";
 const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
   prompt: z.string().optional(),
+  emoji: z.string().trim().max(16).nullable().optional(),
   pts: z.number().int().positive(),
   numWinners: z.number().int().min(1),
   lat: z.number().finite().nullable().optional(),
@@ -55,6 +56,10 @@ export default async function handler(
       data: {
         title: parsed.data.title,
         prompt: parsed.data.prompt?.trim() || " ",
+        emoji:
+          parsed.data.emoji === undefined
+            ? null
+            : parsed.data.emoji?.trim() || null,
         pts: parsed.data.pts,
         numWinners: parsed.data.numWinners,
         lat: parsed.data.lat ?? null,

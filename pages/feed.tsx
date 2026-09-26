@@ -162,6 +162,9 @@ export default function FeedPage({
             s.team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             s.challenge.title
               .toLowerCase()
+              .includes(searchQuery.toLowerCase()) ||
+            (s.challenge.emoji ?? "")
+              .toLowerCase()
               .includes(searchQuery.toLowerCase()),
         );
 
@@ -305,7 +308,9 @@ export default function FeedPage({
                 >
                   <Flex alignItems="center" gap={2} flexWrap="wrap">
                     <Text fontSize="lg" fontWeight="semibold" color="gray.800">
-                      {s.challenge.title}
+                      {s.challenge.emoji
+                        ? `${s.challenge.emoji} ${s.challenge.title}`
+                        : s.challenge.title}
                     </Text>
                     <Tag
                       size="sm"

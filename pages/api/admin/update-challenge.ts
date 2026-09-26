@@ -34,6 +34,12 @@ export default async function handler(
       const lat = parseOptionalCoord(body.lat);
       const lng = parseOptionalCoord(body.lng);
       const enabled = parseOptionalEnabled(body.enabled) ?? true;
+      const emoji =
+        body.emoji === undefined
+          ? undefined
+          : body.emoji === null || String(body.emoji).trim() === ""
+            ? null
+            : String(body.emoji).trim();
 
       if (!title || pts == null || numWinners == null) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -61,6 +67,7 @@ export default async function handler(
         data: {
           title: String(title).trim(),
           prompt: String(prompt || " "),
+          emoji: emoji === undefined ? null : emoji,
           pts: ptsN,
           lat: lat ?? null,
           lng: lng ?? null,
@@ -95,6 +102,7 @@ export default async function handler(
       const data: {
         title?: string;
         prompt?: string;
+        emoji?: string | null;
         pts?: number;
         lat?: number | null;
         lng?: number | null;
@@ -110,6 +118,12 @@ export default async function handler(
         data.title = title;
       }
       if (body.prompt !== undefined) data.prompt = String(body.prompt);
+      if (body.emoji !== undefined) {
+        data.emoji =
+          body.emoji === null || String(body.emoji).trim() === ""
+            ? null
+            : String(body.emoji).trim();
+      }
       if (body.pts !== undefined) {
         const pts = Number(body.pts);
         if (!Number.isFinite(pts) || pts <= 0) {
