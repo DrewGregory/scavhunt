@@ -201,7 +201,7 @@ export default function ChallengeDraftMap({
   height?: number | string;
 }) {
   const [showChallenges, setShowChallenges] = useState(true);
-  const [showNeighborhoods, setShowNeighborhoods] = useState(true);
+  const [showNeighborhoods, setShowNeighborhoods] = useState(false);
   const [hideDisabled, setHideDisabled] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [pinDragging, setPinDragging] = useState(false);
