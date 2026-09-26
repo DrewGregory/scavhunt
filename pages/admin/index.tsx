@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
 import Link from "next/link";
 import {
@@ -135,12 +135,17 @@ export default function AdminPage({
   const [seedBusy, setSeedBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamEmoji, setNewTeamEmoji] = useState("");
   const [pointDrafts, setPointDrafts] = useState<Record<string, string>>({});
   const [pointsBusyId, setPointsBusyId] = useState<string | null>(null);
 
+  const noticeTimer = useRef<number | null>(null);
   const [locationChallenge, setLocationChallenge] = useState<Challenge | null>(
     null,
   );
@@ -212,6 +217,15 @@ export default function AdminPage({
     })();
   }, []);
 
+  const showNotice = (
+    type: "success" | "error",
+    message: string,
+  ) => {
+    setNotice({ type, message });
+    window.clearTimeout(noticeTimer.current ?? undefined);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 5000);
+  };
+
   const patchUser = async (
     id: string,
     patch: Record<string, unknown>,
@@ -223,7 +237,7 @@ export default function AdminPage({
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      alert(data.error || "Failed to update user");
+      showNotice("error", data.error || "Failed to update user");
       return false;
     }
     const data = await res.json();
@@ -244,15 +258,15 @@ export default function AdminPage({
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Failed to create team");
+        showNotice("error", data.error || "Failed to create team");
         return;
       }
       setNewTeamName("");
       setNewTeamEmoji("");
       await loadTeams();
-      alert("Team created successfully!");
+      showNotice("success", "Team created successfully!");
     } catch {
-      alert("Failed to create team");
+      showNotice("error", "Failed to create team");
     }
   };
 
@@ -267,7 +281,7 @@ export default function AdminPage({
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      alert(data.error || "Failed to update challenge");
+      showNotice("error", data.error || "Failed to update challenge");
       return false;
     }
     const data = await res.json();
@@ -305,12 +319,12 @@ export default function AdminPage({
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Failed to create challenge");
+        showNotice("error", data.error || "Failed to create challenge");
         return;
       }
       await loadChallenges();
     } catch {
-      alert("Failed to create challenge");
+      showNotice("error", "Failed to create challenge");
     }
   };
 
@@ -335,7 +349,7 @@ export default function AdminPage({
 
   const handleImportCSV = async () => {
     if (!csvFile) {
-      alert("Please select a CSV file");
+      showNotice("error", "Please select a CSV file");
       return;
     }
     try {
@@ -347,15 +361,15 @@ export default function AdminPage({
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Failed to import challenges");
+        showNotice("error", data.error || "Failed to import challenges");
         return;
       }
       const data = await res.json();
       setCsvFile(null);
       await loadChallenges();
-      alert(data.message || "Challenges imported successfully!");
+      showNotice("success", data.message || "Challenges imported successfully!");
     } catch {
-      alert("Failed to import challenges");
+      showNotice("error", "Failed to import challenges");
     }
   };
 
@@ -378,13 +392,13 @@ export default function AdminPage({
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to delete challenge");
+        showNotice("error", data.error || "Failed to delete challenge");
         return;
       }
       await loadChallenges();
-      alert("Challenge deleted successfully!");
+      showNotice("success", "Challenge deleted successfully!");
     } catch {
-      alert("Failed to delete challenge");
+      showNotice("error", "Failed to delete challenge");
     }
   };
 
@@ -400,7 +414,7 @@ export default function AdminPage({
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to update neighborhood");
+        showNotice("error", data.error || "Failed to update neighborhood");
         return false;
       }
       setNeighborhoods((prev) =>
@@ -408,7 +422,7 @@ export default function AdminPage({
       );
       return true;
     } catch {
-      alert("Failed to update neighborhood");
+      showNotice("error", "Failed to update neighborhood");
       return false;
     }
   };
@@ -430,15 +444,16 @@ export default function AdminPage({
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Seed failed");
+        showNotice("error", data.error || "Seed failed");
         return;
       }
       await Promise.all([loadUsers(), loadTeams()]);
-      alert(
-        `Demo data ready.\nTeams created ${data.teamsCreated}, updated ${data.teamsUpdated}.\nUsers created ${data.usersCreated}, updated ${data.usersUpdated}.`,
+      showNotice(
+        "success",
+        `Demo data ready. Teams created ${data.teamsCreated}, updated ${data.teamsUpdated}. Users created ${data.usersCreated}, updated ${data.usersUpdated}.`,
       );
     } catch {
-      alert("Seed failed");
+      showNotice("error", "Seed failed");
     } finally {
       setSeedBusy(false);
     }
@@ -446,13 +461,13 @@ export default function AdminPage({
 
   const handleSaveHuntSettings = async () => {
     if (!huntStartsAt || !huntEndsAt) {
-      alert("Both start and end times are required");
+      showNotice("error", "Both start and end times are required");
       return;
     }
     const startsAt = new Date(huntStartsAt);
     const endsAt = new Date(huntEndsAt);
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
-      alert("Invalid datetime");
+      showNotice("error", "Invalid datetime");
       return;
     }
     setSettingsBusy(true);
@@ -468,15 +483,15 @@ export default function AdminPage({
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to save settings");
+        showNotice("error", data.error || "Failed to save settings");
         return;
       }
       setHuntStartsAt(toLocalInputValue(data.startsAt));
       setHuntEndsAt(toLocalInputValue(data.endsAt));
       setTerritoryEnabled(Boolean(data.territoryEnabled));
-      alert("Settings saved");
+      showNotice("success", "Settings saved");
     } catch {
-      alert("Failed to save settings");
+      showNotice("error", "Failed to save settings");
     } finally {
       setSettingsBusy(false);
     }
@@ -494,7 +509,7 @@ export default function AdminPage({
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to update team");
+        showNotice("error", data.error || "Failed to update team");
         return;
       }
       setTeams((prev) =>
@@ -510,7 +525,7 @@ export default function AdminPage({
         ),
       );
     } catch {
-      alert("Failed to update team");
+      showNotice("error", "Failed to update team");
     }
   };
 
@@ -522,7 +537,7 @@ export default function AdminPage({
     const raw = pointDrafts[teamId] ?? "";
     const amount = Math.floor(Number(raw));
     if (!Number.isFinite(amount) || amount <= 0) {
-      alert("Enter a positive number of points");
+      showNotice("error", "Enter a positive number of points");
       return;
     }
     const delta = sign * amount;
@@ -535,7 +550,7 @@ export default function AdminPage({
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to adjust points");
+        showNotice("error", data.error || "Failed to adjust points");
         return;
       }
       setTeams((prev) =>
@@ -553,7 +568,7 @@ export default function AdminPage({
       );
       setPointDrafts((prev) => ({ ...prev, [teamId]: "" }));
     } catch {
-      alert("Failed to adjust points");
+      showNotice("error", "Failed to adjust points");
     } finally {
       setPointsBusyId(null);
     }
@@ -1133,6 +1148,36 @@ export default function AdminPage({
             Assign teams
           </Button>
         </HStack>
+
+        {notice && (
+          <Flex
+            align="center"
+            justify="space-between"
+            gap={3}
+            px={4}
+            py={3}
+            borderRadius="md"
+            bg={notice.type === "error" ? "red.50" : "green.50"}
+            border="1px"
+            borderColor={notice.type === "error" ? "red.200" : "green.200"}
+          >
+            <Text
+              fontSize="sm"
+              color={notice.type === "error" ? "red.700" : "green.700"}
+              whiteSpace="pre-line"
+            >
+              {notice.message}
+            </Text>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss"
+            >
+              ✕
+            </Button>
+          </Flex>
+        )}
 
         <HStack spacing={2} flexWrap="wrap">
           {tabs.map((tab) => (
