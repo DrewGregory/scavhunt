@@ -101,6 +101,12 @@ export default async function handler(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // Serialize deposits for this team: lock the Team row before the
+      // balance check so concurrent deposits can't both pass and overdraw
+      // the bank (TOCTOU). The aggregate/insert below then see the latest
+      // committed deposits from any prior deposit that holds the lock.
+      await tx.$queryRaw`SELECT id FROM "Team" WHERE id = ${teamId} FOR UPDATE`;
+
       const accepted = await tx.submission.findMany({
         where: { teamId, accepted: true, deletedAt: null },
         select: { challenge: { select: { pts: true } } },
