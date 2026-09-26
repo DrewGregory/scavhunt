@@ -603,7 +603,7 @@ export default function ChallengeDraftBoard() {
                 ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
             }}
             onMapClickPlace={(lat, lng) => {
-              const id = editingId;
+              const id = selectedId;
               if (!id) return;
               void patchChallenge(id, { lat, lng }, { lat, lng });
             }}

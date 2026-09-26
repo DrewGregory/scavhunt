@@ -59,6 +59,60 @@ function locationBadge(c: DraftChallenge): {
   };
 }
 
+function CardChrome({
+  selected,
+  onDragStart,
+  onStartEdit,
+  children,
+}: {
+  selected?: boolean;
+  onDragStart?: (e: DragEvent) => void;
+  onStartEdit?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <HStack align="flex-start" spacing={2}>
+      <VStack spacing={0.5} flexShrink={0} pt={0.5}>
+        <Box
+          as="span"
+          cursor="grab"
+          color="gray.400"
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            onDragStart?.(e);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Drag to enable or disable"
+          lineHeight={1}
+        >
+          <FiMenu />
+        </Box>
+        {onStartEdit && (
+          <Tooltip label="Edit fields" placement="right">
+            <IconButton
+              aria-label="Edit"
+              icon={<FiEdit2 />}
+              size="xs"
+              variant="ghost"
+              minW="auto"
+              h="auto"
+              p={0.5}
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartEdit();
+              }}
+            />
+          </Tooltip>
+        )}
+      </VStack>
+      <Box flex={1} minW={0}>
+        {children}
+      </Box>
+    </HStack>
+  );
+}
+
 export default function ChallengeDraftCard({
   challenge,
   selected,
@@ -81,31 +135,20 @@ export default function ChallengeDraftCard({
   if (editing) {
     return (
       <Box
-        borderWidth="1px"
+        borderWidth="2px"
         borderRadius="md"
-        bg={selected ? "blue.50" : "white"}
-        borderColor={selected ? "blue.400" : "blue.200"}
+        bg={selected ? "orange.50" : "white"}
+        borderColor={selected ? "orange.400" : "blue.200"}
         p={2}
-        boxShadow="sm"
+        boxShadow={selected ? "md" : "sm"}
         data-challenge-id={challenge.id}
       >
-        <HStack align="flex-start" spacing={1}>
-          <Box
-            as="span"
-            cursor="grab"
-            color="gray.400"
-            pt={1}
-            flexShrink={0}
-            draggable
-            onDragStart={(e) => {
-              e.stopPropagation();
-              onDragStart?.(e);
-            }}
-            aria-label="Drag to enable or disable"
-          >
-            <FiMenu />
-          </Box>
-          <VStack align="stretch" spacing={2} flex={1} minW={0}>
+        <CardChrome
+          selected={selected}
+          onDragStart={onDragStart}
+          onStartEdit={undefined}
+        >
+          <VStack align="stretch" spacing={2}>
             <Input
               size="sm"
               fontWeight="semibold"
@@ -158,12 +201,17 @@ export default function ChallengeDraftCard({
                   }}
                 />
               </HStack>
-              <Badge fontSize="2xs" colorScheme={badge.colorScheme} maxW="50%" isTruncated>
+              <Badge
+                fontSize="2xs"
+                colorScheme={badge.colorScheme}
+                maxW="50%"
+                isTruncated
+              >
                 {badge.label}
               </Badge>
             </HStack>
             <Text fontSize="2xs" color="gray.500">
-              Drag the pin on the map to set location
+              Select on map, then drag the pin to place
               {placed ? " · " : ""}
               {placed && (
                 <Text
@@ -196,43 +244,34 @@ export default function ChallengeDraftCard({
               )}
             </HStack>
           </VStack>
-        </HStack>
+        </CardChrome>
       </Box>
     );
   }
 
   return (
     <Box
-      borderWidth="1px"
+      borderWidth={selected ? "2px" : "1px"}
       borderRadius="md"
-      bg={selected ? "blue.50" : "white"}
-      borderColor={selected ? "blue.300" : "gray.200"}
+      bg={selected ? "orange.50" : "white"}
+      borderColor={selected ? "orange.400" : "gray.200"}
       px={2.5}
       py={2}
       onClick={onSelect}
       cursor="pointer"
-      boxShadow={selected ? "sm" : undefined}
-      _hover={{ borderColor: "gray.300" }}
+      boxShadow={selected ? "md" : undefined}
+      outline={selected ? "2px solid" : undefined}
+      outlineColor={selected ? "orange.300" : undefined}
+      outlineOffset="1px"
+      _hover={{ borderColor: selected ? "orange.400" : "gray.300" }}
       data-challenge-id={challenge.id}
     >
-      <HStack align="flex-start" spacing={2}>
-        <Box
-          as="span"
-          cursor="grab"
-          color="gray.400"
-          pt={0.5}
-          flexShrink={0}
-          draggable
-          onDragStart={(e) => {
-            e.stopPropagation();
-            onDragStart?.(e);
-          }}
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Drag to enable or disable"
-        >
-          <FiMenu />
-        </Box>
-        <VStack align="stretch" spacing={1} flex={1} minW={0}>
+      <CardChrome
+        selected={selected}
+        onDragStart={onDragStart}
+        onStartEdit={onStartEdit}
+      >
+        <VStack align="stretch" spacing={1}>
           <HStack align="flex-start" justify="space-between" spacing={2}>
             <Text fontSize="sm" fontWeight="semibold" noOfLines={2} flex={1}>
               {challenge.title}
@@ -253,30 +292,23 @@ export default function ChallengeDraftCard({
               {promptPreview}
             </Text>
           )}
-          <HStack justify="space-between" align="center" pt={0.5}>
-            <Tooltip label="Edit">
-              <IconButton
-                aria-label="Edit"
-                icon={<FiEdit2 />}
-                size="xs"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartEdit?.();
-                }}
-              />
-            </Tooltip>
+          <HStack justify="flex-end" pt={0.5}>
             <Badge
               fontSize="2xs"
               colorScheme={badge.colorScheme}
-              maxW="70%"
+              maxW="100%"
               isTruncated
             >
               {badge.label}
             </Badge>
           </HStack>
+          {selected && (
+            <Text fontSize="2xs" color="orange.600" fontWeight="medium">
+              Selected — drag pin on map to place
+            </Text>
+          )}
         </VStack>
-      </HStack>
+      </CardChrome>
     </Box>
   );
 }

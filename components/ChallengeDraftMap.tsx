@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
   Marker,
-  Popup,
+  Tooltip,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -44,43 +44,44 @@ export type DraftMapNeighborhood = {
   centerLng?: number | null;
 };
 
-function pinHtml(fill: string, size: number) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="#ffffff" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#ffffff" stroke="none"/></svg>`;
+/** Stack point for challenges with no lat/lng yet. */
+const UNPLACED_STACK: [number, number] = SF_CENTER;
+
+function pinHtml(fill: string, size: number, ring = false) {
+  const ringSvg = ring
+    ? `<circle cx="12" cy="9" r="10" fill="none" stroke="#DD6B20" stroke-width="2.5" opacity="0.95"/>`
+    : "";
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="#ffffff" stroke-width="1.5">${ringSvg}<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#ffffff" stroke="none"/></svg>`;
 }
 
-const enabledIcon = L.divIcon({
-  className: "",
-  html: pinHtml("#3182CE", 28),
-  iconSize: [28, 28],
-  iconAnchor: [14, 28],
-});
+function makeIcon(fill: string, size: number, ring = false) {
+  return L.divIcon({
+    className: "challenge-draft-pin",
+    html: pinHtml(fill, size, ring),
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+  });
+}
 
-const disabledIcon = L.divIcon({
-  className: "",
-  html: pinHtml("#A0AEC0", 24),
-  iconSize: [24, 24],
-  iconAnchor: [12, 24],
-});
-
-const selectedIcon = L.divIcon({
-  className: "",
-  html: pinHtml("#DD6B20", 30),
-  iconSize: [30, 30],
-  iconAnchor: [15, 30],
-});
+const enabledIcon = makeIcon("#3182CE", 28);
+const disabledIcon = makeIcon("#A0AEC0", 24);
+const selectedIcon = makeIcon("#DD6B20", 34, true);
+const unplacedIcon = makeIcon("#718096", 26);
+const unplacedSelectedIcon = makeIcon("#DD6B20", 34, true);
 
 function MapEvents({
-  editingId,
+  selectedId,
   onMapClickPlace,
   onContextCreate,
 }: {
-  editingId: string | null;
+  selectedId: string | null;
   onMapClickPlace: (lat: number, lng: number) => void;
   onContextCreate: (lat: number, lng: number) => void;
 }) {
   useMapEvents({
     click(e) {
-      if (editingId) onMapClickPlace(e.latlng.lat, e.latlng.lng);
+      if (selectedId) onMapClickPlace(e.latlng.lat, e.latlng.lng);
     },
     contextmenu(e) {
       e.originalEvent.preventDefault();
@@ -99,19 +100,27 @@ function FlyToSelected({
 }) {
   const map = useMap();
   useEffect(() => {
-    if (
-      challenge?.lat != null &&
-      challenge?.lng != null &&
-      Number.isFinite(challenge.lat) &&
-      Number.isFinite(challenge.lng)
-    ) {
-      map.setView([challenge.lat, challenge.lng], Math.max(map.getZoom(), 14), {
-        animate: true,
-      });
-    }
-    // token forces re-pan when user re-clicks same card
+    if (!challenge) return;
+    const lat = challenge.lat ?? UNPLACED_STACK[0];
+    const lng = challenge.lng ?? UNPLACED_STACK[1];
+    map.setView([lat, lng], Math.max(map.getZoom(), 14), { animate: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, challenge?.id, token]);
+  return null;
+}
+
+/** While a pin is dragged, disable map pan so Leaflet doesn't steal the gesture. */
+function MapDragLock({ locked }: { locked: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!locked) return;
+    map.dragging.disable();
+    map.doubleClickZoom.disable();
+    return () => {
+      map.dragging.enable();
+      map.doubleClickZoom.enable();
+    };
+  }, [map, locked]);
   return null;
 }
 
@@ -119,7 +128,6 @@ export default function ChallengeDraftMap({
   challenges,
   neighborhoods,
   selectedId,
-  editingId,
   panToken = 0,
   onSelect,
   onMapClickPlace,
@@ -133,7 +141,8 @@ export default function ChallengeDraftMap({
   challenges: DraftChallenge[];
   neighborhoods: DraftMapNeighborhood[];
   selectedId: string | null;
-  editingId: string | null;
+  /** kept for API compat; selection drives drag, not field-edit mode */
+  editingId?: string | null;
   panToken?: number;
   onSelect: (id: string) => void;
   onMapClickPlace: (lat: number, lng: number) => void;
@@ -148,22 +157,25 @@ export default function ChallengeDraftMap({
   const [showNeighborhoods, setShowNeighborhoods] = useState(true);
   const [hideDisabled, setHideDisabled] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [pinDragging, setPinDragging] = useState(false);
   const [basemap, setBasemap] = usePersistedBasemap(
     "scavhunt.mapBasemap.draft",
   );
 
-  const placed = useMemo(
-    () =>
-      challenges.filter(
-        (c) =>
-          c.lat != null &&
-          c.lng != null &&
-          Number.isFinite(c.lat) &&
-          Number.isFinite(c.lng) &&
-          (!hideDisabled || c.enabled),
-      ),
-    [challenges, hideDisabled],
-  );
+  /** All challenges (incl. no location → stack at SF center). */
+  const mapChallenges = useMemo(() => {
+    return challenges
+      .filter((c) => !hideDisabled || c.enabled)
+      .map((c) => {
+        const unplaced = c.lat == null || c.lng == null;
+        return {
+          challenge: c,
+          unplaced,
+          lat: unplaced ? UNPLACED_STACK[0] : c.lat!,
+          lng: unplaced ? UNPLACED_STACK[1] : c.lng!,
+        };
+      });
+  }, [challenges, hideDisabled]);
 
   const selected = useMemo(
     () => challenges.find((c) => c.id === selectedId) ?? null,
@@ -299,6 +311,28 @@ export default function ChallengeDraftMap({
           </Box>
         </HStack>
 
+        {selectedId && (
+          <Box
+            position="absolute"
+            bottom={3}
+            left="50%"
+            transform="translateX(-50%)"
+            zIndex={1000}
+            bg="orange.500"
+            color="white"
+            px={3}
+            py={1.5}
+            borderRadius="full"
+            boxShadow="md"
+            fontSize="xs"
+            fontWeight="semibold"
+            pointerEvents="none"
+            whiteSpace="nowrap"
+          >
+            Drag pin to place · click map to drop
+          </Box>
+        )}
+
         <MapContainer
           center={SF_CENTER}
           zoom={13}
@@ -308,11 +342,12 @@ export default function ChallengeDraftMap({
           <BasemapTileLayer basemap={basemap} />
           <PlaceSearchControl />
           <MapEvents
-            editingId={editingId}
+            selectedId={selectedId}
             onMapClickPlace={onMapClickPlace}
             onContextCreate={onContextCreate}
           />
           <FlyToSelected challenge={selected} token={panToken} />
+          <MapDragLock locked={pinDragging} />
           <InvalidateMapSize
             deps={[
               showChallenges,
@@ -321,6 +356,7 @@ export default function ChallengeDraftMap({
               height,
               basemap,
               layersOpen,
+              selectedId,
             ]}
           />
 
@@ -329,45 +365,59 @@ export default function ChallengeDraftMap({
           )}
 
           {showChallenges &&
-            placed.map((c) => {
-              const isEditing = editingId === c.id;
+            mapChallenges.map(({ challenge: c, unplaced, lat, lng }) => {
+              const isSelected = selectedId === c.id;
+              const icon = isSelected
+                ? unplaced
+                  ? unplacedSelectedIcon
+                  : selectedIcon
+                : unplaced
+                  ? unplacedIcon
+                  : c.enabled
+                    ? enabledIcon
+                    : disabledIcon;
               return (
                 <Marker
                   key={c.id}
-                  position={[c.lat!, c.lng!]}
-                  draggable={isEditing}
-                  icon={
-                    c.id === selectedId || isEditing
-                      ? selectedIcon
-                      : c.enabled
-                        ? enabledIcon
-                        : disabledIcon
-                  }
-                  opacity={c.enabled ? 1 : 0.75}
+                  position={[lat, lng]}
+                  draggable={isSelected}
+                  autoPan={isSelected}
+                  icon={icon}
+                  opacity={isSelected ? 1 : c.enabled ? 0.9 : 0.65}
                   zIndexOffset={
-                    c.id === selectedId || isEditing
-                      ? 1000
-                      : c.enabled
-                        ? 100
-                        : 0
+                    isSelected ? 2000 : unplaced ? 50 : c.enabled ? 100 : 0
                   }
                   eventHandlers={{
                     click: (e) => {
                       L.DomEvent.stopPropagation(e);
                       onSelect(c.id);
                     },
+                    mousedown: (e) => {
+                      if (isSelected) L.DomEvent.stopPropagation(e);
+                    },
+                    dragstart: (e) => {
+                      L.DomEvent.stopPropagation(e);
+                      setPinDragging(true);
+                    },
                     dragend: (e) => {
+                      setPinDragging(false);
                       const p = (e.target as L.Marker).getLatLng();
                       onMarkerMove(c.id, p.lat, p.lng);
                     },
                   }}
                 >
-                  <Popup>
+                  <Tooltip
+                    direction={isSelected ? "right" : "top"}
+                    offset={isSelected ? [14, -18] : [0, -40]}
+                    opacity={0.95}
+                    permanent={isSelected}
+                  >
                     <strong>{c.title}</strong>
                     <br />
+                    {unplaced ? "No location · " : ""}
                     {c.enabled ? "Enabled" : "Disabled"} · {c.pts} pts
-                    {isEditing ? " · drag to move" : ""}
-                  </Popup>
+                    {isSelected ? " · drag me" : ""}
+                  </Tooltip>
                 </Marker>
               );
             })}
