@@ -149,6 +149,38 @@ type DropTarget = "enabled" | "disabled";
 const DRAG_MIME = "application/x-scavhunt-challenge-id";
 const UNPLACED_FILTER = "__unplaced__";
 
+/**
+ * Active map snapshot: same source as the Map tab (`GET /api/admin/topology`).
+ * Falls back to onMap neighborhoods if topology isn't loaded yet.
+ */
+async function fetchActiveMapNeighborhoods(): Promise<ApiNeighborhood[]> {
+  const topoRes = await fetch("/api/admin/topology");
+  if (topoRes.ok) {
+    const data = await topoRes.json();
+    return ((data.neighborhoods ?? []) as Array<Omit<ApiNeighborhood, "onMap">>).map(
+      (n) => ({ ...n, onMap: true }),
+    );
+  }
+  if (topoRes.status !== 404) {
+    throw new Error("Failed to load map topology");
+  }
+  const nRes = await fetch("/api/admin/neighborhoods");
+  if (!nRes.ok) throw new Error("Failed to load neighborhoods");
+  const nData = await nRes.json();
+  return ((nData.neighborhoods ?? []) as ApiNeighborhood[]).filter((n) => n.onMap);
+}
+
+function toHydrateGeo(ns: ApiNeighborhood[]) {
+  return ns.map((n) => ({
+    id: n.id,
+    name: n.name,
+    emoji: n.emoji,
+    boundary: n.boundary,
+    centerLat: n.centerLat,
+    centerLng: n.centerLng,
+  })) as (NeighborhoodWithBoundary & { emoji: string | null })[];
+}
+
 function hydrate(
   c: ApiChallenge,
   neighborhoods: NeighborhoodWithBoundary[],
@@ -272,23 +304,14 @@ export default function ChallengeDraftBoard() {
   );
 
   const load = useCallback(async () => {
-    const [cRes, nRes] = await Promise.all([
+    const [cRes, ns] = await Promise.all([
       fetch("/api/admin/challenges"),
-      fetch("/api/admin/neighborhoods"),
+      fetchActiveMapNeighborhoods(),
     ]);
-    if (!cRes.ok || !nRes.ok) throw new Error("Failed to load");
+    if (!cRes.ok) throw new Error("Failed to load");
     const cData = await cRes.json();
-    const nData = await nRes.json();
-    const ns = (nData.neighborhoods ?? []) as ApiNeighborhood[];
     setNeighborhoods(ns);
-    const geo = ns.map((n) => ({
-      id: n.id,
-      name: n.name,
-      emoji: n.emoji,
-      boundary: n.boundary,
-      centerLat: n.centerLat,
-      centerLng: n.centerLng,
-    })) as (NeighborhoodWithBoundary & { emoji: string | null })[];
+    const geo = toHydrateGeo(ns);
     setChallenges(
       ((cData.challenges ?? []) as ApiChallenge[]).map((c) =>
         hydrate(c, geo),
@@ -315,22 +338,13 @@ export default function ChallengeDraftBoard() {
     const tick = async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const [cRes, nRes] = await Promise.all([
+        const [cRes, ns] = await Promise.all([
           fetch("/api/admin/challenges"),
-          fetch("/api/admin/neighborhoods"),
+          fetchActiveMapNeighborhoods(),
         ]);
-        if (!cRes.ok || !nRes.ok || cancelled) return;
+        if (!cRes.ok || cancelled) return;
         const cData = await cRes.json();
-        const nData = await nRes.json();
-        const ns = (nData.neighborhoods ?? []) as ApiNeighborhood[];
-        const geo = ns.map((n) => ({
-          id: n.id,
-          name: n.name,
-          emoji: n.emoji,
-          boundary: n.boundary,
-          centerLat: n.centerLat,
-          centerLng: n.centerLng,
-        })) as (NeighborhoodWithBoundary & { emoji: string | null })[];
+        const geo = toHydrateGeo(ns);
         const remote = ((cData.challenges ?? []) as ApiChallenge[]).map((c) =>
           hydrate(
             {
@@ -503,6 +517,7 @@ export default function ChallengeDraftBoard() {
   const createChallenge = async (opts?: {
     lat?: number | null;
     lng?: number | null;
+    enabled?: boolean;
   }) => {
     const base = "Untitled";
     let title = base;
@@ -521,7 +536,7 @@ export default function ChallengeDraftBoard() {
           prompt: " ",
           pts: 10,
           numWinners: 1,
-          enabled: false,
+          enabled: opts?.enabled ?? false,
           lat: opts?.lat ?? null,
           lng: opts?.lng ?? null,
         }),
@@ -690,7 +705,9 @@ export default function ChallengeDraftBoard() {
           <Button
             size="xs"
             colorScheme="green"
-            onClick={() => void createChallenge()}
+            onClick={() =>
+              void createChallenge({ enabled: target === "enabled" })
+            }
           >
             +
           </Button>
@@ -885,7 +902,7 @@ export default function ChallengeDraftBoard() {
               flexDirection="column"
               overflow="hidden"
             >
-              {renderColumn("Enabled", enabledList, "enabled")}
+              {renderColumn("Enabled", enabledList, "enabled", true)}
             </Box>
           </Box>
         </VStack>
@@ -924,7 +941,7 @@ export default function ChallengeDraftBoard() {
               void patchChallenge(id, { lat, lng }, { lat, lng });
             }}
             onContextCreate={(lat, lng) => {
-              void createChallenge({ lat, lng });
+              void createChallenge({ lat, lng, enabled: true });
             }}
             height="100%"
           />
