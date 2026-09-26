@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Box,
   Button,
   Checkbox,
   HStack,
+  IconButton,
   Input,
   Menu,
   MenuButton,
@@ -18,7 +19,12 @@ import {
   Tr,
   VStack,
 } from "@chakra-ui/react";
-import { ChevronDownIcon, TriangleDownIcon, TriangleUpIcon } from "@chakra-ui/icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  TriangleDownIcon,
+  TriangleUpIcon,
+} from "@chakra-ui/icons";
 
 export type AdminColumn<T> = {
   id: string;
@@ -104,6 +110,9 @@ export default function AdminDataTable<T>({
   toolbarLeft,
   onRowClick,
   isRowSelected,
+  renderExpandedRow,
+  isRowExpanded,
+  onToggleExpand,
 }: {
   tableId: string;
   rows: T[];
@@ -113,6 +122,10 @@ export default function AdminDataTable<T>({
   toolbarLeft?: ReactNode;
   onRowClick?: (row: T) => void;
   isRowSelected?: (row: T) => boolean;
+  /** When set, shows an expand chevron column and a full-width detail row. */
+  renderExpandedRow?: (row: T) => ReactNode;
+  isRowExpanded?: (row: T) => boolean;
+  onToggleExpand?: (row: T) => void;
 }) {
   const defaultVisible = useMemo(() => {
     const map: Record<string, boolean> = {};
@@ -143,6 +156,9 @@ export default function AdminDataTable<T>({
     () => columns.filter((c) => visible[c.id] !== false),
     [columns, visible],
   );
+
+  const colSpan =
+    visibleColumns.length + (renderExpandedRow ? 1 : 0);
 
   const processed = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -252,6 +268,9 @@ export default function AdminDataTable<T>({
         <Table size="sm">
           <Thead>
             <Tr>
+              {renderExpandedRow ? (
+                <Th w="36px" px={1} aria-label="Expand" />
+              ) : null}
               {visibleColumns.map((col) => {
                 const sortable = Boolean(col.getSortValue) && !col.disableSort;
                 const active = sort?.id === col.id;
@@ -284,43 +303,74 @@ export default function AdminDataTable<T>({
           <Tbody>
             {processed.length === 0 ? (
               <Tr>
-                <Td colSpan={Math.max(visibleColumns.length, 1)}>
+                <Td colSpan={Math.max(colSpan, 1)}>
                   <Text color="gray.500" py={4} textAlign="center">
                     {emptyMessage}
                   </Text>
                 </Td>
               </Tr>
             ) : (
-              processed.map((row) => (
-                <Tr
-                  key={getRowId(row)}
-                  bg={isRowSelected?.(row) ? "blue.50" : undefined}
-                  cursor={onRowClick ? "pointer" : undefined}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  _hover={
-                    onRowClick ? { bg: isRowSelected?.(row) ? "blue.50" : "gray.50" } : undefined
-                  }
-                >
-                  {visibleColumns.map((col) => (
-                    <Td
-                      key={col.id}
-                      minW={col.minW}
-                      maxW={col.maxW}
-                      whiteSpace={col.whiteSpace}
-                      onClick={
+              processed.map((row) => {
+                const id = getRowId(row);
+                const expanded = Boolean(isRowExpanded?.(row));
+                return (
+                  <Fragment key={id}>
+                    <Tr
+                      bg={isRowSelected?.(row) ? "blue.50" : undefined}
+                      cursor={onRowClick ? "pointer" : undefined}
+                      onClick={onRowClick ? () => onRowClick(row) : undefined}
+                      _hover={
                         onRowClick
-                          ? undefined
-                          : (e) => {
-                              /* keep interactive cells from bubbling if row click */
-                              void e;
+                          ? {
+                              bg: isRowSelected?.(row) ? "blue.50" : "gray.50",
                             }
+                          : undefined
                       }
                     >
-                      {col.cell(row)}
-                    </Td>
-                  ))}
-                </Tr>
-              ))
+                      {renderExpandedRow ? (
+                        <Td
+                          w="36px"
+                          px={1}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleExpand?.(row);
+                          }}
+                        >
+                          <IconButton
+                            aria-label={expanded ? "Collapse" : "Expand"}
+                            icon={
+                              expanded ? (
+                                <ChevronDownIcon />
+                              ) : (
+                                <ChevronRightIcon />
+                              )
+                            }
+                            size="xs"
+                            variant="ghost"
+                          />
+                        </Td>
+                      ) : null}
+                      {visibleColumns.map((col) => (
+                        <Td
+                          key={col.id}
+                          minW={col.minW}
+                          maxW={col.maxW}
+                          whiteSpace={col.whiteSpace}
+                        >
+                          {col.cell(row)}
+                        </Td>
+                      ))}
+                    </Tr>
+                    {renderExpandedRow && expanded ? (
+                      <Tr bg="gray.50">
+                        <Td colSpan={colSpan} py={3} px={4}>
+                          {renderExpandedRow(row)}
+                        </Td>
+                      </Tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })
             )}
           </Tbody>
         </Table>
