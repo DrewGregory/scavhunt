@@ -8,14 +8,20 @@ import { jsonError } from "../../../../lib/http";
 import type { GeoGeometry } from "../../../../lib/geo";
 import {
   geometryCenter,
-  splitGeometryVertical,
+  splitGeometryByLine,
 } from "../../../../lib/neighborhoodGeom";
 import { rebuildMapTopologyFromDb } from "../../../../lib/rebuildMapTopology";
 
 const schema = z.object({
   id: z.string().min(1),
-  /** Longitude of the vertical cut. West keeps the original; east becomes "{Name} Child". */
+  /** Point on the cut line. */
   cutLng: z.number().finite(),
+  cutLat: z.number().finite(),
+  /**
+   * Cut orientation in degrees. 0 = vertical (classic west/east).
+   * Positive rotates counterclockwise.
+   */
+  angleDeg: z.number().finite().optional().default(0),
 });
 
 async function uniqueChildName(base: string): Promise<string> {
@@ -58,7 +64,7 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid body" });
   }
 
-  const { id, cutLng } = parsed.data;
+  const { id, cutLng, cutLat, angleDeg } = parsed.data;
   const row = await prisma.neighborhood.findFirst({
     where: { id, deletedAt: null },
   });
@@ -73,7 +79,7 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid boundary geometry" });
   }
 
-  const split = splitGeometryVertical(geom, cutLng);
+  const split = splitGeometryByLine(geom, cutLng, cutLat, angleDeg);
   if ("error" in split) {
     return res.status(400).json({ error: split.error });
   }

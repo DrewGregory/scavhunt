@@ -124,7 +124,9 @@ function MapChrome({
         spacing={3}
         fontSize="xs"
       >
-        <Text fontWeight="semibold">Drag the cut line, then confirm</Text>
+        <Text fontWeight="semibold">
+          Drag center to move · square to rotate · then confirm
+        </Text>
         <Button size="xs" onClick={onCancelSplit} variant="outline" color="white">
           Cancel
         </Button>
@@ -236,26 +238,26 @@ function MapClickClear({
 }
 
 /**
- * Vertical cut for Split: Leaflet-managed marker + line so drag isn't interrupted
- * by React re-renders (controlled Marker position was resetting each move).
+ * Rotatable cut for Split: center handle translates, square handle rotates.
+ * Imperative Leaflet so drag isn't interrupted by React re-renders.
  */
 function SplitCutLine({
-  cutLng,
+  cut,
   minLat,
   maxLat,
   minLng,
   maxLng,
   onChange,
 }: {
-  cutLng: number;
+  cut: { lng: number; lat: number; angleDeg: number };
   minLat: number;
   maxLat: number;
   minLng: number;
   maxLng: number;
-  onChange: (lng: number) => void;
+  onChange: (next: { lng: number; lat: number; angleDeg: number }) => void;
 }) {
   const map = useMap();
-  const cutLngRef = useRef(cutLng);
+  const cutRef = useRef(cut);
   const onChangeRef = useRef(onChange);
   const boundsRef = useRef({ minLat, maxLat, minLng, maxLng });
 
@@ -267,63 +269,128 @@ function SplitCutLine({
   }, [minLat, maxLat, minLng, maxLng]);
 
   useEffect(() => {
-    const pad = 0.002;
-    const clamp = (lng: number) => {
+    const clampPoint = (lng: number, lat: number) => {
       const b = boundsRef.current;
-      return Math.min(b.maxLng - 1e-5, Math.max(b.minLng + 1e-5, lng));
+      return {
+        lng: Math.min(b.maxLng - 1e-5, Math.max(b.minLng + 1e-5, lng)),
+        lat: Math.min(b.maxLat - 1e-5, Math.max(b.minLat + 1e-5, lat)),
+      };
     };
 
-    const line = L.polyline(
-      [
-        [minLat - pad, cutLng],
-        [maxLat + pad, cutLng],
-      ],
-      { color: "#805AD5", weight: 3, dashArray: "6 4", interactive: false },
-    ).addTo(map);
+    const lineExtent = () => {
+      const b = boundsRef.current;
+      return Math.hypot(b.maxLng - b.minLng, b.maxLat - b.minLat) * 1.2 + 0.01;
+    };
 
-    const marker = L.marker([(minLat + maxLat) / 2, cutLng], {
+    const rotateOffset = () => lineExtent() * 0.28;
+
+    const endpoints = (c: { lng: number; lat: number; angleDeg: number }) => {
+      const rad = (c.angleDeg * Math.PI) / 180;
+      const dx = -Math.sin(rad);
+      const dy = Math.cos(rad);
+      const R = lineExtent();
+      return [
+        L.latLng(c.lat - dy * R, c.lng - dx * R),
+        L.latLng(c.lat + dy * R, c.lng + dx * R),
+      ] as [L.LatLng, L.LatLng];
+    };
+
+    const rotateHandlePos = (c: {
+      lng: number;
+      lat: number;
+      angleDeg: number;
+    }) => {
+      const rad = (c.angleDeg * Math.PI) / 180;
+      const dx = -Math.sin(rad);
+      const dy = Math.cos(rad);
+      const R = rotateOffset();
+      return L.latLng(c.lat + dy * R, c.lng + dx * R);
+    };
+
+    const line = L.polyline(endpoints(cut), {
+      color: "#805AD5",
+      weight: 3,
+      dashArray: "6 4",
+      interactive: false,
+    }).addTo(map);
+
+    const centerMarker = L.marker([cut.lat, cut.lng], {
       draggable: true,
       zIndexOffset: 3000,
       autoPan: false,
       icon: L.divIcon({
         className: "split-cut-handle",
-        html: `<div style="width:18px;height:18px;border-radius:50%;background:#805AD5;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:ew-resize"></div>`,
+        html: `<div title="Drag to move" style="width:18px;height:18px;border-radius:50%;background:#805AD5;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:move"></div>`,
         iconSize: [18, 18],
         iconAnchor: [9, 9],
       }),
     }).addTo(map);
 
-    const syncLine = (lng: number) => {
-      const b = boundsRef.current;
-      line.setLatLngs([
-        [b.minLat - pad, lng],
-        [b.maxLat + pad, lng],
-      ]);
+    const rotateMarker = L.marker(rotateHandlePos(cut), {
+      draggable: true,
+      zIndexOffset: 3001,
+      autoPan: false,
+      icon: L.divIcon({
+        className: "split-cut-rotate",
+        html: `<div title="Drag to rotate" style="width:16px;height:16px;border-radius:3px;background:#6B46C1;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:grab"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+      }),
+    }).addTo(map);
+
+    const syncGraphics = (c: {
+      lng: number;
+      lat: number;
+      angleDeg: number;
+    }) => {
+      line.setLatLngs(endpoints(c));
+      centerMarker.setLatLng([c.lat, c.lng]);
+      rotateMarker.setLatLng(rotateHandlePos(c));
     };
 
-    marker.on("drag", () => {
-      const lng = clamp(marker.getLatLng().lng);
-      cutLngRef.current = lng;
-      syncLine(lng);
+    centerMarker.on("drag", () => {
+      const ll = centerMarker.getLatLng();
+      const clamped = clampPoint(ll.lng, ll.lat);
+      cutRef.current = { ...cutRef.current, ...clamped };
+      syncGraphics(cutRef.current);
+    });
+    centerMarker.on("dragend", () => {
+      const ll = centerMarker.getLatLng();
+      const clamped = clampPoint(ll.lng, ll.lat);
+      cutRef.current = { ...cutRef.current, ...clamped };
+      syncGraphics(cutRef.current);
+      onChangeRef.current({ ...cutRef.current });
     });
 
-    marker.on("dragend", () => {
-      const lng = clamp(marker.getLatLng().lng);
-      cutLngRef.current = lng;
-      const midLat =
-        (boundsRef.current.minLat + boundsRef.current.maxLat) / 2;
-      marker.setLatLng([midLat, lng]);
-      syncLine(lng);
-      onChangeRef.current(lng);
+    rotateMarker.on("drag", () => {
+      const ll = rotateMarker.getLatLng();
+      const c = cutRef.current;
+      const dLng = ll.lng - c.lng;
+      const dLat = ll.lat - c.lat;
+      // Recover θ where direction = (-sin θ, cos θ)
+      const angleDeg = (Math.atan2(-dLng, dLat) * 180) / Math.PI;
+      cutRef.current = { ...c, angleDeg };
+      syncGraphics(cutRef.current);
+    });
+    rotateMarker.on("dragend", () => {
+      const ll = rotateMarker.getLatLng();
+      const c = cutRef.current;
+      const dLng = ll.lng - c.lng;
+      const dLat = ll.lat - c.lat;
+      const angleDeg = (Math.atan2(-dLng, dLat) * 180) / Math.PI;
+      cutRef.current = { ...c, angleDeg };
+      syncGraphics(cutRef.current);
+      onChangeRef.current({ ...cutRef.current });
     });
 
-    cutLngRef.current = cutLng;
+    cutRef.current = cut;
 
     return () => {
-      map.removeLayer(marker);
+      map.removeLayer(centerMarker);
+      map.removeLayer(rotateMarker);
       map.removeLayer(line);
     };
-    // Mount once per split session — initial cutLng/bounds only
+    // Mount once per split session
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
 
@@ -628,7 +695,11 @@ export default function AdminNeighborhoodMap({
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
-  const [splitCutLng, setSplitCutLng] = useState<number | null>(null);
+  const [splitCut, setSplitCut] = useState<{
+    lng: number;
+    lat: number;
+    angleDeg: number;
+  } | null>(null);
   const [splitBounds, setSplitBounds] = useState<{
     minLat: number;
     maxLat: number;
@@ -718,7 +789,7 @@ export default function AdminNeighborhoodMap({
     onEditingIdChange(null);
     setMenu(null);
     setRenameOpen(false);
-    setSplitCutLng(null);
+    setSplitCut(null);
     setSplitBounds(null);
   }, [onSelectedIdsChange, onEditingIdChange]);
 
@@ -783,19 +854,28 @@ export default function AdminNeighborhoodMap({
       minLng: bb.minLng,
       maxLng: bb.maxLng,
     });
-    setSplitCutLng((bb.minLng + bb.maxLng) / 2);
+    setSplitCut({
+      lng: (bb.minLng + bb.maxLng) / 2,
+      lat: (bb.minLat + bb.maxLat) / 2,
+      angleDeg: 0,
+    });
     onSelectedIdsChange([id]);
     onEditingIdChange(null);
   };
 
   const confirmSplit = async () => {
-    if (!singleId || splitCutLng == null) return;
+    if (!singleId || !splitCut) return;
     setBusy(true);
     try {
       const res = await fetch("/api/admin/neighborhoods/split", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: singleId, cutLng: splitCutLng }),
+        body: JSON.stringify({
+          id: singleId,
+          cutLng: splitCut.lng,
+          cutLat: splitCut.lat,
+          angleDeg: splitCut.angleDeg,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -806,7 +886,7 @@ export default function AdminNeighborhoodMap({
         title: `Split — created ${data.childName}`,
         status: "success",
       });
-      setSplitCutLng(null);
+      setSplitCut(null);
       setSplitBounds(null);
       await load({ quiet: true });
       await onSavedRef.current?.();
@@ -1009,8 +1089,8 @@ export default function AdminNeighborhoodMap({
           <BasemapTileLayer basemap={basemap} />
           <EscapeHandler
             onEscape={() => {
-              if (splitCutLng != null) {
-                setSplitCutLng(null);
+              if (splitCut != null) {
+                setSplitCut(null);
                 setSplitBounds(null);
                 return;
               }
@@ -1022,7 +1102,7 @@ export default function AdminNeighborhoodMap({
             }}
           />
           <MapClickClear
-            enabled={!editingId && splitCutLng == null}
+            enabled={!editingId && splitCut == null}
             onClear={clearAll}
           />
           <MapController
@@ -1052,15 +1132,15 @@ export default function AdminNeighborhoodMap({
               />
             ))}
 
-          {splitCutLng != null && splitBounds && (
+          {splitCut != null && splitBounds && (
             <SplitCutLine
               key={`split-${singleId ?? "x"}-${splitBounds.minLng.toFixed(5)}`}
-              cutLng={splitCutLng}
+              cut={splitCut}
               minLat={splitBounds.minLat}
               maxLat={splitBounds.maxLat}
               minLng={splitBounds.minLng}
               maxLng={splitBounds.maxLng}
-              onChange={setSplitCutLng}
+              onChange={setSplitCut}
             />
           )}
         </MapContainer>
@@ -1069,9 +1149,9 @@ export default function AdminNeighborhoodMap({
           selectedIds={selectedIds}
           editingId={editingId}
           onExitEdit={() => onEditingIdChange(null)}
-          splitting={splitCutLng != null}
+          splitting={splitCut != null}
           onCancelSplit={() => {
-            setSplitCutLng(null);
+            setSplitCut(null);
             setSplitBounds(null);
           }}
           onConfirmSplit={() => void confirmSplit()}

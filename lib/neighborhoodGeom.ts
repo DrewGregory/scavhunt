@@ -150,56 +150,91 @@ export function unionGeometries(geoms: GeoGeometry[]): GeoGeometry | null {
 }
 
 /**
- * Split a geometry with a vertical cut at `cutLng`.
- * Returns west (lng <= cut) and east (lng >= cut) pieces.
+ * Split a geometry with a line through (cutLng, cutLat) at `angleDeg`.
+ * angleDeg = 0 → vertical cut (same as classic west/east split).
+ * Positive angle rotates the cut counterclockwise (degrees).
+ *
+ * Returns `west` / `east` for API compatibility: the piece whose centroid has
+ * the smaller longitude is `west` (keeps original name); the other is `east`.
  */
+export function splitGeometryByLine(
+  geom: GeoGeometry,
+  cutLng: number,
+  cutLat: number,
+  angleDeg = 0,
+): { west: GeoGeometry; east: GeoGeometry } | { error: string } {
+  const bb = bboxOf(geom);
+  if (
+    cutLng <= bb.minLng ||
+    cutLng >= bb.maxLng ||
+    cutLat <= bb.minLat ||
+    cutLat >= bb.maxLat
+  ) {
+    return { error: "Cut must pass through the neighborhood" };
+  }
+
+  const rad = (angleDeg * Math.PI) / 180;
+  // Normal pointing "east" when angleDeg=0. Line direction is perpendicular.
+  const nx = Math.cos(rad);
+  const ny = Math.sin(rad);
+  const dx = -Math.sin(rad);
+  const dy = Math.cos(rad);
+
+  const span =
+    Math.hypot(bb.maxLng - bb.minLng, bb.maxLat - bb.minLat) * 4 + 0.05;
+
+  const ax = cutLng - dx * span;
+  const ay = cutLat - dy * span;
+  const bx = cutLng + dx * span;
+  const by = cutLat + dy * span;
+
+  const halfPlane = (side: 1 | -1): GeoGeometry => {
+    const ox = nx * span * side;
+    const oy = ny * span * side;
+    return {
+      type: "Polygon",
+      coordinates: [
+        [
+          [ax, ay],
+          [bx, by],
+          [bx + ox, by + oy],
+          [ax + ox, ay + oy],
+          [ax, ay],
+        ],
+      ],
+    };
+  };
+
+  const negRaw = fromClipping(
+    polygonClipping.intersection(toClipping(geom), toClipping(halfPlane(-1))),
+  );
+  const posRaw = fromClipping(
+    polygonClipping.intersection(toClipping(geom), toClipping(halfPlane(1))),
+  );
+  if (!negRaw || !posRaw) {
+    return { error: "Split produced an empty piece — move or rotate the cut" };
+  }
+
+  const neg = cleanMergedGeometry(roundGeometry(negRaw));
+  const pos = cleanMergedGeometry(roundGeometry(posRaw));
+  const negC = centroidOf(neg);
+  const posC = centroidOf(pos);
+
+  // Preserve "west keeps name" convention for vertical cuts.
+  if (negC.lng <= posC.lng) {
+    return { west: neg, east: pos };
+  }
+  return { west: pos, east: neg };
+}
+
+/** @deprecated Prefer splitGeometryByLine — kept for callers that only pass cutLng. */
 export function splitGeometryVertical(
   geom: GeoGeometry,
   cutLng: number,
 ): { west: GeoGeometry; east: GeoGeometry } | { error: string } {
   const bb = bboxOf(geom);
-  if (!(cutLng > bb.minLng && cutLng < bb.maxLng)) {
-    return { error: "Cut line must fall inside the neighborhood" };
-  }
-  const pad = 0.02;
-  const westRect: GeoGeometry = {
-    type: "Polygon",
-    coordinates: [
-      [
-        [bb.minLng - pad, bb.minLat - pad],
-        [cutLng, bb.minLat - pad],
-        [cutLng, bb.maxLat + pad],
-        [bb.minLng - pad, bb.maxLat + pad],
-        [bb.minLng - pad, bb.minLat - pad],
-      ],
-    ],
-  };
-  const eastRect: GeoGeometry = {
-    type: "Polygon",
-    coordinates: [
-      [
-        [cutLng, bb.minLat - pad],
-        [bb.maxLng + pad, bb.minLat - pad],
-        [bb.maxLng + pad, bb.maxLat + pad],
-        [cutLng, bb.maxLat + pad],
-        [cutLng, bb.minLat - pad],
-      ],
-    ],
-  };
-
-  const westRaw = fromClipping(
-    polygonClipping.intersection(toClipping(geom), toClipping(westRect)),
-  );
-  const eastRaw = fromClipping(
-    polygonClipping.intersection(toClipping(geom), toClipping(eastRect)),
-  );
-  if (!westRaw || !eastRaw) {
-    return { error: "Split produced an empty piece — move the cut line" };
-  }
-  return {
-    west: cleanMergedGeometry(roundGeometry(westRaw)),
-    east: cleanMergedGeometry(roundGeometry(eastRaw)),
-  };
+  const cutLat = (bb.minLat + bb.maxLat) / 2;
+  return splitGeometryByLine(geom, cutLng, cutLat, 0);
 }
 
 export function geometryCenter(geom: GeoGeometry): {
