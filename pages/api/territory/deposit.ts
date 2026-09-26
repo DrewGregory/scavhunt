@@ -74,7 +74,11 @@ export default async function handler(
   }
 
   const candidates = await prisma.neighborhood.findMany({
-    where: { onMap: true, NOT: { boundary: { equals: Prisma.DbNull } } },
+    where: {
+      onMap: true,
+      deletedAt: null,
+      NOT: { boundary: { equals: Prisma.DbNull } },
+    },
     select: {
       id: true,
       name: true,
@@ -98,13 +102,13 @@ export default async function handler(
   try {
     const result = await prisma.$transaction(async (tx) => {
       const accepted = await tx.submission.findMany({
-        where: { teamId, accepted: true },
+        where: { teamId, accepted: true, deletedAt: null },
         select: { challenge: { select: { pts: true } } },
       });
       const earned = accepted.reduce((s, row) => s + row.challenge.pts, 0);
 
       const depositedAgg = await tx.neighborhoodDeposit.aggregate({
-        where: { teamId, voidedAt: null },
+        where: { teamId, deletedAt: null },
         _sum: { points: true },
       });
       const deposited = depositedAgg._sum.points ?? 0;

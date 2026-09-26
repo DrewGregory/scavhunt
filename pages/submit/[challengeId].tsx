@@ -34,7 +34,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   const challenge = await prisma.challenge.findUnique({
     where: { id: challengeId },
   });
-  if (challenge == null) {
+  if (
+    challenge == null ||
+    challenge.deletedAt != null ||
+    challenge.enabled !== true
+  ) {
     return {
       redirect: {
         destination: "/challenges",

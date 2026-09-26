@@ -4,6 +4,20 @@ import { prisma } from "../../../lib/prisma";
 import { requireApiAdmin } from "../../../lib/auth";
 import { parseJsonBody } from "../../../lib/serialize";
 
+function parseEnabledCell(raw: string | undefined): boolean {
+  if (raw == null || String(raw).trim() === "") return false;
+  const v = String(raw).trim().toLowerCase();
+  if (v === "true" || v === "1" || v === "yes" || v === "enabled") return true;
+  if (v === "false" || v === "0" || v === "no" || v === "disabled") return false;
+  return false;
+}
+
+/**
+ * CSV columns (header row skipped):
+ * title, prompt, pts, [optional unused], lat, lng, numWinners[, enabled]
+ * Legacy 6-col rows without enabled → created as enabled:false.
+ * 7+ col with enabled at index 6 (after remapping) or last cell.
+ */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -28,11 +42,53 @@ export default async function handler(
       let created = 0;
 
       for (const record of records) {
-        const row =
-          record.length >= 7
-            ? [record[0], record[1], record[2], record[4], record[5], record[6]]
-            : record;
-        const [title, prompt, pts, lat, lng, numWinners] = row;
+        // Support both legacy wide rows and simple rows.
+        let title: string;
+        let prompt: string;
+        let pts: string;
+        let lat: string | undefined;
+        let lng: string | undefined;
+        let numWinners: string;
+        let enabledRaw: string | undefined;
+
+        if (record.length >= 8) {
+          // title, prompt, pts, unused, lat, lng, numWinners, enabled
+          title = record[0];
+          prompt = record[1];
+          pts = record[2];
+          lat = record[4];
+          lng = record[5];
+          numWinners = record[6];
+          enabledRaw = record[7];
+        } else if (record.length >= 7) {
+          // title, prompt, pts, unused, lat, lng, numWinners  OR
+          // title, prompt, pts, lat, lng, numWinners, enabled
+          const maybeEnabled = record[6];
+          const looksLikeEnabled =
+            /^(true|false|1|0|yes|no|enabled|disabled)$/i.test(
+              String(maybeEnabled).trim(),
+            );
+          if (looksLikeEnabled && record.length === 7) {
+            title = record[0];
+            prompt = record[1];
+            pts = record[2];
+            lat = record[3];
+            lng = record[4];
+            numWinners = record[5];
+            enabledRaw = record[6];
+          } else {
+            title = record[0];
+            prompt = record[1];
+            pts = record[2];
+            lat = record[4];
+            lng = record[5];
+            numWinners = record[6];
+            enabledRaw = undefined;
+          }
+        } else {
+          [title, prompt, pts, lat, lng, numWinners, enabledRaw] = record;
+        }
+
         if (!title) continue;
 
         const parseCoord = (v: string | undefined) => {
@@ -42,9 +98,10 @@ export default async function handler(
         };
         const latN = parseCoord(lat);
         const lngN = parseCoord(lng);
+        const enabled = parseEnabledCell(enabledRaw);
 
         const existing = await prisma.challenge.findFirst({
-          where: { title },
+          where: { title, deletedAt: null },
         });
 
         if (existing) {
@@ -57,6 +114,9 @@ export default async function handler(
               lng: lngN,
               pts: Number(pts),
               numWinners: Number(numWinners),
+              ...(enabledRaw != null && String(enabledRaw).trim() !== ""
+                ? { enabled }
+                : {}),
             },
           });
           updated++;
@@ -69,6 +129,7 @@ export default async function handler(
               lng: lngN,
               pts: Number(pts),
               numWinners: Number(numWinners),
+              enabled,
             },
           });
           created++;

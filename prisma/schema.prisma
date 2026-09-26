@@ -19,6 +19,8 @@ model User {
   createdAt  DateTime  @default(now())
   lastSeenAt DateTime?
   updatedAt  DateTime  @updatedAt
+  /// Soft-delete; null = live.
+  deletedAt  DateTime?
 
   /// playing | browsing — set by player survey
   intent              String?
@@ -34,6 +36,7 @@ model User {
   deposits     NeighborhoodDeposit[]
 
   @@index([teamId])
+  @@index([deletedAt])
 }
 
 /// Singleton hunt window (id = "default").
@@ -56,11 +59,15 @@ model Team {
   bonusPoints Int    @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  /// Soft-delete; null = live.
+  deletedAt DateTime?
 
   users        User[]
   submissions  Submission[]
   locations    Location[]
   deposits     NeighborhoodDeposit[]
+
+  @@index([deletedAt])
 }
 
 model Challenge {
@@ -72,10 +79,17 @@ model Challenge {
   lng        Float?
   pts        Int
   numWinners Int
+  /// Player visibility. false = draft/off (admin canvas only).
+  enabled    Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  /// Soft-delete; null = live.
+  deletedAt  DateTime?
 
   submissions Submission[]
+
+  @@index([deletedAt])
+  @@index([enabled])
 }
 
 model Submission {
@@ -89,6 +103,8 @@ model Submission {
   note        String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  /// Soft-delete; null = live. Separate from accepted/rejected moderation.
+  deletedAt   DateTime?
 
   team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -99,6 +115,7 @@ model Submission {
   @@index([challengeId])
   @@index([userId])
   @@index([createdAt])
+  @@index([deletedAt])
 }
 
 model Favorite {
@@ -141,8 +158,12 @@ model Neighborhood {
   centerLat Float?
   centerLng Float?
   createdAt DateTime @default(now())
+  /// Soft-delete; null = live.
+  deletedAt DateTime?
 
   deposits NeighborhoodDeposit[]
+
+  @@index([deletedAt])
 }
 
 /// Singleton shared-edge topology for gap-free SF territory boundaries.
@@ -169,8 +190,8 @@ model NeighborhoodDeposit {
   lat            Float
   lng            Float
   accuracy       Float?
-  /// Soft-delete / admin void. Voided deposits do not count toward standings or score.
-  voidedAt       DateTime?
+  /// Soft-delete; null = counts toward standings/score. Replaces voidedAt.
+  deletedAt      DateTime?
   createdAt      DateTime @default(now())
 
   team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -181,4 +202,5 @@ model NeighborhoodDeposit {
   @@index([teamId])
   @@index([userId])
   @@index([createdAt])
+  @@index([deletedAt])
 }

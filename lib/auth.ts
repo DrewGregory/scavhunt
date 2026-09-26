@@ -51,7 +51,7 @@ export async function getUserFromReq(
     where: { id: session.userId },
     include: { team: true },
   });
-  if (!user || !user.isActive) return null;
+  if (!user || !user.isActive || user.deletedAt) return null;
 
   void prisma.user
     .update({

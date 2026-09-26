@@ -47,7 +47,7 @@ export default async function handler(
     }
 
     const neighborhoods = await prisma.neighborhood.findMany({
-      where: { onMap: true },
+      where: { onMap: true, deletedAt: null },
       select: {
         id: true,
         name: true,

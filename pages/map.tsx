@@ -46,9 +46,10 @@ export const getServerSideProps = async (
   if (huntRedirect) return { redirect: huntRedirect };
 
   const challengesRaw = await prisma.challenge.findMany({
+    where: { deletedAt: null, enabled: true },
     include: {
       submissions: {
-        where: { rejected: false },
+        where: { rejected: false, deletedAt: null },
       },
     },
     orderBy: { createdAt: "asc" },
@@ -63,6 +64,7 @@ export const getServerSideProps = async (
   let locations: LatestTeamLocation[] = [];
   if (disableTracking !== "true" && disableTracking !== "1") {
     const teamsWithLocations = await prisma.team.findMany({
+      where: { deletedAt: null },
       include: {
         locations: {
           orderBy: { createdAt: "desc" },

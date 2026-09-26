@@ -1144,9 +1144,14 @@ export default function AdminPage({
       <VStack align="stretch" spacing={6} width="100%">
         <HStack justify="space-between" flexWrap="wrap" gap={2}>
           <Heading size="lg">Admin</Heading>
-          <Button as={Link} href="/admin/assign" size="sm" colorScheme="purple">
-            Assign teams
-          </Button>
+          <HStack>
+            <Button as={Link} href="/admin/challenges" size="sm" colorScheme="purple" variant="outline">
+              Draft challenges
+            </Button>
+            <Button as={Link} href="/admin/assign" size="sm" colorScheme="purple">
+              Assign teams
+            </Button>
+          </HStack>
         </HStack>
 
         {notice && (
@@ -1265,13 +1270,23 @@ export default function AdminPage({
             <Box>
               <HStack justify="space-between" mb={3} flexWrap="wrap" gap={2}>
                 <Heading size="md">All Challenges</Heading>
-                <Button
-                  size="sm"
-                  colorScheme="green"
-                  onClick={() => void handleCreateChallenge()}
-                >
-                  New Challenge
-                </Button>
+                <HStack>
+                  <Button
+                    as={Link}
+                    href="/admin/challenges"
+                    size="sm"
+                    colorScheme="purple"
+                  >
+                    Draft board
+                  </Button>
+                  <Button
+                    size="sm"
+                    colorScheme="green"
+                    onClick={() => void handleCreateChallenge()}
+                  >
+                    New Challenge
+                  </Button>
+                </HStack>
               </HStack>
               <AdminDataTable
                 tableId="admin-challenges"

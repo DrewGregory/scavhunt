@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  GeoJSON,
   MapContainer,
   Marker,
   Popup,
-  TileLayer,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -18,7 +16,15 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { SF_CENTER, type GeoGeometry } from "../lib/geo";
+import { SF_CENTER } from "../lib/geo";
+import {
+  BasemapSelect,
+  BasemapTileLayer,
+  InvalidateMapSize,
+  PlaceSearchControl,
+  QuietNeighborhoodLayers,
+  usePersistedBasemap,
+} from "./HuntMapShared";
 
 export type LocationMapChallenge = {
   id: string;
@@ -33,6 +39,8 @@ export type LocationMapNeighborhood = {
   emoji?: string | null;
   boundary: unknown;
   onMap?: boolean;
+  centerLat?: number | null;
+  centerLng?: number | null;
 };
 
 const pinIcon = L.divIcon({
@@ -78,25 +86,9 @@ function Recententer({
   return null;
 }
 
-function InvalidateSize({ deps }: { deps: unknown[] }) {
-  const map = useMap();
-  useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, ...deps]);
-  return null;
-}
-
-function isGeometry(raw: unknown): raw is GeoGeometry {
-  if (!raw || typeof raw !== "object") return false;
-  const g = raw as { type?: string };
-  return g.type === "Polygon" || g.type === "MultiPolygon";
-}
-
 /**
- * Shared admin map for picking a lat/lng with optional context overlays
- * (other challenges + neighborhood boundaries).
+ * Admin map for picking a lat/lng with shared basemap, place search,
+ * and quiet neighborhood overlays (click to pan).
  */
 export default function AdminLocationMap({
   lat,
@@ -114,7 +106,6 @@ export default function AdminLocationMap({
   onChange: (lat: number | null, lng: number | null) => void;
   height?: number;
   challenges?: LocationMapChallenge[];
-  /** When set, that challenge is not drawn as an "other" marker (active pin instead). */
   activeChallengeId?: string | null;
   neighborhoods?: LocationMapNeighborhood[];
   defaultShowChallenges?: boolean;
@@ -123,6 +114,9 @@ export default function AdminLocationMap({
   const [showChallenges, setShowChallenges] = useState(defaultShowChallenges);
   const [showNeighborhoods, setShowNeighborhoods] = useState(
     defaultShowNeighborhoods,
+  );
+  const [basemap, setBasemap] = usePersistedBasemap(
+    "scavhunt.mapBasemap.adminLocation",
   );
 
   const valid =
@@ -145,16 +139,6 @@ export default function AdminLocationMap({
     [challenges, activeChallengeId],
   );
 
-  const neighborhoodFeatures = useMemo(() => {
-    return neighborhoods
-      .filter((n) => n.onMap !== false && isGeometry(n.boundary))
-      .map((n) => ({
-        type: "Feature" as const,
-        properties: { id: n.id, name: n.name, emoji: n.emoji ?? null },
-        geometry: n.boundary as GeoGeometry,
-      }));
-  }, [neighborhoods]);
-
   return (
     <Box borderWidth="1px" borderRadius="md" overflow="hidden" bg="white">
       <HStack
@@ -165,7 +149,7 @@ export default function AdminLocationMap({
         flexWrap="wrap"
         gap={2}
       >
-        <HStack spacing={4} flexWrap="wrap">
+        <HStack spacing={3} flexWrap="wrap" align="center">
           <HStack spacing={2}>
             <Text fontSize="xs" fontWeight="medium">
               Challenges
@@ -188,6 +172,12 @@ export default function AdminLocationMap({
               colorScheme="blue"
             />
           </HStack>
+          <HStack spacing={2}>
+            <Text fontSize="xs" fontWeight="medium">
+              Basemap
+            </Text>
+            <BasemapSelect value={basemap} onChange={setBasemap} />
+          </HStack>
         </HStack>
         <HStack spacing={2}>
           <Text fontSize="xs" color="gray.500" fontFamily="mono">
@@ -209,35 +199,17 @@ export default function AdminLocationMap({
         style={{ height, width: "100%" }}
         scrollWheelZoom
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <BasemapTileLayer basemap={basemap} />
+        <PlaceSearchControl />
         <ClickHandler onPick={onChange} />
         <Recententer lat={lat} lng={lng} />
-        <InvalidateSize deps={[height, showChallenges, showNeighborhoods]} />
+        <InvalidateMapSize
+          deps={[height, showChallenges, showNeighborhoods, basemap]}
+        />
 
-        {showNeighborhoods &&
-          neighborhoodFeatures.map((f) => (
-            <GeoJSON
-              key={f.properties.id}
-              data={f as any}
-              style={() => ({
-                color: "#4A5568",
-                weight: 1,
-                fillColor: "#A0AEC0",
-                fillOpacity: 0.15,
-              })}
-              onEachFeature={(feature, layer) => {
-                const name = feature.properties?.name ?? "";
-                const emoji = feature.properties?.emoji;
-                layer.bindTooltip(
-                  emoji ? `${emoji} ${name}` : name,
-                  { sticky: true },
-                );
-              }}
-            />
-          ))}
+        {showNeighborhoods && (
+          <QuietNeighborhoodLayers neighborhoods={neighborhoods} />
+        )}
 
         {showChallenges &&
           otherChallenges.map((c) => (
@@ -271,8 +243,8 @@ export default function AdminLocationMap({
 
       <VStack align="stretch" spacing={0} px={3} py={2}>
         <Text fontSize="xs" color="gray.500">
-          Click the map or drag the blue pin to set location. Leave cleared to
-          draft without a place (map falls back to SF center).
+          Search or click/drag the blue pin to set location. Click a
+          neighborhood to pan. Leave cleared to draft without a place.
         </Text>
       </VStack>
     </Box>

@@ -5,7 +5,6 @@ import {
   MapContainer,
   Marker,
   Popup,
-  TileLayer,
 } from "react-leaflet";
 import { LatLngExpression, PathOptions, divIcon, icon, type Path } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -30,6 +29,12 @@ import {
   SF_CENTER,
   type GeoGeometry,
 } from "../lib/geo";
+import { DEFAULT_PLAYER_BASEMAP } from "../lib/mapBasemaps";
+import {
+  BasemapSelect,
+  BasemapTileLayer,
+  usePersistedBasemap,
+} from "./HuntMapShared";
 
 type ChallengeWithSubmissions = {
   id: string;
@@ -113,6 +118,10 @@ export default function LeafletMap({
   const [myFix, setMyFix] = useState<GeoFix | null>(null);
   const [locating, setLocating] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [basemap, setBasemap] = usePersistedBasemap(
+    "scavhunt.mapBasemap.player",
+    DEFAULT_PLAYER_BASEMAP,
+  );
   const myFixRef = useRef<GeoFix | null>(null);
   /** Only one neighborhood highlight at a time (fast mouse moves skip mouseout). */
   const highlightedLayerRef = useRef<{
@@ -446,6 +455,12 @@ export default function LeafletMap({
                   />
                 </HStack>
               )}
+              <HStack justifyContent="space-between">
+                <Text fontSize="sm" fontWeight="medium">
+                  Basemap
+                </Text>
+                <BasemapSelect value={basemap} onChange={setBasemap} size="sm" />
+              </HStack>
               {team && (
                 <>
                   <Box borderTop="1px solid" borderColor="gray.200" pt={3}>
@@ -571,10 +586,7 @@ export default function LeafletMap({
         zoom={13}
         style={{ height: "100%", width: "100%" }}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
+        <BasemapTileLayer basemap={basemap} />
         {territoryOn &&
           showNeighborhoods &&
           neighborhoods.map((n) => {
@@ -617,6 +629,23 @@ export default function LeafletMap({
                     }
                   }
                   layer.on({
+                    click: (e) => {
+                      const target = e.target as Path & {
+                        getBounds: () => import("leaflet").LatLngBounds;
+                      };
+                      const map = (e.target as { _map?: import("leaflet").Map })
+                        ._map;
+                      if (map && typeof target.getBounds === "function") {
+                        const bounds = target.getBounds();
+                        if (bounds.isValid()) {
+                          map.fitBounds(bounds, {
+                            padding: [40, 40],
+                            maxZoom: 15,
+                            animate: true,
+                          });
+                        }
+                      }
+                    },
                     mouseover: (e) => {
                       const target = e.target as Path;
                       const prev = highlightedLayerRef.current;

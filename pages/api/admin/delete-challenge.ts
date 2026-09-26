@@ -28,24 +28,20 @@ export default async function handler(
     if (!challenge) {
       return res.status(404).json({ error: "Challenge not found" });
     }
-
-    const submissionCount = await prisma.submission.count({
-      where: { challengeId },
-    });
-
-    if (submissionCount > 0) {
-      return res.status(400).json({
-        error: `Cannot delete challenge. There are ${submissionCount} submission(s) associated with this challenge.`,
-      });
+    if (challenge.deletedAt) {
+      return res.status(200).json({ message: "Challenge already archived" });
     }
 
-    await prisma.challenge.delete({ where: { id: challengeId } });
+    await prisma.challenge.update({
+      where: { id: challengeId },
+      data: { deletedAt: new Date() },
+    });
 
     return res.status(200).json({
-      message: "Challenge deleted successfully",
+      message: "Challenge archived successfully",
     });
   } catch (error) {
-    console.error("Error deleting challenge:", error);
-    return res.status(500).json({ error: "Failed to delete challenge" });
+    console.error("Error archiving challenge:", error);
+    return res.status(500).json({ error: "Failed to archive challenge" });
   }
 }

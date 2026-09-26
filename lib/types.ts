@@ -47,6 +47,7 @@ export type SerializedChallenge = {
   lng: number | null;
   pts: number;
   numWinners: number;
+  enabled: boolean;
 };
 
 export type SerializedTeam = {
