@@ -85,10 +85,24 @@ export default async function handler(
       data.pinned = parsed.data.pinned;
     }
 
-    const row = await prisma.announcement.update({
-      where: { id },
-      data,
-    });
+    // Only one announcement may be pinned at a time.
+    const row =
+      data.pinned === true
+        ? await prisma.$transaction(async (tx) => {
+            await tx.announcement.updateMany({
+              where: {
+                deletedAt: null,
+                pinned: true,
+                id: { not: id },
+              },
+              data: { pinned: false },
+            });
+            return tx.announcement.update({ where: { id }, data });
+          })
+        : await prisma.announcement.update({
+            where: { id },
+            data,
+          });
 
     return res.status(200).json({
       announcement: {

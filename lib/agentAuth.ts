@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
+import { z } from "zod";
 
 function extractApiKey(req: NextApiRequest): string | null {
   const headerKey = req.headers["x-admin-api-key"];
@@ -49,3 +50,17 @@ export function requireAdminApiKey(
 export function wantsIncludeDeleted(req: NextApiRequest): boolean {
   return req.query.includeDeleted === "1";
 }
+
+/**
+ * Optional ISO-8601 `createdAt` override for hunt simulation.
+ * Accepts any Date.parse-able string (e.g. `2026-09-26T18:30:00.000Z`).
+ */
+export const optionalCreatedAtSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((s) => !Number.isNaN(Date.parse(s)), {
+    message: "createdAt must be a valid ISO datetime",
+  })
+  .transform((s) => new Date(s))
+  .optional();

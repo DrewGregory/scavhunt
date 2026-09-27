@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
-import { requireAdminApiKey, wantsIncludeDeleted } from "../../../../lib/agentAuth";
+import { requireAdminApiKey, wantsIncludeDeleted, optionalCreatedAtSchema } from "../../../../lib/agentAuth";
 import { includeDeletedWhere } from "../../../../lib/softDelete";
 import { prisma } from "../../../../lib/prisma";
 import { normalizeEmail, normalizePhone } from "../../../../lib/phone";
@@ -54,6 +54,8 @@ const createSchema = z.object({
   teamId: z.string().nullable().optional(),
   isAdmin: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  /** Artificial timestamp for hunt simulation (ISO-8601). */
+  createdAt: optionalCreatedAtSchema,
 });
 
 export default async function handler(
@@ -105,6 +107,9 @@ export default async function handler(
           teamId: parsed.data.teamId ?? null,
           isAdmin,
           isActive: parsed.data.isActive ?? true,
+          ...(parsed.data.createdAt
+            ? { createdAt: parsed.data.createdAt }
+            : {}),
         },
         include: {
           team: { select: { id: true, name: true, emoji: true } },

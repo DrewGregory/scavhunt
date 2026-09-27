@@ -3,9 +3,16 @@ import { prisma } from "./prisma";
 import { serializeSubmission, serializeTeam } from "./serialize";
 import type { SerializedSubmission, SerializedTeam } from "./types";
 import { isTerritoryEnabled } from "./territoryGate";
-import { getStandings, territoryLeaderboard } from "./territory";
+import {
+  getClaimSeriesOverTime,
+  getStandings,
+  territoryLeaderboard,
+  type ClaimSeries,
+} from "./territory";
 import { scoreFromParts } from "./scoring";
 import { getEndTime, getStartTime } from "./time";
+
+export type { ClaimSeries };
 
 export type TeamMember = { id: string; name: string };
 
@@ -45,6 +52,8 @@ export type LeaderboardPayload = {
   endTimeISO: string;
   territoryEnabled: boolean;
   territoryRows: TerritoryRow[];
+  /** Neighborhoods held over time (empty when territory is off). */
+  claimSeries: ClaimSeries[];
 };
 
 /** Shared payload for SSR + live polling on /teams. */
@@ -76,12 +85,18 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
 
   const claimedByTeam = new Map<string, ClaimedNeighborhood[]>();
   let territoryRows: TerritoryRow[] = [];
+  let claimSeries: ClaimSeries[] = [];
 
   if (territoryEnabled) {
-    const standings = await getStandings({
-      onMapOnly: true,
-      includeBoundary: false,
-    });
+    const [standings, series] = await Promise.all([
+      getStandings({
+        onMapOnly: true,
+        includeBoundary: false,
+      }),
+      getClaimSeriesOverTime({ onMapOnly: true, startTime }),
+    ]);
+    claimSeries = series;
+
     for (const s of standings) {
       if (!s.claimedBy) continue;
       const list = claimedByTeam.get(s.claimedBy.teamId) ?? [];
@@ -95,12 +110,17 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
 
     const rows = territoryLeaderboard(
       standings,
-      teamsRaw.map((t) => ({
-        id: t.id,
-        name: t.name,
-        emoji: t.emoji,
-        color: t.color,
-      })),
+      teamsRaw.map((t) => {
+        const accepted = t.submissions.filter((s) => s.accepted);
+        const earned = accepted.reduce((sum, s) => sum + s.challenge.pts, 0);
+        return {
+          id: t.id,
+          name: t.name,
+          emoji: t.emoji,
+          color: t.color,
+          earned,
+        };
+      }),
     );
 
     const bankByTeam = new Map<string, number>();
@@ -153,5 +173,6 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
     endTimeISO: formatISO(endTime),
     territoryEnabled,
     territoryRows: territoryEnabled ? territoryRows : [],
+    claimSeries: territoryEnabled ? claimSeries : [],
   };
 }

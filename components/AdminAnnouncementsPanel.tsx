@@ -75,7 +75,7 @@ type AnnouncementRow = {
 };
 
 const PIN_TOOLTIP =
-  "Pins a blue banner at the top of the feed so everyone sees it first. You can still open the full message from the announcements sidebar.";
+  "Pins a blue banner at the top of the feed. Only one announcement can be pinned — pinning this one unpins any other. Players can browse all announcements from the Announcements page in the sidebar.";
 
 export default function AdminAnnouncementsPanel({
   onNotice,

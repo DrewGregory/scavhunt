@@ -27,6 +27,7 @@ import { requireUserSSP } from "../lib/auth";
 import {
   getLeaderboardPayload,
   type ClaimedNeighborhood,
+  type ClaimSeries,
   type LeaderboardPayload,
   type TeamMember,
 } from "../lib/leaderboard";
@@ -197,6 +198,9 @@ export default function Page(initial: LeaderboardPayload) {
   const router = useRouter();
   const [teamsSortedbyPts, setTeams] = useState(initial.teamsSortedbyPts);
   const [territoryRows, setTerritoryRows] = useState(initial.territoryRows);
+  const [claimSeries, setClaimSeries] = useState<ClaimSeries[]>(
+    initial.claimSeries ?? [],
+  );
   const [territoryEnabled, setTerritoryEnabled] = useState(
     initial.territoryEnabled,
   );
@@ -207,6 +211,7 @@ export default function Page(initial: LeaderboardPayload) {
   useEffect(() => {
     setTeams(initial.teamsSortedbyPts);
     setTerritoryRows(initial.territoryRows);
+    setClaimSeries(initial.claimSeries ?? []);
     setTerritoryEnabled(initial.territoryEnabled);
     setStartTimeISO(initial.startTimeISO);
     setEndTimeISO(initial.endTimeISO);
@@ -226,6 +231,9 @@ export default function Page(initial: LeaderboardPayload) {
         }
         if (Array.isArray(data.territoryRows)) {
           setTerritoryRows(data.territoryRows);
+        }
+        if (Array.isArray(data.claimSeries)) {
+          setClaimSeries(data.claimSeries);
         }
         if (typeof data.territoryEnabled === "boolean") {
           setTerritoryEnabled(data.territoryEnabled);
@@ -284,8 +292,22 @@ export default function Page(initial: LeaderboardPayload) {
     return { id: `${t.emoji} ${t.name}`, data };
   });
 
+  const claimChartData = useMemo(
+    () =>
+      claimSeries.map((s) => ({
+        id: s.id,
+        data: s.data.map((p) => ({ x: new Date(p.x), y: p.y })),
+      })),
+    [claimSeries],
+  );
+
   const maxEarned = teamsSortedbyPts.reduce(
     (max, t) => Math.max(max, t.earned),
+    0,
+  );
+
+  const maxHeld = territoryRows.reduce(
+    (max, r) => Math.max(max, r.neighborhoodsHeld),
     0,
   );
 
@@ -420,11 +442,68 @@ export default function Page(initial: LeaderboardPayload) {
 
       {showNeighborhoods && (
         <>
+          <Box
+            height={{ base: 280, md: 400 }}
+            p={4}
+            mb={4}
+            bg="white"
+            boxShadow="sm"
+            borderRadius="lg"
+          >
+            <ResponsiveLine
+              data={claimChartData}
+              margin={{ top: 40, right: 20, bottom: 60, left: 50 }}
+              xScale={{
+                format: "%Y-%m-%d, %H:%M:%S",
+                type: "time",
+                precision: "minute",
+                min: startTime,
+                max: maxDate,
+                useUTC: true,
+              }}
+              xFormat="time:%Y-%m-%d %H:%M:%S"
+              yScale={{
+                type: "linear",
+                min: 0,
+                max: Math.max(3, maxHeld + 1),
+                stacked: false,
+                reverse: false,
+              }}
+              yFormat=" >-.0f"
+              axisTop={null}
+              axisRight={null}
+              axisBottom={{
+                tickSize: 5,
+                tickPadding: 5,
+                tickRotation: 90,
+                format: "%H:%M",
+                legend: "Time",
+                legendOffset: 48,
+                legendPosition: "middle",
+              }}
+              axisLeft={{
+                tickSize: 5,
+                tickPadding: 5,
+                tickRotation: 0,
+                legend: "Neighborhoods held",
+                legendOffset: -40,
+                legendPosition: "middle",
+                truncateTickAt: 0,
+              }}
+              pointSize={0}
+              colors={{ scheme: "set3" }}
+              pointLabel="data.yFormatted"
+              pointLabelYOffset={-12}
+              enableTouchCrosshair={true}
+              enableSlices="x"
+              useMesh={true}
+            />
+          </Box>
           <Heading size="md" mb={1} color="gray.800">
             Neighborhoods
           </Heading>
           <Text fontSize="sm" color="gray.600" mb={3}>
-            Ranked by neighborhoods held, then points deposited.
+            Ranked by neighborhoods held, then points earned.
           </Text>
           <Podium items={territoryPodium} />
           <LeaderboardTable

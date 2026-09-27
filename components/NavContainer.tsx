@@ -22,6 +22,7 @@ import {
   LuChevronRight,
   LuListChecks,
   LuLogOut,
+  LuMegaphone,
   LuMenu,
   LuNewspaper,
   LuShieldCheck,
@@ -48,6 +49,11 @@ const LinkItems: Array<LinkItemProps> = [
     icon: LuNewspaper,
     url: "/feed",
     matchPaths: ["/feed", "/scavtok"],
+  },
+  {
+    name: "Announcements",
+    icon: LuMegaphone,
+    url: "/announcements",
   },
   {
     name: "Challenges",
@@ -286,7 +292,7 @@ const SidebarContent = ({
             {session.user.name}
           </Text>
           {session.team && (
-            <Text fontSize="sm">
+            <Text fontSize="sm" fontWeight="bold">
               {session.team.emoji} {session.team.name}
             </Text>
           )}
@@ -381,6 +387,7 @@ const SidebarContent = ({
               leftIcon={<LuLogOut />}
               onClick={handleLogout}
               width="100%"
+              fontWeight="bold"
             >
               Log out
             </Button>
@@ -434,7 +441,11 @@ const NavItem = ({
           as={icon}
         />
       )}
-      {!collapsed && children}
+      {!collapsed && (
+        <Text fontWeight="bold" fontSize="md">
+          {children}
+        </Text>
+      )}
     </Flex>
   );
 

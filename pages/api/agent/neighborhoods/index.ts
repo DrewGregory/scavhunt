@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
-import { requireAdminApiKey, wantsIncludeDeleted } from "../../../../lib/agentAuth";
+import { requireAdminApiKey, wantsIncludeDeleted, optionalCreatedAtSchema } from "../../../../lib/agentAuth";
 import { includeDeletedWhere } from "../../../../lib/softDelete";
 import { prisma } from "../../../../lib/prisma";
 import { parseJsonBody } from "../../../../lib/serialize";
@@ -37,6 +37,8 @@ const createSchema = z.object({
   name: z.string().trim().min(1).max(80),
   emoji: z.string().trim().max(16).optional().nullable(),
   onMap: z.boolean().optional(),
+  /** Artificial timestamp for hunt simulation (ISO-8601). */
+  createdAt: optionalCreatedAtSchema,
 });
 
 export default async function handler(
@@ -67,6 +69,9 @@ export default async function handler(
           name: parsed.data.name,
           emoji: parsed.data.emoji ?? null,
           onMap: parsed.data.onMap ?? false,
+          ...(parsed.data.createdAt
+            ? { createdAt: parsed.data.createdAt }
+            : {}),
         },
       });
       return res.status(201).json({

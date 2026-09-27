@@ -210,11 +210,12 @@ function NeighborhoodLabelLayer({
             ? "#2B6CB0"
             : (n.claimedBy?.teamColor ?? "#CBD5E0");
         const nEmoji = neighborhoodEmoji(n.name, n.emoji);
+        // Prefix with claiming team's emoji (not the neighborhood's).
         const label = n.claimedBy
-          ? `${n.claimedBy.teamEmoji} ${nEmoji} ${n.name}`
+          ? `${n.claimedBy.teamEmoji} ${n.name}`
           : n.contested
-            ? `~ ${nEmoji} ${n.name}`
-            : `${nEmoji} ${n.name}`;
+            ? `~ ${n.name}`
+            : n.name;
         const claimLine = n.contested
           ? "Contested"
           : n.claimedBy
@@ -249,7 +250,9 @@ function NeighborhoodLabelLayer({
               <Tooltip direction="top" offset={[0, -12]} opacity={0.95}>
                 <div>
                   <strong>
-                    {nEmoji} {n.name}
+                    {n.claimedBy
+                      ? `${n.claimedBy.teamEmoji} ${n.name}`
+                      : `${nEmoji} ${n.name}`}
                   </strong>
                   <br />
                   {claimLine}
@@ -326,6 +329,7 @@ export default function LeafletMap({
   const [locating, setLocating] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [hoverCapable, setHoverCapable] = useState(false);
+  const hoverCapableRef = useRef(false);
   const myFixRef = useRef<GeoFix | null>(null);
   /** Only one neighborhood highlight at a time (fast mouse moves skip mouseout). */
   const highlightedLayerRef = useRef<{
@@ -334,7 +338,9 @@ export default function LeafletMap({
   } | null>(null);
 
   useEffect(() => {
-    setHoverCapable(canHover());
+    const ok = canHover();
+    setHoverCapable(ok);
+    hoverCapableRef.current = ok;
   }, []);
 
   useEffect(() => {
@@ -519,36 +525,32 @@ export default function LeafletMap({
     [neighborhoods],
   );
 
-  const styleFor = useCallback(
-    (n: TerritoryNeighborhood): PathOptions => {
-      const isHere = currentNeighborhood?.id === n.id;
-      if (n.contested) {
-        return {
-          color: isHere ? "#4A5568" : "#A0AEC0",
-          weight: isHere ? 3 : 1.25,
-          dashArray: "6 4",
-          fillColor: "#CBD5E0",
-          fillOpacity: isHere ? 0.4 : 0.18,
-        };
-      }
-      if (n.claimedBy) {
-        const c = n.claimedBy.teamColor || "#3182CE";
-        return {
-          color: c,
-          weight: isHere ? 3.5 : 1.25,
-          fillColor: c,
-          fillOpacity: isHere ? 0.42 : 0.2,
-        };
-      }
+  const styleFor = useCallback((n: TerritoryNeighborhood): PathOptions => {
+    if (n.contested) {
       return {
-        color: isHere ? "#2B6CB0" : "#A0AEC0",
-        weight: isHere ? 3 : 1,
-        fillColor: isHere ? "#90CDF4" : "#EDF2F7",
-        fillOpacity: isHere ? 0.4 : 0.12,
+        color: "#A0AEC0",
+        weight: 1.25,
+        dashArray: "6 4",
+        fillColor: "#CBD5E0",
+        fillOpacity: 0.18,
       };
-    },
-    [currentNeighborhood?.id],
-  );
+    }
+    if (n.claimedBy) {
+      const c = n.claimedBy.teamColor || "#3182CE";
+      return {
+        color: c,
+        weight: 1.25,
+        fillColor: c,
+        fillOpacity: 0.2,
+      };
+    }
+    return {
+      color: "#A0AEC0",
+      weight: 1,
+      fillColor: "#EDF2F7",
+      fillOpacity: 0.12,
+    };
+  }, []);
 
   const handleDeposit = async () => {
     if (!team || !territoryOn) return;
@@ -863,7 +865,7 @@ export default function LeafletMap({
             const isSelected = selectedNeighborhoodId === n.id;
             return (
               <GeoJSON
-                key={`${n.id}-${standingsKey}-${currentNeighborhood?.id ?? "none"}-${isSelected ? "sel" : ""}`}
+                key={`${n.id}-${standingsKey}-${isSelected ? "sel" : ""}`}
                 data={feature as never}
                 style={() => {
                   const base = styleFor(n);
@@ -876,7 +878,7 @@ export default function LeafletMap({
                 }}
                 onEachFeature={(_feat, layer) => {
                   const baseStyle = styleFor(n);
-                  if (currentNeighborhood?.id === n.id || isSelected) {
+                  if (isSelected) {
                     if (typeof (layer as Path).bringToFront === "function") {
                       (layer as Path).bringToFront();
                     }
@@ -886,17 +888,18 @@ export default function LeafletMap({
                       onSelectNeighborhood?.(n.id);
                     },
                     mouseover: (e) => {
+                      // Desktop fine-pointer only; ignore touch / coarse pointers.
+                      if (!hoverCapableRef.current) return;
                       const target = e.target as Path;
                       const prev = highlightedLayerRef.current;
                       if (prev && prev.layer !== target) {
                         prev.layer.setStyle(prev.style);
                       }
-                      const hoverColor = n.claimedBy?.teamColor || "#3182CE";
                       target.setStyle({
-                        fillColor: hoverColor,
-                        fillOpacity: 0.5,
-                        color: hoverColor,
-                        weight: 3.5,
+                        fillColor: "#E2E8F0",
+                        fillOpacity: 0.45,
+                        color: "#A0AEC0",
+                        weight: 2.5,
                         dashArray: undefined,
                       });
                       if (typeof target.bringToFront === "function") {
@@ -904,10 +907,20 @@ export default function LeafletMap({
                       }
                       highlightedLayerRef.current = {
                         layer: target,
-                        style: baseStyle,
+                        style: isSelected
+                          ? {
+                              ...baseStyle,
+                              weight: Math.max(baseStyle.weight ?? 2, 3.5),
+                              fillOpacity: Math.min(
+                                (baseStyle.fillOpacity ?? 0.35) + 0.15,
+                                0.6,
+                              ),
+                            }
+                          : baseStyle,
                       };
                     },
                     mouseout: (e) => {
+                      if (!hoverCapableRef.current) return;
                       const target = e.target as Path;
                       const restore = isSelected
                         ? {

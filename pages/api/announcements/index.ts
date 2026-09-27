@@ -5,7 +5,7 @@ import {
 } from "../../../lib/announcements";
 import { requireApiUser } from "../../../lib/auth";
 
-/** All published announcements for feed sidebar / banners. */
+/** All published announcements for the announcements page. */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,

@@ -29,7 +29,10 @@ Use the HTTP agent admin API documented in [`docs/agent-api.md`](../../../docs/a
 | List teams | `GET /api/agent/teams` |
 | Create team | `POST /api/agent/teams` `{ name, emoji, color? }` |
 | Bonus points | `PATCH /api/agent/teams/:id` `{ bonusDelta }` |
-| Create challenge | `POST /api/agent/challenges` `{ title, prompt?, pts, numWinners, lat?, lng?, enabled? }` (`enabled: false` for drafts) |
+| Create challenge | `POST /api/agent/challenges` `{ title, prompt?, pts, numWinners, lat?, lng?, enabled?, createdAt? }` (`enabled: false` for drafts) |
+| Create submission | `POST /api/agent/submissions` `{ teamId, userId, challengeId, accepted?, note?, mediaURL?, createdAt? }` |
+| Create deposit | `POST /api/agent/deposits` `{ teamId, userId, neighborhoodId, points, lat, lng, accuracy?, createdAt? }` |
+| Backdate submission | `PATCH /api/agent/submissions/:id` `{ createdAt }` |
 | Archive challenge | `DELETE /api/agent/challenges/:id` |
 | Restore | `POST /api/agent/…/:id/restore` |
 | Moderate | `POST /api/agent/submissions/:id/accept` or `/reject` |

@@ -62,17 +62,40 @@ Base path: `/api/agent`
 | GET/PATCH/DELETE | `/neighborhoods/[id]` | Get / update / soft-delete |
 | POST | `/neighborhoods/[id]/restore` | Restore |
 | GET/PATCH | `/settings` | Hunt window + territory |
-| GET | `/deposits` | List (`?includeDeleted=1`) |
+| GET/POST | `/deposits` | List (`?includeDeleted=1`) / create (`createdAt?` for simulation) |
 | DELETE | `/deposits/[id]` | Soft-delete |
 | POST | `/deposits/[id]/restore` | Restore |
-| GET | `/submissions` | List (`?status=pending\|accepted\|rejected`) |
+| GET/POST | `/submissions` | List (`?status=pending\|accepted\|rejected`) / create (`createdAt?`, `accepted?`) |
+| GET/PATCH/DELETE | `/submissions/[id]` | Soft-delete via DELETE; PATCH `createdAt` (and note/media/moderation) |
 | POST | `/submissions/[id]/accept` | Accept |
 | POST | `/submissions/[id]/reject` | Reject |
-| DELETE | `/submissions/[id]` | Soft-delete |
 | POST | `/submissions/[id]/restore` | Restore |
 | GET | `/telemetry` | Upload/playback telemetry (`?view=summary\|events`) |
 
 Out of scope for agents: topology/boundary editing, CSV import, seed-demo.
+
+### Hunt simulation (`createdAt`)
+
+Create endpoints accept an optional ISO-8601 `createdAt` so you can backdate rows for leaderboard / claim charts:
+
+- `POST /users`, `/teams`, `/challenges`, `/neighborhoods`, `/submissions`, `/deposits`
+- `PATCH /submissions/[id]` can also set `createdAt` on an existing submission
+
+Example — accepted submission at a fake time:
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"teamId":"…","userId":"…","challengeId":"…","accepted":true,"createdAt":"2026-09-26T18:30:00.000Z"}' \
+  "$BASE/api/agent/submissions" | jq .
+```
+
+Example — neighborhood deposit earlier in the day:
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"teamId":"…","userId":"…","neighborhoodId":"…","points":50,"lat":37.77,"lng":-122.42,"createdAt":"2026-09-26T16:00:00.000Z"}' \
+  "$BASE/api/agent/deposits" | jq .
+```
 
 ### Telemetry
 

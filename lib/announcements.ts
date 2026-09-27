@@ -58,7 +58,7 @@ export function serializeAnnouncement(row: {
   };
 }
 
-/** Published announcements for feed sidebar / banners. Pinned first, then newest. */
+/** Published announcements for the announcements page. Newest first; pinned first. */
 export async function listPublishedAnnouncements() {
   return prisma.announcement.findMany({
     where: {
@@ -66,6 +66,18 @@ export async function listPublishedAnnouncements() {
       publishedAt: { not: null },
     },
     orderBy: [{ pinned: "desc" }, { publishedAt: "desc" }],
+  });
+}
+
+/** At most one pinned published announcement for the feed banner. */
+export async function getPinnedAnnouncement() {
+  return prisma.announcement.findFirst({
+    where: {
+      deletedAt: null,
+      publishedAt: { not: null },
+      pinned: true,
+    },
+    orderBy: { publishedAt: "desc" },
   });
 }
 

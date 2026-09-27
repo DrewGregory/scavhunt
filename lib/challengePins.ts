@@ -51,9 +51,9 @@ export function makeChallengePinIcon(opts: {
   const ring = opts.selected
     ? `<span style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);width:${size - 4}px;height:${size - 4}px;border-radius:50%;box-shadow:0 0 0 3px rgba(49,130,206,0.95),0 0 12px rgba(49,130,206,0.55);pointer-events:none"></span>`
     : "";
-  // Half on / half off the pin's top-right corner.
+  // Overlap the pin head's top-right shoulder (pin path is inset in the SVG box).
   const heart = opts.favorited
-    ? `<span style="position:absolute;top:-${Math.round(heartSize * 0.45)}px;right:-${Math.round(heartSize * 0.45)}px;line-height:0;pointer-events:none;z-index:2">${favoriteHeartSvg(heartSize)}</span>`
+    ? `<span style="position:absolute;top:${Math.round(size * 0.02)}px;right:-${Math.round(heartSize * 0.12)}px;line-height:0;pointer-events:none;z-index:2">${favoriteHeartSvg(heartSize)}</span>`
     : "";
   const html = `<div style="position:relative;width:${size}px;height:${size}px;opacity:${opacity};filter:${opts.selected ? "drop-shadow(0 2px 4px rgba(0,0,0,.45))" : "none"}">${ring}${pinSvg(fill, stroke, size)}${heart}</div>`;
   return L.divIcon({

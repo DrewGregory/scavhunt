@@ -42,7 +42,7 @@ import {
 } from "../lib/feedTypes";
 import type { SerializedTeam } from "../lib/types";
 import {
-  listPublishedAnnouncements,
+  getPinnedAnnouncement,
   serializeAnnouncement,
 } from "../lib/announcements";
 import {
@@ -100,7 +100,7 @@ export const getServerSideProps = async (
   const teamIdParam =
     typeof context.query.teamId === "string" ? context.query.teamId : null;
 
-  const [initialPage, tokInitialPage, pinnedPage, announcementRows] =
+  const [initialPage, tokInitialPage, pinnedPage, pinnedAnnouncementRow] =
     await Promise.all([
       getFeedPage({ userId: user.id }),
       getFeedPage({
@@ -114,8 +114,21 @@ export const getServerSideProps = async (
       submissionParam
         ? getFeedPage({ userId: user.id, ids: [submissionParam], limit: 1 })
         : Promise.resolve(null),
-      listPublishedAnnouncements(),
+      getPinnedAnnouncement(),
     ]);
+
+  const pinnedAnnouncement = pinnedAnnouncementRow
+    ? (() => {
+        const s = serializeAnnouncement(pinnedAnnouncementRow);
+        return {
+          id: s.id,
+          title: s.title,
+          body: s.body,
+          publishedAt: s.publishedAt,
+          pinned: s.pinned,
+        } satisfies FeedAnnouncement;
+      })()
+    : null;
 
   return {
     props: {
@@ -124,16 +137,7 @@ export const getServerSideProps = async (
       tokInitialPage,
       tokTeamId: teamIdParam,
       pinnedPage: pinnedPage && pinnedPage.items.length > 0 ? pinnedPage : null,
-      announcements: announcementRows.map((row) => {
-        const s = serializeAnnouncement(row);
-        return {
-          id: s.id,
-          title: s.title,
-          body: s.body,
-          publishedAt: s.publishedAt,
-          pinned: s.pinned,
-        } satisfies FeedAnnouncement;
-      }),
+      pinnedAnnouncement,
     },
   };
 };
@@ -152,7 +156,7 @@ export default function FeedPage({
   tokInitialPage,
   tokTeamId,
   pinnedPage,
-  announcements,
+  pinnedAnnouncement,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -689,7 +693,7 @@ export default function FeedPage({
 
   return (
     <NavContainer title="Feed" right={scavTokNavButton}>
-      <FeedWithAnnouncements announcements={announcements}>
+      <FeedWithAnnouncements pinned={pinnedAnnouncement}>
         {noSubmissionsAtAll ? (
           <Heading size="lg" color="gray.500" textAlign="center" mt={8}>
             No Submissions Yet!

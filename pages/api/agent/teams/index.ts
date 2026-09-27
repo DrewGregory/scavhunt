@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
-import { requireAdminApiKey, wantsIncludeDeleted } from "../../../../lib/agentAuth";
+import { requireAdminApiKey, wantsIncludeDeleted, optionalCreatedAtSchema } from "../../../../lib/agentAuth";
 import { includeDeletedWhere } from "../../../../lib/softDelete";
 import { prisma } from "../../../../lib/prisma";
 import { parseJsonBody, serializeTeam } from "../../../../lib/serialize";
@@ -25,6 +25,8 @@ const createSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .optional(),
+  /** Artificial timestamp for hunt simulation (ISO-8601). */
+  createdAt: optionalCreatedAtSchema,
 });
 
 export default async function handler(
@@ -96,6 +98,9 @@ export default async function handler(
         name: parsed.data.name,
         emoji: parsed.data.emoji,
         color,
+        ...(parsed.data.createdAt
+          ? { createdAt: parsed.data.createdAt }
+          : {}),
       },
     });
 
