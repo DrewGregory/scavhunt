@@ -4,6 +4,7 @@ import {
   Box,
   CloseButton,
   Flex,
+  HStack,
   Icon,
   useColorModeValue,
   Text,
@@ -293,16 +294,30 @@ const SidebarContent = ({
         <CloseButton display={{ base: "flex", md: "none" }} onClick={onClose} />
       </Flex>
       {session && !collapsed && (
-        <Flex px={4} mx={4} mb={4} direction="column" gap={1} flexShrink={0}>
-          <Text fontWeight="bold" fontSize="sm">
+        <HStack
+          px={4}
+          mx={4}
+          mb={4}
+          mt={1}
+          spacing={2}
+          align="center"
+          flexWrap="wrap"
+          flexShrink={0}
+        >
+          <Text fontWeight="semibold" fontSize="sm" color="gray.800">
             {session.user.name}
           </Text>
           {session.team && (
-            <Text fontSize="sm" fontWeight="bold">
-              {session.team.emoji} {session.team.name}
-            </Text>
+            <>
+              <Text fontSize="sm" color="gray.300" aria-hidden>
+                ·
+              </Text>
+              <Text fontSize="sm" color="gray.600" noOfLines={1}>
+                {session.team.emoji} {session.team.name}
+              </Text>
+            </>
           )}
-        </Flex>
+        </HStack>
       )}
       {session && collapsed && (
         <Flex direction="column" align="center" gap={2} mb={3} px={1} flexShrink={0}>

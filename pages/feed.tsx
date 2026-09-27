@@ -3,7 +3,6 @@ import { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
 import {
   Button,
   Flex,
-  Heading,
   HStack,
   Link,
   Tag,
@@ -726,9 +725,16 @@ export default function FeedPage({
     <NavContainer title="Feed" right={scavTokNavButton}>
       <FeedWithAnnouncements pinned={pinnedAnnouncement}>
         {noSubmissionsAtAll ? (
-          <Heading size="lg" color="gray.500" textAlign="center" mt={8}>
-            No Submissions Yet!
-          </Heading>
+          <Box
+            bg="white"
+            borderRadius={{ base: 0, md: "lg" }}
+            py={12}
+            px={4}
+            textAlign="center"
+          >
+            <Text color="gray.400">No submissions yet</Text>
+            <Text color="gray.400">Let the games begin!</Text>
+          </Box>
         ) : (
           <Box>
             <DataListToolbar

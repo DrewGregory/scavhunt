@@ -121,12 +121,9 @@ function FlyToSelection({
     lastChallengeId.current = challenge.id;
     const lat = challenge.lat ?? SF_CENTER[0];
     const lng = challenge.lng ?? SF_CENTER[1];
-    const shouldZoom = zoomChallengeId === challenge.id;
-    if (shouldZoom) {
-      map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+    map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+    if (zoomChallengeId === challenge.id) {
       onDeepLinkZoomConsumed?.("challenge");
-    } else {
-      map.panTo([lat, lng], { animate: true });
     }
   }, [
     map,
@@ -151,12 +148,9 @@ function FlyToSelection({
     const lat = fromBoundary?.lat ?? neighborhood.centerLat;
     const lng = fromBoundary?.lng ?? neighborhood.centerLng;
     if (lat == null || lng == null) return;
-    const shouldZoom = zoomNeighborhoodId === neighborhood.id;
-    if (shouldZoom) {
-      map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+    map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+    if (zoomNeighborhoodId === neighborhood.id) {
       onDeepLinkZoomConsumed?.("neighborhood");
-    } else {
-      map.panTo([lat, lng], { animate: true });
     }
   }, [
     map,
@@ -1031,6 +1025,10 @@ export default function LeafletMap({
                         {c.emoji ? `${c.emoji} ${c.title}` : c.title}
                       </strong>
                       <br />
+                      {c.lat == null || c.lng == null
+                        ? "Location agnostic"
+                        : null}
+                      {c.lat == null || c.lng == null ? <br /> : null}
                       {accepted}/{c.numWinners} filled
                       {spotsLeft > 0 ? ` · ${spotsLeft} left` : " · full"}
                       {c.pts != null ? ` · ${c.pts} pts` : ""}

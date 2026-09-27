@@ -31,6 +31,69 @@ import { findNeighborhoodAt } from "../lib/geo";
 import { neighborhoodEmoji } from "../lib/neighborhoodEmoji";
 import type { ChallengeWithSubsAndFav } from "../lib/challengeFavorites";
 
+type LocationBadge =
+  | { kind: "agnostic" }
+  | { kind: "neighborhood"; id: string; name: string; emoji: string | null };
+
+function challengeHasCoords(c: {
+  lat: number | null;
+  lng: number | null;
+}): boolean {
+  return (
+    c.lat != null &&
+    c.lng != null &&
+    Number.isFinite(c.lat) &&
+    Number.isFinite(c.lng)
+  );
+}
+
+function locationBadgeFor(
+  c: { lat: number | null; lng: number | null },
+  neighborhoods: Array<{
+    id: string;
+    name: string;
+    emoji: string | null;
+    boundary: unknown;
+    centerLat: number | null;
+    centerLng: number | null;
+  }>,
+): LocationBadge {
+  if (!challengeHasCoords(c)) return { kind: "agnostic" };
+  const geo = neighborhoods
+    .filter((n) => n.boundary != null)
+    .map((n) => ({
+      id: n.id,
+      name: n.name,
+      emoji: n.emoji,
+      boundary: n.boundary,
+      centerLat: n.centerLat,
+      centerLng: n.centerLng,
+    }));
+  const hit = findNeighborhoodAt(c.lng!, c.lat!, geo);
+  if (!hit) return { kind: "agnostic" };
+  return {
+    kind: "neighborhood",
+    id: hit.id,
+    name: hit.name,
+    emoji: hit.emoji,
+  };
+}
+
+function LocationTag({ badge }: { badge: LocationBadge }) {
+  if (badge.kind === "agnostic") {
+    return (
+      <Tag size="sm" colorScheme="gray" variant="subtle" flexShrink={0}>
+        Location agnostic
+      </Tag>
+    );
+  }
+  return (
+    <Tag size="sm" colorScheme="blue" variant="subtle" flexShrink={0}>
+      {neighborhoodEmoji(badge.name, badge.emoji)} {badge.name}
+    </Tag>
+  );
+}
+
 const LeafletMap = dynamic(() => import("../components/leafletMap"), {
   ssr: false,
   loading: () => (
@@ -353,9 +416,10 @@ export default function ChallengesPage({
           const filled = spotsFilled(c);
           const pending = spotsPending(c);
           const done = teamCompleted(c);
+          const badge = locationBadgeFor(c, mapNeighborhoods);
           return (
             <Box minW={0}>
-              <Flex align="center" gap={2} minW={0}>
+              <Flex align="center" gap={2} minW={0} flexWrap="wrap">
                 <Text
                   fontWeight="semibold"
                   color="gray.800"
@@ -370,11 +434,14 @@ export default function ChallengesPage({
                   </Tag>
                 )}
               </Flex>
-              <Text fontSize="sm" color="gray.500" mt={0.5} noOfLines={1}>
-                {`${filled} of ${c.numWinners} spot${
-                  c.numWinners === 1 ? "" : "s"
-                }${pending > 0 ? ` · ${pending} pending` : ""}`}
-              </Text>
+              <Flex mt={1} align="center" gap={2} flexWrap="wrap">
+                <LocationTag badge={badge} />
+                <Text fontSize="sm" color="gray.500" noOfLines={1}>
+                  {`${filled} of ${c.numWinners} spot${
+                    c.numWinners === 1 ? "" : "s"
+                  }${pending > 0 ? ` · ${pending} pending` : ""}`}
+                </Text>
+              </Flex>
             </Box>
           );
         },
@@ -431,7 +498,7 @@ export default function ChallengesPage({
         },
       }),
     ],
-    [team, teamCompleted, favBusyId, toggleFavorite],
+    [team, teamCompleted, favBusyId, toggleFavorite, mapNeighborhoods],
   );
 
   const selected = useMemo(
@@ -446,29 +513,6 @@ export default function ChallengesPage({
         : null,
     [mapNeighborhoods, neighborhoodParam],
   );
-
-  const selectedNeighborhood = useMemo(() => {
-    if (
-      !selected ||
-      selected.lat == null ||
-      selected.lng == null ||
-      !Number.isFinite(selected.lat) ||
-      !Number.isFinite(selected.lng)
-    ) {
-      return null;
-    }
-    const geo = mapNeighborhoods
-      .filter((n) => n.boundary != null)
-      .map((n) => ({
-        id: n.id,
-        name: n.name,
-        emoji: n.emoji,
-        boundary: n.boundary,
-        centerLat: n.centerLat,
-        centerLng: n.centerLng,
-      }));
-    return findNeighborhoodAt(selected.lng, selected.lat, geo);
-  }, [selected, mapNeighborhoods]);
 
   const mapNavButton = (
     <IconButton
@@ -486,22 +530,18 @@ export default function ChallengesPage({
     />
   );
 
-  const challengeDetails = (c: ChallengeWithSubsAndFav) => {
+  const challengeDetails = (
+    c: ChallengeWithSubsAndFav,
+    opts?: { hideLocation?: boolean },
+  ) => {
     const accepted = c.submissions.filter((s) => s.accepted).length;
     const pending = c.submissions.filter(
       (s) => !s.accepted && !s.rejected,
     ).length;
+    const badge = locationBadgeFor(c, mapNeighborhoods);
     return (
-      <VStack align="stretch" spacing={3}>
-        {selectedNeighborhood && (
-          <Text fontSize="sm" color="gray.600">
-            {neighborhoodEmoji(
-              selectedNeighborhood.name,
-              selectedNeighborhood.emoji,
-            )}{" "}
-            {selectedNeighborhood.name}
-          </Text>
-        )}
+      <VStack align="stretch" spacing={2}>
+        {!opts?.hideLocation && <LocationTag badge={badge} />}
         <Text fontSize="sm" color="gray.600">
           {`${accepted} of ${c.numWinners} spot${
             c.numWinners === 1 ? "" : "s"
@@ -595,46 +635,61 @@ export default function ChallengesPage({
               boxShadow="0 -8px 30px rgba(0,0,0,0.18)"
             >
               <DrawerCloseButton />
-              <DrawerHeader pr={12}>
-                <HStack justify="space-between" align="flex-start" gap={3}>
-                  <Box minW={0}>
-                    <Heading size="md" noOfLines={2}>
-                      {selected
-                        ? selected.emoji
-                          ? `${selected.emoji} ${selected.title}`
-                          : selected.title
-                        : ""}
-                    </Heading>
-                    {selected && (
-                      <Text fontSize="sm" color="gray.500" mt={1}>
-                        {selected.pts} pts
-                      </Text>
-                    )}
-                  </Box>
-                  {team && selected && (
-                    <IconButton
-                      aria-label={
-                        selected.favorited
-                          ? "Unfavorite for team"
-                          : "Favorite for team"
-                      }
-                      icon={
-                        selected.favorited ? (
-                          <LuHeart fill="currentColor" />
-                        ) : (
-                          <LuHeart />
-                        )
-                      }
-                      color={selected.favorited ? "pink.500" : "gray.400"}
-                      variant="ghost"
-                      isLoading={favBusyId === selected.id}
-                      onClick={() => void toggleFavorite(selected.id)}
-                    />
+              <DrawerHeader pr={12} pb={2}>
+                <Box minW={0}>
+                  <Heading size="md" noOfLines={2}>
+                    {selected
+                      ? selected.emoji
+                        ? `${selected.emoji} ${selected.title}`
+                        : selected.title
+                      : ""}
+                  </Heading>
+                  {selected && (
+                    <VStack align="stretch" spacing={1} mt={1}>
+                      <HStack spacing={1} align="center">
+                        <Text
+                          fontSize="sm"
+                          color="gray.500"
+                          fontWeight="semibold"
+                        >
+                          {selected.pts} pts
+                        </Text>
+                        {team && (
+                          <IconButton
+                            aria-label={
+                              selected.favorited
+                                ? "Unfavorite for team"
+                                : "Favorite for team"
+                            }
+                            icon={
+                              selected.favorited ? (
+                                <LuHeart fill="currentColor" />
+                              ) : (
+                                <LuHeart />
+                              )
+                            }
+                            color={
+                              selected.favorited ? "pink.500" : "gray.400"
+                            }
+                            variant="ghost"
+                            size="xs"
+                            minW={6}
+                            h={6}
+                            isLoading={favBusyId === selected.id}
+                            onClick={() => void toggleFavorite(selected.id)}
+                          />
+                        )}
+                      </HStack>
+                      <LocationTag
+                        badge={locationBadgeFor(selected, mapNeighborhoods)}
+                      />
+                    </VStack>
                   )}
-                </HStack>
+                </Box>
               </DrawerHeader>
-              <DrawerBody overflowY="auto">
-                {selected && challengeDetails(selected)}
+              <DrawerBody overflowY="auto" pt={1}>
+                {selected &&
+                  challengeDetails(selected, { hideLocation: true })}
               </DrawerBody>
               {team && selected && (
                 <DrawerFooter
