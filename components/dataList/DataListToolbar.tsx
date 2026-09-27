@@ -80,7 +80,6 @@ export default function DataListToolbar({
       data-sticky-toolbar
       flexShrink={0}
       bg="white"
-      mx={-4}
       px={4}
       pt={3}
       pb={3}
@@ -88,6 +87,9 @@ export default function DataListToolbar({
       borderColor="gray.100"
       transition="border-color 0.15s ease"
       zIndex={5}
+      w="100%"
+      maxW="100%"
+      overflowX="hidden"
     >
       <VStack align="stretch" spacing={2}>
         <Input

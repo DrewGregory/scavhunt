@@ -773,7 +773,17 @@ export default function ChallengesPage({
         onToggleFilter={toggleFilter}
         onClearFilter={clearFilter}
       />
-      <Box flex="1" minH={0} overflowY="auto" data-nav-scroll pb="150px">
+      <Box
+        flex="1"
+        minH={0}
+        overflowY="auto"
+        overflowX="hidden"
+        data-nav-scroll
+        px={4}
+        pb="150px"
+        w="100%"
+        maxW="100%"
+      >
         <DataList
           rows={sortedChallenges}
           columns={columns}

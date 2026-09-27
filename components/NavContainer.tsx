@@ -217,7 +217,7 @@ export default function NavContainer({
       <Box
         data-nav-scroll={pinnedChrome ? undefined : true}
         ml={{ base: 0, md: sidebarW }}
-        px={fullScreen ? 0 : 4}
+        px={fullScreen || pinnedChrome ? 0 : 4}
         pt={fullScreen || pinnedChrome ? 0 : 4}
         width={{ base: "100vw", md: `calc(100vw - ${sidebarW})` }}
         height={hgt ? hgt : hideTopBar ? "100dvh" : "90dvh"}

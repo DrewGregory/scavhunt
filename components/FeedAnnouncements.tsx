@@ -33,7 +33,7 @@ export function FeedWithAnnouncements({
       overflow="hidden"
     >
       {pinned ? (
-        <Box flexShrink={0} px={0} pb={3}>
+        <Box flexShrink={0} px={4} pb={3} pt={3}>
           <PinnedBanner item={pinned} />
         </Box>
       ) : null}

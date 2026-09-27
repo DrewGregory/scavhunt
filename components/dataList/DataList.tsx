@@ -67,7 +67,8 @@ export default function DataList<T>({
       bg="white"
       borderRadius={{ base: 0, md: "lg" }}
       overflow="hidden"
-      mx={{ base: -4, md: 0 }}
+      w="100%"
+      maxW="100%"
     >
       <Table variant="unstyled" size="sm" width="100%">
         <Thead display={{ base: "none", md: "table-header-group" }}>
