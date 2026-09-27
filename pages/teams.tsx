@@ -327,11 +327,14 @@ export default function Page(initial: LeaderboardPayload) {
     0,
   );
 
-  const maxHeld = territoryRows.reduce(
-    (max, r) => Math.max(max, r.neighborhoodsHeld),
+  // Historical claim series can peak above the current leaderboard after
+  // deposits are corrected/archived. Scale the graph to its full history.
+  const maxHistoricalHeld = claimChartData.reduce(
+    (max, series) =>
+      series.data.reduce((seriesMax, point) => Math.max(seriesMax, point.y), max),
     0,
   );
-  const heldYMax = Math.max(3, maxHeld + 1);
+  const heldYMax = Math.max(3, maxHistoricalHeld + 1);
   const heldTickValues = Array.from({ length: heldYMax + 1 }, (_, i) => i);
 
   const maxDate =
