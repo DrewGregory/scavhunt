@@ -80,15 +80,25 @@ function locationBadgeFor(
 }
 
 function LocationTag({ badge }: { badge: LocationBadge }) {
+  const tagProps = {
+    size: "sm" as const,
+    variant: "subtle" as const,
+    flexShrink: 0,
+    alignSelf: "flex-start",
+    w: "fit-content",
+    maxW: "100%",
+    px: "10px",
+    py: "3px",
+  };
   if (badge.kind === "agnostic") {
     return (
-      <Tag size="sm" colorScheme="gray" variant="subtle" flexShrink={0}>
+      <Tag {...tagProps} colorScheme="gray">
         Location agnostic
       </Tag>
     );
   }
   return (
-    <Tag size="sm" colorScheme="blue" variant="subtle" flexShrink={0}>
+    <Tag {...tagProps} colorScheme="blue">
       {neighborhoodEmoji(badge.name, badge.emoji)} {badge.name}
     </Tag>
   );
@@ -171,7 +181,7 @@ export default function ChallengesPage({
 
   const viewParam = router.query.view;
   const view: ViewMode =
-    viewParam === "map" || viewParam === "list" ? viewParam : "list";
+    viewParam === "map" || viewParam === "list" ? viewParam : "map";
   const challengeParam =
     typeof router.query.challenge === "string"
       ? router.query.challenge
@@ -183,7 +193,7 @@ export default function ChallengesPage({
   // Deep-link zoom only on the first map paint for this page load.
   const [zoomChallengeOnce, setZoomChallengeOnce] = useState<string | null>(
     () =>
-      viewParam === "map" && typeof router.query.challenge === "string"
+      viewParam !== "list" && typeof router.query.challenge === "string"
         ? router.query.challenge
         : null,
   );
@@ -191,7 +201,7 @@ export default function ChallengesPage({
     string | null
   >(
     () =>
-      viewParam === "map" && typeof router.query.neighborhood === "string"
+      viewParam !== "list" && typeof router.query.neighborhood === "string"
         ? router.query.neighborhood
         : null,
   );
@@ -530,18 +540,13 @@ export default function ChallengesPage({
     />
   );
 
-  const challengeDetails = (
-    c: ChallengeWithSubsAndFav,
-    opts?: { hideLocation?: boolean },
-  ) => {
+  const challengeDetails = (c: ChallengeWithSubsAndFav) => {
     const accepted = c.submissions.filter((s) => s.accepted).length;
     const pending = c.submissions.filter(
       (s) => !s.accepted && !s.rejected,
     ).length;
-    const badge = locationBadgeFor(c, mapNeighborhoods);
     return (
       <VStack align="stretch" spacing={2}>
-        {!opts?.hideLocation && <LocationTag badge={badge} />}
         <Text fontSize="sm" color="gray.600">
           {`${accepted} of ${c.numWinners} spot${
             c.numWinners === 1 ? "" : "s"
@@ -688,8 +693,7 @@ export default function ChallengesPage({
                 </Box>
               </DrawerHeader>
               <DrawerBody overflowY="auto" pt={1}>
-                {selected &&
-                  challengeDetails(selected, { hideLocation: true })}
+                {selected && challengeDetails(selected)}
               </DrawerBody>
               {team && selected && (
                 <DrawerFooter

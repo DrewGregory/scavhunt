@@ -65,7 +65,7 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
     include: {
       users: {
         where: { deletedAt: null },
-        select: { id: true, name: true },
+        select: { id: true, name: true, isAdmin: true },
       },
       submissions: {
         where: { deletedAt: null },
@@ -78,6 +78,11 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
       },
     },
   });
+
+  // Hide HQ / admin-only squads from player-facing leaderboards.
+  const playTeams = teamsRaw.filter(
+    (t) => t.users.length > 0 && t.users.some((u) => !u.isAdmin),
+  );
 
   const [startTime, endTime, territoryEnabled] = await Promise.all([
     getStartTime(),
@@ -97,7 +102,6 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
       }),
       getClaimSeriesOverTime({ onMapOnly: true, startTime }),
     ]);
-    claimSeries = series;
 
     for (const s of standings) {
       if (!s.claimedBy) continue;
@@ -112,7 +116,7 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
 
     const rows = territoryLeaderboard(
       standings,
-      teamsRaw.map((t) => {
+      playTeams.map((t) => {
         const accepted = t.submissions.filter((s) => s.accepted);
         const earned = accepted.reduce((sum, s) => sum + s.challenge.pts, 0);
         return {
@@ -127,7 +131,7 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
 
     const bankByTeam = new Map<string, number>();
     const earnedByTeam = new Map<string, number>();
-    for (const t of teamsRaw) {
+    for (const t of playTeams) {
       const accepted = t.submissions.filter((s) => s.accepted);
       const earned = accepted.reduce((sum, s) => sum + s.challenge.pts, 0);
       const deposited = t.deposits.reduce((sum, d) => sum + d.points, 0);
@@ -145,14 +149,17 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
       earned: earnedByTeam.get(r.teamId) ?? 0,
       bankPts: bankByTeam.get(r.teamId) ?? 0,
       members:
-        teamsRaw
+        playTeams
           .find((t) => t.id === r.teamId)
           ?.users.map((u) => ({ id: u.id, name: u.name })) ?? [],
       claimedNeighborhoods: claimedByTeam.get(r.teamId) ?? [],
     }));
+
+    const playTeamIds = new Set(playTeams.map((t) => t.id));
+    claimSeries = series.filter((s) => playTeamIds.has(s.teamId));
   }
 
-  const teamsWithPts: TeamWithPts[] = teamsRaw.map((t) => {
+  const teamsWithPts: TeamWithPts[] = playTeams.map((t) => {
     const accepted = t.submissions.filter((s) => s.accepted);
     const ptsArray = accepted.map((s) => s.challenge.pts);
     const earned = ptsArray.reduce((sum, p) => sum + p, 0);

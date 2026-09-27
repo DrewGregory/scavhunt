@@ -538,7 +538,7 @@ export default function FeedPage({
           if (!challenge || !team) return null;
           return (
             <Box minW={0}>
-              <Flex align="center" gap={2} flexWrap="wrap">
+              <Flex align="center" gap={1} flexWrap="wrap" rowGap={0.5}>
                 <Text
                   fontWeight="semibold"
                   color="gray.800"
@@ -562,7 +562,7 @@ export default function FeedPage({
                       : "Pending"}
                 </Tag>
               </Flex>
-              <Text fontSize="sm" color="gray.500" mt={0.5} noOfLines={1}>
+              <Text fontSize="sm" color="gray.500" mt={1.5} noOfLines={1}>
                 {team.emoji} {team.name} ·{" "}
                 {formatDistance(new Date(s.createdAt), new Date())} ago
                 {!s.rejected && s.submissionNumber != null
