@@ -82,6 +82,7 @@ export default function NavContainer({
   hideTopBar,
   hideMenu,
   right,
+  padTop = true,
 }: {
   title: string;
   children: ReactNode;
@@ -93,6 +94,11 @@ export default function NavContainer({
   hideMenu?: boolean;
   /** Optional actions rendered on the right side of the top navbar. */
   right?: ReactNode;
+  /**
+   * Top padding inside the scroll area. Set false when the page uses a pinned
+   * toolbar + inner scroller (Challenges / Feed) so rows can't peek under the title.
+   */
+  padTop?: boolean;
 }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const session = useSession();
@@ -129,6 +135,9 @@ export default function NavContainer({
   const locationPromptActive = Boolean(
     session?.user.teamId || session?.team,
   );
+
+  // Pinned-toolbar pages: outer shell doesn't scroll; an inner [data-nav-scroll] does.
+  const pinnedChrome = Boolean(!fullScreen && padTop === false);
 
   return (
     <LocationPermissionProvider active={locationPromptActive}>
@@ -206,16 +215,17 @@ export default function NavContainer({
         </Flex>
       )}
       <Box
-        data-nav-scroll
+        data-nav-scroll={pinnedChrome ? undefined : true}
         ml={{ base: 0, md: sidebarW }}
-        p={fullScreen ? 0 : 4}
+        px={fullScreen ? 0 : 4}
+        pt={fullScreen || pinnedChrome ? 0 : 4}
         width={{ base: "100vw", md: `calc(100vw - ${sidebarW})` }}
         height={hgt ? hgt : hideTopBar ? "100dvh" : "90dvh"}
-        overflow={fullScreen ? "hidden" : "scroll"}
+        overflow={fullScreen || pinnedChrome ? "hidden" : "scroll"}
         background={bgColor ? bgColor : "white"}
-        pb={fullScreen ? 0 : "150px"}
-        display={fullScreen ? "flex" : "block"}
-        flexDirection={fullScreen ? "column" : undefined}
+        pb={fullScreen || pinnedChrome ? 0 : "150px"}
+        display={fullScreen || pinnedChrome ? "flex" : "block"}
+        flexDirection={fullScreen || pinnedChrome ? "column" : undefined}
         transition={sidebarTransition}
       >
         {children}

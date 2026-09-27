@@ -77,39 +77,19 @@ export default function DataListToolbar({
 
   return (
     <Box
-      position="sticky"
-      // NavContainer scroll area uses p={4}. Sticky top:0 locks to the
-      // padding edge, leaving a 16px gap where rows peek under the title.
-      // Stick into that padding so the white toolbar is flush with the nav.
-      top={-4}
-      zIndex={5}
-      isolation="isolate"
+      data-sticky-toolbar
+      flexShrink={0}
       bg="white"
       mx={-4}
-      mt={-4}
       px={4}
-      pt={5}
+      pt={3}
       pb={3}
-      mb={2}
       borderBottomWidth={scrolled ? "1px" : "0"}
       borderColor="gray.100"
       transition="border-color 0.15s ease"
-      sx={{ transform: "translateZ(0)" }}
+      zIndex={5}
     >
-      {/* Opaque underlay — sticky bg alone can fail to cover scrolling rows
-          in the gaps between search / sort / filter chips. Extends past the
-          bottom margin so rows don't flash in the gap under the toolbar. */}
-      <Box
-        aria-hidden
-        position="absolute"
-        top={0}
-        left={0}
-        right={0}
-        bottom={-2}
-        bg="white"
-        pointerEvents="none"
-      />
-      <VStack align="stretch" spacing={2} position="relative">
+      <VStack align="stretch" spacing={2}>
         <Input
           placeholder={searchPlaceholder}
           value={search}

@@ -750,7 +750,7 @@ export default function ChallengesPage({
   }
 
   return (
-    <NavContainer title="Challenges" right={mapNavButton}>
+    <NavContainer title="Challenges" right={mapNavButton} padTop={false}>
       <DataListToolbar
         search={searchQuery}
         onSearchChange={setSearchQuery}
@@ -771,44 +771,46 @@ export default function ChallengesPage({
         onToggleFilter={toggleFilter}
         onClearFilter={clearFilter}
       />
-      <DataList
-        rows={sortedChallenges}
-        columns={columns}
-        getRowId={(c) => c.id}
-        expandedId={challengeParam}
-        onToggle={(id) =>
-          setQuery({
-            view: "list",
-            challenge: id === challengeParam ? null : id,
-          })
-        }
-        rowRef={rowRef}
-        emptyMessage="No challenges match"
-        renderExpanded={(c) => (
-          <VStack align="stretch" spacing={3}>
-            {challengeDetails(c)}
-            {team != null && (
-              <HStack flexWrap="wrap">
-                <Button
-                  colorScheme="blue"
-                  size="md"
-                  onClick={() => void router.push(`/submit/${c.id}`)}
-                >
-                  Submit Challenge
-                </Button>
-                <Button
-                  size="md"
-                  variant="outline"
-                  leftIcon={<LuMap />}
-                  onClick={() => setQuery({ view: "map", challenge: c.id })}
-                >
-                  Show on map
-                </Button>
-              </HStack>
-            )}
-          </VStack>
-        )}
-      />
+      <Box flex="1" minH={0} overflowY="auto" data-nav-scroll pb="150px">
+        <DataList
+          rows={sortedChallenges}
+          columns={columns}
+          getRowId={(c) => c.id}
+          expandedId={challengeParam}
+          onToggle={(id) =>
+            setQuery({
+              view: "list",
+              challenge: id === challengeParam ? null : id,
+            })
+          }
+          rowRef={rowRef}
+          emptyMessage="No challenges match"
+          renderExpanded={(c) => (
+            <VStack align="stretch" spacing={3}>
+              {challengeDetails(c)}
+              {team != null && (
+                <HStack flexWrap="wrap">
+                  <Button
+                    colorScheme="blue"
+                    size="md"
+                    onClick={() => void router.push(`/submit/${c.id}`)}
+                  >
+                    Submit Challenge
+                  </Button>
+                  <Button
+                    size="md"
+                    variant="outline"
+                    leftIcon={<LuMap />}
+                    onClick={() => setQuery({ view: "map", challenge: c.id })}
+                  >
+                    Show on map
+                  </Button>
+                </HStack>
+              )}
+            </VStack>
+          )}
+        />
+      </Box>
     </NavContainer>
   );
 }

@@ -24,9 +24,29 @@ export function FeedWithAnnouncements({
   children: React.ReactNode;
 }) {
   return (
-    <VStack align="stretch" spacing={4} width="100%">
-      {pinned ? <PinnedBanner item={pinned} /> : null}
-      <Box width="100%">{children}</Box>
+    <VStack
+      align="stretch"
+      spacing={0}
+      width="100%"
+      flex="1"
+      minH={0}
+      overflow="hidden"
+    >
+      {pinned ? (
+        <Box flexShrink={0} px={0} pb={3}>
+          <PinnedBanner item={pinned} />
+        </Box>
+      ) : null}
+      <Box
+        width="100%"
+        flex="1"
+        minH={0}
+        display="flex"
+        flexDirection="column"
+        overflow="hidden"
+      >
+        {children}
+      </Box>
     </VStack>
   );
 }

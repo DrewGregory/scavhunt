@@ -721,10 +721,14 @@ export default function FeedPage({
   }
 
   return (
-    <NavContainer title="Feed" right={scavTokNavButton}>
+    <NavContainer title="Feed" right={scavTokNavButton} padTop={false}>
       <FeedWithAnnouncements pinned={pinnedAnnouncement}>
         {noSubmissionsAtAll ? (
           <Box
+            flex="1"
+            minH={0}
+            overflowY="auto"
+            data-nav-scroll
             bg="white"
             borderRadius={{ base: 0, md: "lg" }}
             py={12}
@@ -735,7 +739,7 @@ export default function FeedPage({
             <Text color="gray.400">Let the games begin!</Text>
           </Box>
         ) : (
-          <Box>
+          <>
             <DataListToolbar
               search={searchQuery}
               onSearchChange={setSearchQuery}
@@ -748,56 +752,58 @@ export default function FeedPage({
               onToggleFilter={toggleFilter}
               onClearFilter={clearFilter}
             />
-            {feed.isLoading && visibleItems.length === 0 ? (
-              <Flex justify="center" py={10}>
-                <Spinner color="gray.400" />
-              </Flex>
-            ) : (
-              <DataList
-                rows={visibleItems}
-                columns={columns}
-                getRowId={(s) => s.id}
-                expandedId={selectedSubmission}
-                onToggle={(id) => {
-                  toggleOpen(id);
-                }}
-                rowRef={rowRef}
-                emptyMessage="No submissions match"
-                renderExpanded={(s) => {
-                  const challenge = challenges[s.challengeId];
-                  const team = teams[s.teamId];
-                  if (!challenge || !team) return null;
-                  const index = visibleItems.findIndex((i) => i.id === s.id);
-                  return (
-                    <FeedExpandedDetail
-                      item={s}
-                      index={index < 0 ? 0 : index}
-                      team={team}
-                      challenge={challenge}
-                      queue={queue}
-                      isOpen={selectedSubmission === s.id}
-                    />
-                  );
-                }}
-              />
-            )}
-            <Box ref={loadMoreRef} h={1} />
-            {feed.isLoadingMore && (
-              <Flex justify="center" my={4}>
-                <Spinner color="gray.400" />
-              </Flex>
-            )}
-            {feed.error && (
-              <Button
-                size="sm"
-                variant="outline"
-                mt={2}
-                onClick={() => feed.mutate()}
-              >
-                Couldn&apos;t load more — retry
-              </Button>
-            )}
-          </Box>
+            <Box flex="1" minH={0} overflowY="auto" data-nav-scroll pb="150px">
+              {feed.isLoading && visibleItems.length === 0 ? (
+                <Flex justify="center" py={10}>
+                  <Spinner color="gray.400" />
+                </Flex>
+              ) : (
+                <DataList
+                  rows={visibleItems}
+                  columns={columns}
+                  getRowId={(s) => s.id}
+                  expandedId={selectedSubmission}
+                  onToggle={(id) => {
+                    toggleOpen(id);
+                  }}
+                  rowRef={rowRef}
+                  emptyMessage="No submissions match"
+                  renderExpanded={(s) => {
+                    const challenge = challenges[s.challengeId];
+                    const team = teams[s.teamId];
+                    if (!challenge || !team) return null;
+                    const index = visibleItems.findIndex((i) => i.id === s.id);
+                    return (
+                      <FeedExpandedDetail
+                        item={s}
+                        index={index < 0 ? 0 : index}
+                        team={team}
+                        challenge={challenge}
+                        queue={queue}
+                        isOpen={selectedSubmission === s.id}
+                      />
+                    );
+                  }}
+                />
+              )}
+              <Box ref={loadMoreRef} h={1} />
+              {feed.isLoadingMore && (
+                <Flex justify="center" my={4}>
+                  <Spinner color="gray.400" />
+                </Flex>
+              )}
+              {feed.error && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  mt={2}
+                  onClick={() => feed.mutate()}
+                >
+                  Couldn&apos;t load more — retry
+                </Button>
+              )}
+            </Box>
+          </>
         )}
       </FeedWithAnnouncements>
     </NavContainer>
