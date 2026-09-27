@@ -87,7 +87,7 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                             <br /><br />
                             • Use the map to see which challenges are nearby! Challenges in the "water" don't have a set location
                             <br /><br />
-                            • Some challenges might require you to find a member of HQ (Aivant, Drew, Grace, Sevy). You can find their locations on the map!
+                            • Some challenges might require you to find a member of HQ (Aivant, Drew, Grace, Joshua). You can find their locations on the map!
                         </Text>
                     </Box>
 
