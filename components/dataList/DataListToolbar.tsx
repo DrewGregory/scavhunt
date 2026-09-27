@@ -78,15 +78,16 @@ export default function DataListToolbar({
   return (
     <Box
       position="sticky"
-      top={0}
+      // NavContainer scroll area uses p={4}. Sticky top:0 locks to the
+      // padding edge, leaving a 16px gap where rows peek under the title.
+      // Stick into that padding so the white toolbar is flush with the nav.
+      top={-4}
       zIndex={5}
       isolation="isolate"
       bg="white"
-      // Bleed into NavContainer's p={4} so scrolled rows can't peek
-      // between the page title and the search bar.
-      mx={{ base: -4, md: -4 }}
+      mx={-4}
       mt={-4}
-      px={{ base: 4, md: 4 }}
+      px={4}
       pt={5}
       pb={3}
       mb={2}
