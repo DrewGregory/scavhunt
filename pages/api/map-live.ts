@@ -5,6 +5,7 @@ import { listEnabledChallengesWithSubs } from "../../lib/challengeFavorites";
 import { isTerritoryEnabled } from "../../lib/territoryGate";
 import { getStandings } from "../../lib/territory";
 import { getTeamScore } from "../../lib/scoring";
+import { loadMapFilterTeams } from "../../lib/mapPayload";
 import type { LatestTeamLocation } from "../../lib/types";
 
 /**
@@ -106,6 +107,7 @@ export default async function handler(
   return res.status(200).json({
     challenges,
     locations,
+    teams: await loadMapFilterTeams(),
     territoryEnabled: territoryGloballyEnabled,
     neighborhoods,
     bank: showTerritory ? bank : null,

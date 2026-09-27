@@ -17,6 +17,37 @@ export type MapPageBank = {
   score: number;
 };
 
+/** Team row for map layer toggles (includes HQ / admin-only squads). */
+export type MapFilterTeam = {
+  id: string;
+  name: string;
+  emoji: string;
+  /** True when the team has no non-admin members (HQ / organizer squad). */
+  isAdminTeam: boolean;
+};
+
+export async function loadMapFilterTeams(): Promise<MapFilterTeam[]> {
+  const teams = await prisma.team.findMany({
+    where: { deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      emoji: true,
+      users: {
+        where: { deletedAt: null, isActive: true },
+        select: { isAdmin: true },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+  return teams.map((t) => ({
+    id: t.id,
+    name: t.name,
+    emoji: t.emoji,
+    isAdminTeam: t.users.length === 0 || t.users.every((u) => u.isAdmin),
+  }));
+}
+
 export async function loadPlayerMapPayload(user: {
   id: string;
   teamId: string | null;
@@ -47,6 +78,8 @@ export async function loadPlayerMapPayload(user: {
         },
       }));
   }
+
+  const teams = await loadMapFilterTeams();
 
   const territoryGloballyEnabled = await isTerritoryEnabled();
   const showTerritory = territoryGloballyEnabled || user.isAdmin;
@@ -103,6 +136,7 @@ export async function loadPlayerMapPayload(user: {
   return {
     challenges,
     locations,
+    teams,
     team: user.team ? serializeTeam(user.team) : null,
     territoryEnabled: territoryGloballyEnabled,
     isAdmin: user.isAdmin,

@@ -13,7 +13,9 @@ import { LatLngExpression, PathOptions, divIcon, type Path } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Link from "next/link";
 import { LatestTeamLocation } from "../lib/types";
+import type { MapFilterTeam } from "../lib/mapPayload";
 import {
+  Badge,
   Box,
   Button,
   HStack,
@@ -270,6 +272,7 @@ export default function LeafletMap({
   locations,
   challenges,
   team,
+  teams: initialTeams = [],
   territoryEnabled = false,
   isAdmin = false,
   initialNeighborhoods = [],
@@ -285,6 +288,8 @@ export default function LeafletMap({
   locations: Array<LatestTeamLocation>;
   challenges: Array<ChallengeWithSubmissions>;
   team: { id: string; name?: string; emoji?: string; color?: string } | null;
+  /** All teams for per-team pin toggles (alphabetical; includes admin/HQ). */
+  teams?: MapFilterTeam[];
   /** Global HuntSettings.territoryEnabled — players only see territory when true. */
   territoryEnabled?: boolean;
   isAdmin?: boolean;
@@ -306,8 +311,13 @@ export default function LeafletMap({
   } = useLocationPermissionUI();
   const [liveChallenges, setLiveChallenges] = useState(challenges);
   const [liveLocations, setLiveLocations] = useState(locations);
+  const [mapTeams, setMapTeams] = useState(initialTeams);
   const [showChallenges, setShowChallenges] = useState(true);
   const [showPlayers, setShowPlayers] = useState(true);
+  /** Team ids whose pins are hidden (default: none hidden). */
+  const [hiddenTeamIds, setHiddenTeamIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [showNeighborhoods, setShowNeighborhoods] = useState(true);
   const [hideCompleted, setHideCompleted] = useState(true);
   const [hideFullChallenges, setHideFullChallenges] = useState(true);
@@ -347,6 +357,9 @@ export default function LeafletMap({
   useEffect(() => {
     setLiveLocations(locations);
   }, [locations]);
+  useEffect(() => {
+    setMapTeams(initialTeams);
+  }, [initialTeams]);
 
   useEffect(() => {
     window.dispatchEvent(new Event("resize"));
@@ -364,6 +377,7 @@ export default function LeafletMap({
         if (cancelled) return;
         if (Array.isArray(data.challenges)) setLiveChallenges(data.challenges);
         if (Array.isArray(data.locations)) setLiveLocations(data.locations);
+        if (Array.isArray(data.teams)) setMapTeams(data.teams);
         if (Array.isArray(data.neighborhoods)) {
           setNeighborhoods(data.neighborhoods);
         }
@@ -378,6 +392,21 @@ export default function LeafletMap({
       window.clearInterval(id);
     };
   }, []);
+
+  const toggleTeamVisible = useCallback((teamId: string) => {
+    setHiddenTeamIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId);
+      else next.add(teamId);
+      return next;
+    });
+  }, []);
+
+  const visibleTeamLocations = useMemo(
+    () =>
+      liveLocations.filter((l) => showPlayers && !hiddenTeamIds.has(l.id)),
+    [liveLocations, showPlayers, hiddenTeamIds],
+  );
 
   const applyFix = useCallback((fix: GeoFix) => {
     myFixRef.current = fix;
@@ -673,28 +702,11 @@ export default function LeafletMap({
             boxShadow="lg"
             width="280px"
             maxW="calc(100vw - 2rem)"
+            maxH="min(70dvh, calc(100dvh - 6rem))"
+            overflowY="auto"
+            overscrollBehavior="contain"
           >
             <VStack spacing={3} alignItems="stretch">
-              <HStack justifyContent="space-between">
-                <Text fontSize="sm" fontWeight="medium">
-                  Challenges
-                </Text>
-                <Switch
-                  isChecked={showChallenges}
-                  onChange={(e) => setShowChallenges(e.target.checked)}
-                  colorScheme="blue"
-                />
-              </HStack>
-              <HStack justifyContent="space-between">
-                <Text fontSize="sm" fontWeight="medium">
-                  Teams
-                </Text>
-                <Switch
-                  isChecked={showPlayers}
-                  onChange={(e) => setShowPlayers(e.target.checked)}
-                  colorScheme="blue"
-                />
-              </HStack>
               {isAdmin && (
                 <HStack justifyContent="space-between">
                   <Box>
@@ -715,20 +727,45 @@ export default function LeafletMap({
                 </HStack>
               )}
               {territoryOn && (
-                <HStack justifyContent="space-between">
+                <Box
+                  borderTop={isAdmin ? "1px solid" : undefined}
+                  borderColor="gray.200"
+                  pt={isAdmin ? 3 : 0}
+                >
+                  <HStack justifyContent="space-between">
+                    <Text fontSize="sm" fontWeight="medium">
+                      Neighborhoods
+                    </Text>
+                    <Switch
+                      isChecked={showNeighborhoods}
+                      onChange={(e) => setShowNeighborhoods(e.target.checked)}
+                      colorScheme="blue"
+                    />
+                  </HStack>
+                </Box>
+              )}
+              <Box
+                borderTop={
+                  isAdmin || territoryOn ? "1px solid" : undefined
+                }
+                borderColor="gray.200"
+                pt={isAdmin || territoryOn ? 3 : 0}
+              >
+                <HStack
+                  justifyContent="space-between"
+                  mb={showChallenges && team ? 2 : 0}
+                >
                   <Text fontSize="sm" fontWeight="medium">
-                    Neighborhoods
+                    Challenges
                   </Text>
                   <Switch
-                    isChecked={showNeighborhoods}
-                    onChange={(e) => setShowNeighborhoods(e.target.checked)}
+                    isChecked={showChallenges}
+                    onChange={(e) => setShowChallenges(e.target.checked)}
                     colorScheme="blue"
                   />
                 </HStack>
-              )}
-              {team && (
-                <>
-                  <Box borderTop="1px solid" borderColor="gray.200" pt={3}>
+                {showChallenges && team && (
+                  <VStack spacing={2} alignItems="stretch">
                     <HStack justifyContent="space-between">
                       <Text fontSize="xs" fontWeight="medium" color="gray.600">
                         Only favorites
@@ -740,30 +777,82 @@ export default function LeafletMap({
                         colorScheme="pink"
                       />
                     </HStack>
-                  </Box>
-                  <HStack justifyContent="space-between">
-                    <Text fontSize="xs" fontWeight="medium" color="gray.600">
-                      Hide finished
+                    <HStack justifyContent="space-between">
+                      <Text fontSize="xs" fontWeight="medium" color="gray.600">
+                        Hide finished
+                      </Text>
+                      <Switch
+                        size="sm"
+                        isChecked={hideCompleted}
+                        onChange={(e) => setHideCompleted(e.target.checked)}
+                        colorScheme="blue"
+                      />
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text fontSize="xs" fontWeight="medium" color="gray.600">
+                        Hide at capacity
+                      </Text>
+                      <Switch
+                        size="sm"
+                        isChecked={hideFullChallenges}
+                        onChange={(e) =>
+                          setHideFullChallenges(e.target.checked)
+                        }
+                        colorScheme="blue"
+                      />
+                    </HStack>
+                  </VStack>
+                )}
+              </Box>
+              {mapTeams.length > 0 && (
+                <Box borderTop="1px solid" borderColor="gray.200" pt={3}>
+                  <HStack
+                    justifyContent="space-between"
+                    mb={showPlayers ? 2 : 0}
+                  >
+                    <Text fontSize="sm" fontWeight="medium">
+                      Teams
                     </Text>
                     <Switch
-                      size="sm"
-                      isChecked={hideCompleted}
-                      onChange={(e) => setHideCompleted(e.target.checked)}
+                      isChecked={showPlayers}
+                      onChange={(e) => setShowPlayers(e.target.checked)}
                       colorScheme="blue"
                     />
                   </HStack>
-                  <HStack justifyContent="space-between">
-                    <Text fontSize="xs" fontWeight="medium" color="gray.600">
-                      Hide at capacity
-                    </Text>
-                    <Switch
-                      size="sm"
-                      isChecked={hideFullChallenges}
-                      onChange={(e) => setHideFullChallenges(e.target.checked)}
-                      colorScheme="blue"
-                    />
-                  </HStack>
-                </>
+                  {showPlayers && (
+                    <VStack spacing={2} alignItems="stretch">
+                      {mapTeams.map((t) => (
+                        <HStack
+                          key={t.id}
+                          justifyContent="space-between"
+                          gap={2}
+                        >
+                          <HStack spacing={1.5} minW={0} flex="1">
+                            <Text fontSize="xs" noOfLines={1}>
+                              {t.emoji} {t.name}
+                            </Text>
+                            {t.isAdminTeam && (
+                              <Badge
+                                colorScheme="purple"
+                                fontSize="0.65em"
+                                flexShrink={0}
+                              >
+                                admin
+                              </Badge>
+                            )}
+                          </HStack>
+                          <Switch
+                            size="sm"
+                            isChecked={!hiddenTeamIds.has(t.id)}
+                            onChange={() => toggleTeamVisible(t.id)}
+                            colorScheme="blue"
+                            flexShrink={0}
+                          />
+                        </HStack>
+                      ))}
+                    </VStack>
+                  )}
+                </Box>
               )}
             </VStack>
           </Box>
@@ -1022,8 +1111,7 @@ export default function LeafletMap({
               </Marker>
             );
           })}
-        {showPlayers &&
-          liveLocations.map((l) => (
+        {visibleTeamLocations.map((l) => (
             <Marker
               icon={divIcon({
                 html: `${l.emoji}`,

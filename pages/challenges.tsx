@@ -170,6 +170,7 @@ export const getServerSideProps = async (
 export default function ChallengesPage({
   challenges: initialChallenges,
   locations,
+  teams,
   team,
   territoryEnabled,
   isAdmin,
@@ -604,6 +605,7 @@ export default function ChallengesPage({
           <LeafletMap
             challenges={challenges}
             locations={locations}
+            teams={teams}
             team={team}
             territoryEnabled={territoryEnabled}
             isAdmin={isAdmin}
