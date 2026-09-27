@@ -63,3 +63,17 @@ export type SerializedTeam = {
   emoji: string;
   color: string;
 };
+
+export type SerializedSubmissionComment = {
+  id: string;
+  submissionId: string;
+  userId: string;
+  body: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    isAdmin: boolean;
+    team: SerializedTeam | null;
+  };
+};

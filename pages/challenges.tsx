@@ -9,6 +9,7 @@ import {
   DrawerContent,
   DrawerFooter,
   DrawerHeader,
+  DrawerOverlay,
   Flex,
   Heading,
   HStack,
@@ -681,8 +682,13 @@ export default function ChallengesPage({
             size="md"
             blockScrollOnMount={false}
             autoFocus={false}
+            trapFocus={false}
+            closeOnOverlayClick={false}
           >
+            <DrawerOverlay bg="blackAlpha.200" pointerEvents="none" />
             <DrawerContent
+              pointerEvents="auto"
+              containerProps={{ pointerEvents: "none" }}
               borderTopRadius="xl"
               maxH="85dvh"
               mx="auto"
@@ -769,8 +775,13 @@ export default function ChallengesPage({
             size="md"
             blockScrollOnMount={false}
             autoFocus={false}
+            trapFocus={false}
+            closeOnOverlayClick={false}
           >
+            <DrawerOverlay bg="blackAlpha.200" pointerEvents="none" />
             <DrawerContent
+              pointerEvents="auto"
+              containerProps={{ pointerEvents: "none" }}
               borderTopRadius="xl"
               maxH="70dvh"
               mx="auto"

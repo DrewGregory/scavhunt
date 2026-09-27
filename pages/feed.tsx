@@ -34,9 +34,12 @@ import {
   isVideoUrl,
   type FeedChallenge,
   type FeedFilters,
-  type FeedItem,
   type FeedPage,
+  type FeedRow,
   type FeedStatus,
+  type FeedSubmissionItem,
+  isFeedDeposit,
+  isFeedSubmission,
 } from "../lib/feedTypes";
 import type { SerializedTeam } from "../lib/types";
 import {
@@ -58,6 +61,7 @@ import {
 import ScavTokReel from "../components/ScavTokReel";
 import DataList from "../components/dataList/DataList";
 import DataListToolbar from "../components/dataList/DataListToolbar";
+import SubmissionComments from "../components/SubmissionComments";
 
 type ViewMode = "list" | "tok";
 const TOK_PAGE_SIZE = 10;
@@ -87,28 +91,15 @@ function ordinal(n: number): string {
   return `${n}th`;
 }
 
-/** Short standing for list rows, e.g. "4th of 5". */
-function submissionStandingShort(
+/** Standing for list + expanded rows, e.g. "1st out of 5". */
+function submissionStanding(
   number: number,
   numWinners: number,
 ): string {
-  return `${ordinal(number)} of ${numWinners}`;
+  return `${ordinal(number)} out of ${numWinners}`;
 }
 
-/** Verbose standing for expanded detail. */
-function submissionStandingLong(
-  number: number,
-  challenge: FeedChallenge,
-  accepted: boolean,
-): string {
-  const place = `${ordinal(number)} submission of this challenge`;
-  if (accepted) {
-    return `${place} (out of ${challenge.numWinners})`;
-  }
-  return `${place} (${challenge.acceptedCount} accepted, ${challenge.pendingCount} pending out of ${challenge.numWinners})`;
-}
-
-const columnHelper = createColumnHelper<FeedItem>();
+const columnHelper = createColumnHelper<FeedRow>();
 
 
 export const getServerSideProps = async (
@@ -298,6 +289,10 @@ export default function FeedPage({
     () => ({ ...pinned?.challenges, ...feed.challenges }),
     [pinned, feed.challenges],
   );
+  const neighborhoods = useMemo(
+    () => ({ ...pinned?.neighborhoods, ...feed.neighborhoods }),
+    [pinned, feed.neighborhoods],
+  );
 
   const visibleItems = useMemo(() => {
     const pinnedItem = pinned?.items[0];
@@ -307,9 +302,17 @@ export default function FeedPage({
       !feed.items.some((i) => i.id === pinnedItem.id)
         ? [pinnedItem, ...feed.items]
         : feed.items;
-    return sortId === "favorites"
-      ? [...base].sort((a, b) => b.favoriteCount - a.favoriteCount)
-      : base;
+    if (sortId !== "favorites") return base;
+    return [...base].sort((a, b) => {
+      if (isFeedSubmission(a) && isFeedSubmission(b)) {
+        return b.favoriteCount - a.favoriteCount;
+      }
+      if (isFeedSubmission(a)) return -1;
+      if (isFeedSubmission(b)) return 1;
+      return (
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    });
   }, [pinned, feed.items, isDefaultFilters, sortId]);
 
   const toggleFilter = useCallback((id: string) => {
@@ -333,12 +336,18 @@ export default function FeedPage({
   const patchItem = useCallback(
     (
       id: string,
-      fn: (item: FeedItem) => FeedItem | null,
+      fn: (item: FeedSubmissionItem) => FeedSubmissionItem | null,
       revalidate = false,
     ) => {
-      void updateItems((i) => (i.id === id ? fn(i) : i), { revalidate });
+      void updateItems((i) => {
+        if (i.id !== id || !isFeedSubmission(i)) return i;
+        const next = fn(i);
+        return next;
+      }, { revalidate });
       setPinned((p) => {
-        if (!p || p.items[0]?.id !== id) return p;
+        if (!p || p.items[0]?.id !== id || !isFeedSubmission(p.items[0])) {
+          return p;
+        }
         const next = fn(p.items[0]);
         return next ? { ...p, items: [next] } : null;
       });
@@ -427,6 +436,8 @@ export default function FeedPage({
 
   const toggleOpen = useCallback(
     (id: string) => {
+      const row = visibleItems.find((i) => i.id === id);
+      if (row && isFeedDeposit(row)) return false;
       const opening = id !== selectedRef.current;
       selectedRef.current = opening ? id : null;
       setSelectedSubmission(selectedRef.current);
@@ -437,7 +448,7 @@ export default function FeedPage({
       });
       return opening;
     },
-    [queue, setQuery],
+    [queue, setQuery, visibleItems],
   );
 
   const editSubmission = useCallback((id: string) => {
@@ -460,7 +471,7 @@ export default function FeedPage({
     feed.hasMore && !feed.isLoadingMore && !feed.error,
   );
 
-  const noSubmissionsAtAll =
+  const noFeedItemsAtAll =
     isDefaultFilters && !feed.isLoading && visibleItems.length === 0;
 
   const sortOptions = useMemo(
@@ -495,7 +506,25 @@ export default function FeedPage({
         id: "thumb",
         header: "",
         cell: ({ row }) => {
-          const s = row.original;
+          const item = row.original;
+          if (isFeedDeposit(item)) {
+            const nbh = neighborhoods[item.neighborhoodId];
+            return (
+              <Flex
+                w="48px"
+                h="48px"
+                borderRadius="md"
+                bg="teal.50"
+                flexShrink={0}
+                align="center"
+                justify="center"
+                fontSize="xl"
+              >
+                {nbh?.emoji ?? "🗺️"}
+              </Flex>
+            );
+          }
+          const s = item;
           const isVideo = isVideoUrl(s.mediaURL);
           const isImage = !isVideo && isImageUrl(s.mediaURL);
           const src = isVideo
@@ -539,21 +568,41 @@ export default function FeedPage({
       }),
       columnHelper.display({
         id: "primary",
-        header: "Submission",
+        header: "Activity",
         cell: ({ row }) => {
-          const s = row.original;
+          const item = row.original;
+          const team = teams[item.teamId];
+          if (!team) return null;
+
+          if (isFeedDeposit(item)) {
+            const nbh = neighborhoods[item.neighborhoodId];
+            const nbhName = nbh?.name ?? "a neighborhood";
+            const controlSuffix = item.tookControl
+              ? item.displacedTeam
+                ? ` and took control from ${item.displacedTeam.emoji} ${item.displacedTeam.name}`
+                : " and took control"
+              : "";
+            return (
+              <Box minW={0}>
+                <Text fontWeight="semibold" color="gray.800" lineHeight="short">
+                  {team.emoji} {team.name} added {item.points} point
+                  {item.points === 1 ? "" : "s"} to {nbhName}
+                  {controlSuffix}
+                </Text>
+                <Text fontSize="sm" color="gray.500" mt={1.5}>
+                  {formatDistance(new Date(item.createdAt), new Date())} ago
+                </Text>
+              </Box>
+            );
+          }
+
+          const s = item;
           const challenge = challenges[s.challengeId];
-          const team = teams[s.teamId];
-          if (!challenge || !team) return null;
+          if (!challenge) return null;
           return (
             <Box minW={0}>
               <Flex align="center" gap={1} flexWrap="wrap" rowGap={0.5}>
-                <Text
-                  fontWeight="semibold"
-                  color="gray.800"
-                  noOfLines={2}
-                  lineHeight="short"
-                >
+                <Text fontWeight="semibold" color="gray.800" lineHeight="short">
                   {challenge.emoji
                     ? `${challenge.emoji} ${challenge.title}`
                     : challenge.title}
@@ -571,11 +620,11 @@ export default function FeedPage({
                       : "Pending"}
                 </Tag>
               </Flex>
-              <Text fontSize="sm" color="gray.500" mt={1.5} noOfLines={1}>
+              <Text fontSize="sm" color="gray.500" mt={1.5}>
                 {team.emoji} {team.name} ·{" "}
                 {formatDistance(new Date(s.createdAt), new Date())} ago
                 {!s.rejected && s.submissionNumber != null
-                  ? ` · ${submissionStandingShort(s.submissionNumber, challenge.numWinners)}`
+                  ? ` · ${submissionStanding(s.submissionNumber, challenge.numWinners)}`
                   : ""}
               </Text>
             </Box>
@@ -583,102 +632,124 @@ export default function FeedPage({
         },
       }),
       columnHelper.display({
-        id: "pts",
-        header: "Pts",
-        meta: { numeric: true },
-        cell: ({ row }) => {
-          const challenge = challenges[row.original.challengeId];
-          return (
-            <Text fontWeight="semibold" color="gray.700">
-              {challenge?.pts ?? "—"}
-            </Text>
-          );
-        },
-      }),
-      columnHelper.display({
-        id: "actions",
+        id: "trailing",
         header: "",
-        meta: { isAction: true },
+        meta: { isTrailing: true },
         cell: ({ row }) => {
-          const s = row.original;
+          const item = row.original;
+          if (isFeedDeposit(item)) {
+            return (
+              <Flex h="100%" align="flex-start" justify="flex-end">
+                <Text fontWeight="semibold" color="gray.700" lineHeight="1.2">
+                  {item.points}
+                </Text>
+              </Flex>
+            );
+          }
+          const s = item;
+          const challenge = challenges[s.challengeId];
           const canManage = isAdmin || user.teamId === s.teamId;
           return (
-            <HStack spacing={0} onClick={(e) => e.stopPropagation()}>
-              <IconButton
-                aria-label="Toggle favorite"
-                icon={
-                  s.favorited ? (
-                    <LuHeart fill="currentColor" />
-                  ) : (
-                    <LuHeart />
-                  )
-                }
-                onClick={() => toggleFavorite(s.id)}
-                variant="ghost"
-                color={s.favorited ? "red.500" : "gray.400"}
-                size="sm"
-              />
-              {isAdmin && sortId === "favorites" && (
-                <Text fontSize="xs" color="gray.500" minW="14px">
-                  {s.favoriteCount}
+            <Flex
+              h="100%"
+              minH="56px"
+              direction="column"
+              align="flex-end"
+              justify="space-between"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <HStack spacing={0} align="flex-start">
+                <Text
+                  fontWeight="semibold"
+                  color="gray.700"
+                  lineHeight="1.2"
+                  pt="6px"
+                  pr={canManage ? 0 : 1}
+                >
+                  {challenge?.pts ?? "—"}
                 </Text>
-              )}
-              {canManage && (
-                <Menu>
-                  <MenuButton
-                    as={IconButton}
-                    icon={<HiDotsVertical />}
-                    variant="ghost"
-                    size="sm"
-                    aria-label="Options"
-                  />
-                  <MenuList>
-                    {isAdmin && (
-                      <>
-                        {!s.accepted && (
-                          <MenuItem
-                            onClick={() =>
-                              void runAdminAction(s.id, "approve")
-                            }
-                          >
-                            Approve
-                          </MenuItem>
-                        )}
-                        {!s.rejected && (
-                          <MenuItem
-                            onClick={() =>
-                              void runAdminAction(s.id, "reject")
-                            }
-                          >
-                            Reject
-                          </MenuItem>
-                        )}
-                        {(s.accepted || s.rejected) && (
-                          <MenuItem
-                            onClick={() =>
-                              void runAdminAction(s.id, "reset")
-                            }
-                          >
-                            Reset to pending
-                          </MenuItem>
-                        )}
-                      </>
-                    )}
-                    <MenuItem onClick={() => editSubmission(s.id)}>
-                      {s.mediaURL ? "Update media" : "Add media"}
-                    </MenuItem>
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => void runAdminAction(s.id, "delete")}
-                        color="red.600"
-                      >
-                        Delete
+                {canManage ? (
+                  <Menu>
+                    <MenuButton
+                      as={IconButton}
+                      icon={<HiDotsVertical />}
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Options"
+                      minW={7}
+                      h={7}
+                    />
+                    <MenuList>
+                      {isAdmin && (
+                        <>
+                          {!s.accepted && (
+                            <MenuItem
+                              onClick={() =>
+                                void runAdminAction(s.id, "approve")
+                              }
+                            >
+                              Approve
+                            </MenuItem>
+                          )}
+                          {!s.rejected && (
+                            <MenuItem
+                              onClick={() =>
+                                void runAdminAction(s.id, "reject")
+                              }
+                            >
+                              Reject
+                            </MenuItem>
+                          )}
+                          {(s.accepted || s.rejected) && (
+                            <MenuItem
+                              onClick={() =>
+                                void runAdminAction(s.id, "reset")
+                              }
+                            >
+                              Reset to pending
+                            </MenuItem>
+                          )}
+                        </>
+                      )}
+                      <MenuItem onClick={() => editSubmission(s.id)}>
+                        {s.mediaURL ? "Update media" : "Add media"}
                       </MenuItem>
-                    )}
-                  </MenuList>
-                </Menu>
-              )}
-            </HStack>
+                      {isAdmin && (
+                        <MenuItem
+                          onClick={() => void runAdminAction(s.id, "delete")}
+                          color="red.600"
+                        >
+                          Delete
+                        </MenuItem>
+                      )}
+                    </MenuList>
+                  </Menu>
+                ) : null}
+              </HStack>
+              <HStack spacing={0}>
+                {isAdmin && sortId === "favorites" ? (
+                  <Text fontSize="xs" color="gray.500" minW="14px">
+                    {s.favoriteCount}
+                  </Text>
+                ) : null}
+                <IconButton
+                  aria-label="Toggle favorite"
+                  icon={
+                    s.favorited ? (
+                      <LuHeart fill="currentColor" />
+                    ) : (
+                      <LuHeart />
+                    )
+                  }
+                  onClick={() => toggleFavorite(s.id)}
+                  variant="ghost"
+                  color={s.favorited ? "red.500" : "gray.400"}
+                  size="sm"
+                  minW={7}
+                  h={7}
+                />
+              </HStack>
+            </Flex>
           );
         },
       }),
@@ -686,6 +757,7 @@ export default function FeedPage({
     [
       challenges,
       teams,
+      neighborhoods,
       isAdmin,
       user.teamId,
       sortId,
@@ -733,7 +805,7 @@ export default function FeedPage({
   return (
     <NavContainer title="Feed" right={scavTokNavButton} padTop={false}>
       <FeedWithAnnouncements pinned={pinnedAnnouncement}>
-        {noSubmissionsAtAll ? (
+        {noFeedItemsAtAll ? (
           <Box
             flex="1"
             minH={0}
@@ -745,7 +817,7 @@ export default function FeedPage({
             px={4}
             textAlign="center"
           >
-            <Text color="gray.400">No submissions yet</Text>
+            <Text color="gray.400">Nothing in the feed yet</Text>
             <Text color="gray.400">Let the games begin!</Text>
           </Box>
         ) : (
@@ -787,8 +859,11 @@ export default function FeedPage({
                     toggleOpen(id);
                   }}
                   rowRef={rowRef}
-                  emptyMessage="No submissions match"
-                  renderExpanded={(s) => {
+                  isRowExpandable={isFeedSubmission}
+                  emptyMessage="No activity matches"
+                  renderExpanded={(row) => {
+                    if (!isFeedSubmission(row)) return null;
+                    const s = row;
                     const challenge = challenges[s.challengeId];
                     const team = teams[s.teamId];
                     if (!challenge || !team) return null;
@@ -832,7 +907,7 @@ export default function FeedPage({
 }
 
 type FeedExpandedProps = {
-  item: FeedItem;
+  item: FeedSubmissionItem;
   index: number;
   team: SerializedTeam;
   challenge: FeedChallenge;
@@ -902,7 +977,7 @@ const FeedExpandedDetail = memo(function FeedExpandedDetail({
         {!s.rejected && s.submissionNumber != null && (
           <>
             {" "}
-            · {submissionStandingLong(s.submissionNumber, challenge, s.accepted)}
+            · {submissionStanding(s.submissionNumber, challenge.numWinners)}
           </>
         )}
         {duration ? ` · ${duration}` : ""}
@@ -1002,6 +1077,8 @@ const FeedExpandedDetail = memo(function FeedExpandedDetail({
           </Text>
         </Box>
       )}
+
+      <SubmissionComments submissionId={s.id} enabled={isOpen} />
     </VStack>
   );
 });

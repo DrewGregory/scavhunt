@@ -136,6 +136,7 @@ export default async function handler(
             name: member.name,
             phoneE164: member.phoneE164,
             teamId: team.id,
+            isAdmin: false,
             isActive: true,
           },
         });

@@ -566,38 +566,39 @@ export default function LeafletMap({
   );
 
   const styleFor = useCallback((n: TerritoryNeighborhood): PathOptions => {
+    // Unselected: no fill highlight — borders stay clear in every state.
     if (n.contested) {
       return {
-        color: "#A0AEC0",
-        weight: 1.25,
+        color: "#4A5568",
+        weight: 2,
         dashArray: "6 4",
         fillColor: "#CBD5E0",
-        fillOpacity: 0.18,
+        fillOpacity: 0,
       };
     }
     if (n.claimedBy) {
       const c = n.claimedBy.teamColor || "#3182CE";
       return {
         color: c,
-        weight: 1.25,
+        weight: 2,
         fillColor: c,
-        fillOpacity: 0.2,
+        fillOpacity: 0.12,
       };
     }
     return {
-      color: "#A0AEC0",
-      weight: 1,
-      fillColor: "#EDF2F7",
-      fillOpacity: 0.12,
+      color: "#4A5568",
+      weight: 2,
+      fillColor: "#A0AEC0",
+      fillOpacity: 0,
     };
   }, []);
 
-  /** Hover + selected outline (desktop hover / mobile selection). */
+  /** Selected (and desktop hover) fill + thicker outline. */
   const highlightStyle = useMemo(
     (): PathOptions => ({
-      fillColor: "#CBD5E0",
-      fillOpacity: 0.5,
-      color: "#2D3748",
+      fillColor: "#718096",
+      fillOpacity: 0.35,
+      color: "#1A202C",
       weight: 3.5,
       dashArray: undefined,
     }),

@@ -1,14 +1,21 @@
 import type {
   Challenge,
   Submission,
+  SubmissionComment,
   Team,
+  User,
 } from "@prisma/client";
 import { toCdnUrl } from "./media";
 import type {
   SerializedChallenge,
   SerializedSubmission,
+  SerializedSubmissionComment,
   SerializedTeam,
 } from "./types";
+
+type CommentWithUser = SubmissionComment & {
+  user: User & { team: Team | null };
+};
 
 export function serializeTeam(team: Team): SerializedTeam {
   return {
@@ -52,6 +59,24 @@ export function serializeSubmission(
     compressed: submission.compressed,
     note: submission.note,
     createdAt: submission.createdAt.toISOString(),
+  };
+}
+
+export function serializeSubmissionComment(
+  comment: CommentWithUser,
+): SerializedSubmissionComment {
+  return {
+    id: comment.id,
+    submissionId: comment.submissionId,
+    userId: comment.userId,
+    body: comment.body,
+    createdAt: comment.createdAt.toISOString(),
+    user: {
+      id: comment.user.id,
+      name: comment.user.name,
+      isAdmin: comment.user.isAdmin,
+      team: comment.user.team ? serializeTeam(comment.user.team) : null,
+    },
   };
 }
 

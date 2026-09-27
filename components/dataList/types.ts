@@ -9,6 +9,8 @@ declare module "@tanstack/react-table" {
     numeric?: boolean;
     /** Narrow trailing action column. */
     isAction?: boolean;
+    /** Right rail that stretches with the row (top/bottom controls). */
+    isTrailing?: boolean;
   }
 }
 
@@ -16,6 +18,7 @@ export type DataListColumnMeta = {
   hideBelow?: "md" | "lg";
   numeric?: boolean;
   isAction?: boolean;
+  isTrailing?: boolean;
 };
 
 export type DataListSortOption = {

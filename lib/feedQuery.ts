@@ -2,15 +2,19 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { serializeSubmission, serializeTeam } from "./serialize";
 import type { SerializedTeam } from "./types";
+import { depositFeedMetaForIds } from "./feedDepositMeta";
 import {
   FEED_DEFAULT_LIMIT,
   FEED_MAX_LIMIT,
   VIDEO_EXTENSIONS,
   type FeedChallenge,
+  type FeedDepositItem,
   type FeedFilters,
-  type FeedItem,
+  type FeedNeighborhood,
   type FeedPage,
+  type FeedRow,
   type FeedStatus,
+  type FeedSubmissionItem,
 } from "./feedTypes";
 
 type Cursor = { c: string; i: string };
@@ -174,6 +178,74 @@ async function challengeStats(
   return new Map(rows.map((r) => [r.challengeId, r]));
 }
 
+function depositsInFeed(filters: FeedFilters): boolean {
+  return (
+    !filters.status &&
+    !filters.mediaOnly &&
+    !filters.videoOnly &&
+    !filters.favoritedOnly &&
+    !filters.challengeId
+  );
+}
+
+function buildDepositWhere(
+  filters: FeedFilters,
+  cursor: Cursor | null,
+): Prisma.NeighborhoodDepositWhereInput {
+  const and: Prisma.NeighborhoodDepositWhereInput[] = [
+    { deletedAt: null },
+    { team: { deletedAt: null } },
+    { neighborhood: { deletedAt: null, onMap: true } },
+  ];
+  if (filters.teamId) and.push({ teamId: filters.teamId });
+  const q = filters.q?.trim();
+  if (q) {
+    and.push({
+      OR: [
+        { team: { name: { contains: q, mode: "insensitive" } } },
+        { neighborhood: { name: { contains: q, mode: "insensitive" } } },
+      ],
+    });
+  }
+  if (cursor) {
+    const c = new Date(cursor.c);
+    and.push({
+      OR: [{ createdAt: { lt: c } }, { createdAt: c, id: { lt: cursor.i } }],
+    });
+  }
+  return { AND: and };
+}
+
+function mergeFeedStreams(
+  subs: Array<{ id: string; createdAt: Date }>,
+  deps: Array<{ id: string; createdAt: Date }>,
+  limit: number,
+): Array<{ id: string; kind: "submission" | "deposit"; createdAt: Date }> {
+  const out: Array<{ id: string; kind: "submission" | "deposit"; createdAt: Date }> =
+    [];
+  let si = 0;
+  let di = 0;
+  while (out.length < limit + 1 && (si < subs.length || di < deps.length)) {
+    const s = subs[si];
+    const d = deps[di];
+    const takeSub =
+      !d ||
+      (s &&
+        (s.createdAt > d.createdAt ||
+          (s.createdAt.getTime() === d.createdAt.getTime() && s.id > d.id)));
+    if (takeSub && s) {
+      out.push({ id: s.id, kind: "submission", createdAt: s.createdAt });
+      si += 1;
+    } else if (d) {
+      out.push({ id: d.id, kind: "deposit", createdAt: d.createdAt });
+      di += 1;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
+
 export async function getFeedPage(opts: {
   userId: string;
   filters?: FeedFilters;
@@ -186,68 +258,190 @@ export async function getFeedPage(opts: {
   const filters = opts.filters ?? {};
   const limit = Math.min(opts.limit ?? FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT);
   const cursor = decodeCursor(opts.cursor);
+  const withDeposits = !opts.ids && depositsInFeed(filters);
 
-  const rows = await prisma.submission.findMany({
-    where: buildWhere(filters, opts.userId, cursor, opts.ids),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    include: {
-      team: true,
-      challenge: {
-        select: {
-          id: true,
-          title: true,
-          emoji: true,
-          pts: true,
-          numWinners: true,
-          ...(opts.includeChallengePrompt ? { prompt: true } : {}),
-        },
-      },
-      favorites: { where: { userId: opts.userId }, select: { id: true } },
-      _count: { select: { favorites: true } },
-    },
-  });
+  const subWhere = buildWhere(filters, opts.userId, cursor, opts.ids);
+  const take = limit + 1;
 
-  const hasMore = rows.length > limit;
-  const page = hasMore ? rows.slice(0, limit) : rows;
-  const last = page[page.length - 1];
+  const [subRows, depRows] = await Promise.all([
+    prisma.submission.findMany({
+      where: subWhere,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take,
+      select: { id: true, createdAt: true },
+    }),
+    withDeposits
+      ? prisma.neighborhoodDeposit.findMany({
+          where: buildDepositWhere(filters, cursor),
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take,
+          select: { id: true, createdAt: true },
+        })
+      : Promise.resolve([]),
+  ]);
 
-  const challengeIds = Array.from(new Set(page.map((s) => s.challengeId)));
-  const [numbers, stats] = await Promise.all([
-    submissionNumbers(
-      page.map((s) => s.id),
-      challengeIds,
-    ),
+  const merged = opts.ids
+    ? subRows.map((s) => ({
+        id: s.id,
+        kind: "submission" as const,
+        createdAt: s.createdAt,
+      }))
+    : mergeFeedStreams(subRows, depRows, limit);
+
+  const hasMore = merged.length > limit;
+  const pageKeys = hasMore ? merged.slice(0, limit) : merged;
+  const last = pageKeys[pageKeys.length - 1];
+
+  const submissionIds = pageKeys
+    .filter((k) => k.kind === "submission")
+    .map((k) => k.id);
+  const depositIds = pageKeys
+    .filter((k) => k.kind === "deposit")
+    .map((k) => k.id);
+
+  const [submissionRows, depositRows] = await Promise.all([
+    submissionIds.length
+      ? prisma.submission.findMany({
+          where: { id: { in: submissionIds } },
+          include: {
+            team: true,
+            challenge: {
+              select: {
+                id: true,
+                title: true,
+                emoji: true,
+                pts: true,
+                numWinners: true,
+                ...(opts.includeChallengePrompt ? { prompt: true } : {}),
+              },
+            },
+            favorites: { where: { userId: opts.userId }, select: { id: true } },
+            _count: { select: { favorites: true } },
+          },
+        })
+      : Promise.resolve([]),
+    depositIds.length
+      ? prisma.neighborhoodDeposit.findMany({
+          where: { id: { in: depositIds } },
+          include: {
+            team: true,
+            neighborhood: {
+              select: { id: true, name: true, emoji: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const subById = new Map(submissionRows.map((s) => [s.id, s]));
+  const depById = new Map(depositRows.map((d) => [d.id, d]));
+
+  const challengeIds = Array.from(
+    new Set(submissionRows.map((s) => s.challengeId)),
+  );
+  const [numbers, stats, replayDeposits, replayTeams] = await Promise.all([
+    submissionNumbers(submissionIds, challengeIds),
     challengeStats(challengeIds),
+    depositIds.length
+      ? prisma.neighborhoodDeposit.findMany({
+          where: {
+            deletedAt: null,
+            neighborhood: { deletedAt: null, onMap: true },
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            teamId: true,
+            neighborhoodId: true,
+            points: true,
+            createdAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    depositIds.length
+      ? prisma.team.findMany({
+          where: { deletedAt: null },
+          select: { id: true, name: true, emoji: true, color: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const teams: Record<string, SerializedTeam> = {};
   const challenges: Record<string, FeedChallenge> = {};
-  const items: FeedItem[] = page.map((s) => {
-    teams[s.teamId] ??= serializeTeam(s.team);
-    if (!challenges[s.challengeId]) {
-      const st = stats.get(s.challengeId);
-      challenges[s.challengeId] = {
-        id: s.challenge.id,
-        title: s.challenge.title,
-        emoji: s.challenge.emoji ?? null,
-        pts: s.challenge.pts,
-        numWinners: s.challenge.numWinners,
-        acceptedCount: st?.accepted ?? 0,
-        pendingCount: st?.pending ?? 0,
-        totalCount: st?.total ?? 0,
-        ...(opts.includeChallengePrompt && "prompt" in s.challenge
-          ? { prompt: s.challenge.prompt }
-          : {}),
-      };
-    }
-    const { team: _team, challenge: _challenge, favorites, _count, ...sub } = s;
-    return {
-      ...serializeSubmission(sub),
-      favoriteCount: _count.favorites,
-      favorited: favorites.length > 0,
-      submissionNumber: s.rejected ? null : (numbers.get(s.id) ?? null),
+  const neighborhoods: Record<string, FeedNeighborhood> = {};
+
+  for (const d of depositRows) {
+    teams[d.teamId] ??= serializeTeam(d.team);
+    neighborhoods[d.neighborhoodId] ??= {
+      id: d.neighborhood.id,
+      name: d.neighborhood.name,
+      emoji: d.neighborhood.emoji,
     };
+  }
+
+  for (const t of replayTeams) {
+    teams[t.id] ??= serializeTeam(t);
+  }
+  const teamMap = new Map(Object.entries(teams));
+  const depositMeta = depositFeedMetaForIds(
+    replayDeposits,
+    new Set(depositIds),
+    teamMap,
+  );
+
+  const items: FeedRow[] = pageKeys.map((key) => {
+    if (key.kind === "submission") {
+      const s = subById.get(key.id);
+      if (!s) throw new Error(`Missing submission ${key.id}`);
+      teams[s.teamId] ??= serializeTeam(s.team);
+      if (!challenges[s.challengeId]) {
+        const st = stats.get(s.challengeId);
+        challenges[s.challengeId] = {
+          id: s.challenge.id,
+          title: s.challenge.title,
+          emoji: s.challenge.emoji ?? null,
+          pts: s.challenge.pts,
+          numWinners: s.challenge.numWinners,
+          acceptedCount: st?.accepted ?? 0,
+          pendingCount: st?.pending ?? 0,
+          totalCount: st?.total ?? 0,
+          ...(opts.includeChallengePrompt && "prompt" in s.challenge
+            ? { prompt: s.challenge.prompt }
+            : {}),
+        };
+      }
+      const { team: _team, challenge: _challenge, favorites, _count, ...sub } =
+        s;
+      const row: FeedSubmissionItem = {
+        kind: "submission",
+        ...serializeSubmission(sub),
+        favoriteCount: _count.favorites,
+        favorited: favorites.length > 0,
+        submissionNumber: s.rejected ? null : (numbers.get(s.id) ?? null),
+      };
+      return row;
+    }
+
+    const d = depById.get(key.id);
+    if (!d) throw new Error(`Missing deposit ${key.id}`);
+    const meta = depositMeta.get(d.id) ?? {
+      tookControl: false,
+      displacedTeam: null,
+      contested: false,
+    };
+    const row: FeedDepositItem = {
+      kind: "deposit",
+      id: d.id,
+      teamId: d.teamId,
+      userId: d.userId,
+      neighborhoodId: d.neighborhoodId,
+      points: d.points,
+      createdAt: d.createdAt.toISOString(),
+      tookControl: meta.tookControl,
+      contested: meta.contested,
+      displacedTeam: meta.displacedTeam,
+    };
+    return row;
   });
 
   return {
@@ -255,5 +449,6 @@ export async function getFeedPage(opts: {
     nextCursor: hasMore && last ? encodeCursor(last.createdAt, last.id) : null,
     teams,
     challenges,
+    neighborhoods,
   };
 }

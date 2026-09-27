@@ -33,6 +33,7 @@ model User {
   team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
   submissions  Submission[]
   favorites    Favorite[]
+  submissionComments SubmissionComment[]
   deposits     NeighborhoodDeposit[]
   announcementDismissals AnnouncementDismissal[]
 
@@ -125,6 +126,7 @@ model Submission {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
   favorites Favorite[]
+  comments  SubmissionComment[]
 
   @@index([teamId])
   @@index([challengeId])
@@ -144,6 +146,24 @@ model Favorite {
 
   @@unique([submissionId, userId])
   @@index([userId])
+}
+
+model SubmissionComment {
+  id           String   @id @default(cuid())
+  submissionId String
+  userId       String
+  body         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  /// Soft-delete; null = live.
+  deletedAt    DateTime?
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, createdAt])
+  @@index([userId])
+  @@index([deletedAt])
 }
 
 /// Shared team pin/favorite for a challenge (any teammate can toggle).

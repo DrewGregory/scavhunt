@@ -26,6 +26,7 @@ export default function DataList<T>({
   renderExpanded,
   emptyMessage = "Nothing here",
   rowRef,
+  isRowExpandable,
 }: {
   rows: T[];
   columns: ColumnDef<T, unknown>[];
@@ -36,6 +37,7 @@ export default function DataList<T>({
   emptyMessage?: string;
   /** Optional ref attached to the currently expanded row (for deep-link scroll). */
   rowRef?: Ref<HTMLTableRowElement>;
+  isRowExpandable?: (row: T) => boolean;
 }) {
   const data = useMemo(() => rows, [rows]);
 
@@ -92,7 +94,13 @@ export default function DataList<T>({
                         ? { base: "none", [meta.hideBelow]: "table-cell" }
                         : undefined
                     }
-                    w={meta?.isAction ? "40px" : undefined}
+                    w={
+                      meta?.isTrailing
+                        ? "72px"
+                        : meta?.isAction
+                          ? "40px"
+                          : undefined
+                    }
                   >
                     {header.isPlaceholder
                       ? null
@@ -109,13 +117,14 @@ export default function DataList<T>({
         <Tbody>
           {table.getRowModel().rows.map((row) => {
             const id = row.id;
-            const open = expandedId === id;
+            const expandable = isRowExpandable?.(row.original) ?? true;
+            const open = expandable && expandedId === id;
             return (
               <Fragment key={id}>
                 <Tr
                   ref={open ? rowRef : undefined}
-                  cursor="pointer"
-                  onClick={() => onToggle(id)}
+                  cursor={expandable ? "pointer" : undefined}
+                  onClick={() => expandable && onToggle(id)}
                   bg={open ? "gray.50" : undefined}
                   _hover={{ bg: "gray.50" }}
                   borderBottomWidth={open ? 0 : "1px"}
@@ -129,7 +138,11 @@ export default function DataList<T>({
                         py={3}
                         px={3}
                         verticalAlign={
-                          meta?.isAction || meta?.numeric ? "middle" : "top"
+                          meta?.isTrailing
+                            ? "top"
+                            : meta?.isAction || meta?.numeric
+                              ? "middle"
+                              : "top"
                         }
                         isNumeric={meta?.numeric}
                         whiteSpace={meta?.numeric ? "nowrap" : undefined}
@@ -141,9 +154,16 @@ export default function DataList<T>({
                               }
                             : undefined
                         }
-                        w={meta?.isAction ? "40px" : undefined}
+                        w={
+                          meta?.isTrailing
+                            ? "72px"
+                            : meta?.isAction
+                              ? "40px"
+                              : undefined
+                        }
+                        h={meta?.isTrailing ? "1px" : undefined}
                         onClick={
-                          meta?.isAction
+                          meta?.isAction || meta?.isTrailing
                             ? (e) => e.stopPropagation()
                             : undefined
                         }

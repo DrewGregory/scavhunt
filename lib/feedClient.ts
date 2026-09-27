@@ -5,8 +5,8 @@ import { track } from "./telemetry";
 import {
   feedQueryString,
   type FeedFilters,
-  type FeedItem,
   type FeedPage,
+  type FeedRow,
 } from "./feedTypes";
 
 async function fetchFeedPage(url: string): Promise<FeedPage> {
@@ -77,20 +77,22 @@ export function useFeed(filters: FeedFilters, opts: UseFeedOptions = {}) {
   const pages = data ?? [];
 
   const merged = useMemo(() => {
-    const items: FeedItem[] = [];
+    const items: FeedRow[] = [];
     const seen = new Set<string>();
     const teams: FeedPage["teams"] = {};
     const challenges: FeedPage["challenges"] = {};
+    const neighborhoods: FeedPage["neighborhoods"] = {};
     for (const page of pages) {
       Object.assign(teams, page.teams);
       Object.assign(challenges, page.challenges);
+      Object.assign(neighborhoods, page.neighborhoods ?? {});
       for (const item of page.items) {
         if (seen.has(item.id)) continue;
         seen.add(item.id);
         items.push(item);
       }
     }
-    return { items, teams, challenges };
+    return { items, teams, challenges, neighborhoods };
   }, [pages]);
 
   const lastPage = pages[pages.length - 1];
@@ -105,7 +107,7 @@ export function useFeed(filters: FeedFilters, opts: UseFeedOptions = {}) {
   /** Optimistically patch or drop items across all loaded pages. */
   const updateItems = useCallback(
     (
-      fn: (item: FeedItem) => FeedItem | null,
+      fn: (item: FeedRow) => FeedRow | null,
       options: { revalidate?: boolean } = {},
     ) =>
       mutate(
@@ -114,7 +116,7 @@ export function useFeed(filters: FeedFilters, opts: UseFeedOptions = {}) {
             ...page,
             items: page.items
               .map(fn)
-              .filter((i): i is FeedItem => i != null),
+              .filter((i): i is FeedRow => i != null),
           })),
         { revalidate: options.revalidate ?? false },
       ),

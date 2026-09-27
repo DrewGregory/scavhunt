@@ -12,11 +12,45 @@ export type FeedFilters = {
   q?: string;
 };
 
-export type FeedItem = SerializedSubmission & {
-  favoriteCount: number;
-  favorited: boolean;
-  /** Position among non-rejected submissions for the challenge (oldest = 1); null when rejected. */
-  submissionNumber: number | null;
+export type FeedSubmissionItem = {
+  kind: "submission";
+} & SerializedSubmission & {
+    favoriteCount: number;
+    favorited: boolean;
+    /** Position among non-rejected submissions for the challenge (oldest = 1); null when rejected. */
+    submissionNumber: number | null;
+  };
+
+/** @deprecated Use FeedSubmissionItem */
+export type FeedItem = FeedSubmissionItem;
+
+export type FeedDepositItem = {
+  kind: "deposit";
+  id: string;
+  teamId: string;
+  userId: string;
+  neighborhoodId: string;
+  points: number;
+  createdAt: string;
+  tookControl: boolean;
+  contested: boolean;
+  displacedTeam: import("./types").SerializedTeam | null;
+};
+
+export type FeedRow = FeedSubmissionItem | FeedDepositItem;
+
+export function isFeedSubmission(row: FeedRow): row is FeedSubmissionItem {
+  return row.kind === "submission";
+}
+
+export function isFeedDeposit(row: FeedRow): row is FeedDepositItem {
+  return row.kind === "deposit";
+}
+
+export type FeedNeighborhood = {
+  id: string;
+  name: string;
+  emoji: string | null;
 };
 
 export type FeedChallenge = {
@@ -33,10 +67,11 @@ export type FeedChallenge = {
 };
 
 export type FeedPage = {
-  items: FeedItem[];
+  items: FeedRow[];
   nextCursor: string | null;
   teams: Record<string, SerializedTeam>;
   challenges: Record<string, FeedChallenge>;
+  neighborhoods: Record<string, FeedNeighborhood>;
 };
 
 export const FEED_DEFAULT_LIMIT = 20;
