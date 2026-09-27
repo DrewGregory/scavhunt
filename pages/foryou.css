@@ -126,3 +126,17 @@
     border-radius: 50%;
   }
 }
+
+@media (max-width: 768px) {
+  .scavtok .app {
+    height: 100%;
+    width: 100%;
+  }
+
+  .scavtok .container {
+    height: 100%;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+  }
+}

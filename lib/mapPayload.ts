@@ -1,29 +1,28 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "../../lib/prisma";
-import { requireApiUser } from "../../lib/auth";
-import { listEnabledChallengesWithSubs } from "../../lib/challengeFavorites";
-import { isTerritoryEnabled } from "../../lib/territoryGate";
-import { getStandings } from "../../lib/territory";
-import { getTeamScore } from "../../lib/scoring";
-import { requireHuntStartedApi } from "../../lib/time";
-import type { LatestTeamLocation } from "../../lib/types";
-
 /**
- * Live map payload for polling: challenges (+ team favorites), team locations,
- * territory standings / labeling neighborhoods, and bank.
+ * Shared SSR/API helper for the player map + challenges map view.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
-  const user = await requireApiUser(req, res);
-  if (!user) return;
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+import { prisma } from "./prisma";
+import { serializeTeam } from "./serialize";
+import type { LatestTeamLocation } from "./types";
+import { isTerritoryEnabled } from "./territoryGate";
+import { getStandings } from "./territory";
+import { getTeamScore } from "./scoring";
+import { listEnabledChallengesWithSubs } from "./challengeFavorites";
+import type { TerritoryNeighborhood } from "../components/leafletMap";
 
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+export type MapPageBank = {
+  earned: number;
+  deposited: number;
+  bonus?: number;
+  score: number;
+};
 
+export async function loadPlayerMapPayload(user: {
+  id: string;
+  teamId: string | null;
+  isAdmin: boolean;
+  team: Parameters<typeof serializeTeam>[0] | null;
+}) {
   const challenges = await listEnabledChallengesWithSubs(user.teamId);
 
   const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
@@ -51,11 +50,9 @@ export default async function handler(
 
   const territoryGloballyEnabled = await isTerritoryEnabled();
   const showTerritory = territoryGloballyEnabled || user.isAdmin;
-  let bank: unknown = null;
+  let bank: MapPageBank | null = null;
 
-  // Always load onMap neighborhoods with boundaries so challenge drawers can
-  // label neighborhoods client-side even when territory mode is off.
-  let neighborhoods: unknown[] = [];
+  let neighborhoods: TerritoryNeighborhood[] = [];
   if (showTerritory) {
     const standings = await getStandings({
       onMapOnly: true,
@@ -67,7 +64,7 @@ export default async function handler(
       emoji: s.emoji,
       centerLat: s.centerLat,
       centerLng: s.centerLng,
-      boundary: s.boundary,
+      boundary: s.boundary as TerritoryNeighborhood["boundary"],
       totals: s.totals,
       claimedBy: s.claimedBy,
       contested: s.contested,
@@ -95,7 +92,7 @@ export default async function handler(
       emoji: n.emoji,
       centerLat: n.centerLat,
       centerLng: n.centerLng,
-      boundary: n.boundary,
+      boundary: n.boundary as TerritoryNeighborhood["boundary"],
       totals: [],
       claimedBy: null,
       contested: false,
@@ -103,12 +100,13 @@ export default async function handler(
     }));
   }
 
-  res.setHeader("Cache-Control", "no-store");
-  return res.status(200).json({
+  return {
     challenges,
     locations,
+    team: user.team ? serializeTeam(user.team) : null,
     territoryEnabled: territoryGloballyEnabled,
+    isAdmin: user.isAdmin,
     neighborhoods,
     bank: showTerritory ? bank : null,
-  });
+  };
 }

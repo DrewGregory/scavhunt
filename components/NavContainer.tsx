@@ -18,13 +18,11 @@ import {
 } from "@chakra-ui/react";
 import { FiChevronLeft, FiChevronRight, FiMenu } from "react-icons/fi";
 import {
-  GiTreasureMap,
   GiPodium,
   GiNotebook,
   GiRuleBook,
   GiScrollUnfurled,
 } from "react-icons/gi";
-import { FaVideo } from "react-icons/fa";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useSession } from "./useSession";
@@ -37,14 +35,23 @@ interface LinkItemProps {
   icon: IconType;
   url: string;
   adminOnly?: boolean;
+  matchPaths?: string[];
 }
 
 const LinkItems: Array<LinkItemProps> = [
-  { name: "Feed", icon: GiScrollUnfurled, url: "/feed" },
-  { name: "ScavTok", icon: FaVideo, url: "/scavtok" },
-  { name: "Challenges", icon: GiNotebook, url: "/challenges" },
+  {
+    name: "Feed",
+    icon: GiScrollUnfurled,
+    url: "/feed",
+    matchPaths: ["/feed", "/scavtok"],
+  },
+  {
+    name: "Challenges",
+    icon: GiNotebook,
+    url: "/challenges",
+    matchPaths: ["/challenges", "/map"],
+  },
   { name: "Leaderboard", icon: GiPodium, url: "/teams" },
-  { name: "Map", icon: GiTreasureMap, url: "/map" },
   { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" },
   { name: "Admin", icon: GiNotebook, url: "/admin", adminOnly: true },
 ];
@@ -328,19 +335,27 @@ const SidebarContent = ({
       <Divider />
       {LinkItems.filter(
         (link) => !link.adminOnly || session?.user.isAdmin,
-      ).map((link) => (
-        <NavItem
-          key={link.name}
-          icon={link.icon}
-          collapsed={collapsed}
-          label={link.name}
-          onClick={() => {
-            router.push(`${link.url}`);
-          }}
-        >
-          {link.name}
-        </NavItem>
-      ))}
+      ).map((link) => {
+        const paths = link.matchPaths ?? [link.url];
+        const active = paths.some(
+          (p) =>
+            router.pathname === p || router.asPath.split("?")[0] === p,
+        );
+        return (
+          <NavItem
+            key={link.name}
+            icon={link.icon}
+            collapsed={collapsed}
+            label={link.name}
+            bg={active ? colors.green : undefined}
+            onClick={() => {
+              router.push(`${link.url}`);
+            }}
+          >
+            {link.name}
+          </NavItem>
+        );
+      })}
       {onToggleCollapse && (
         <Box
           display={{ base: "none", md: "block" }}

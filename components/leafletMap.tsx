@@ -5,6 +5,7 @@ import {
   MapContainer,
   Marker,
   Popup,
+  useMap,
 } from "react-leaflet";
 import { LatLngExpression, PathOptions, divIcon, type Path } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -84,6 +85,21 @@ type Bank = {
   score: number;
 };
 
+function FlyToChallenge({
+  challenge,
+}: {
+  challenge: ChallengeWithSubmissions | null;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!challenge) return;
+    const lat = challenge.lat ?? SF_CENTER[0];
+    const lng = challenge.lng ?? SF_CENTER[1];
+    map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+  }, [map, challenge?.id, challenge?.lat, challenge?.lng]);
+  return null;
+}
+
 export default function LeafletMap({
   locations,
   challenges,
@@ -92,6 +108,8 @@ export default function LeafletMap({
   isAdmin = false,
   initialNeighborhoods = [],
   initialBank = null,
+  selectedChallengeId = null,
+  onSelectChallenge,
 }: {
   locations: Array<LatestTeamLocation>;
   challenges: Array<ChallengeWithSubmissions>;
@@ -101,6 +119,8 @@ export default function LeafletMap({
   isAdmin?: boolean;
   initialNeighborhoods?: TerritoryNeighborhood[];
   initialBank?: Bank | null;
+  selectedChallengeId?: string | null;
+  onSelectChallenge?: (id: string | null) => void;
 }) {
   const toast = useToast();
   const [liveChallenges, setLiveChallenges] = useState(challenges);
@@ -475,12 +495,16 @@ export default function LeafletMap({
         />
         {layersOpen ? (
           <Box
+            position="absolute"
+            top="100%"
+            right={0}
             mt={2}
             bg="white"
             p={4}
             borderRadius="md"
             boxShadow="lg"
-            maxWidth="280px"
+            width="280px"
+            maxW="calc(100vw - 2rem)"
           >
             <VStack spacing={3} alignItems="stretch">
               <HStack justifyContent="space-between">
@@ -671,6 +695,14 @@ export default function LeafletMap({
         style={{ height: "100%", width: "100%" }}
       >
         <BasemapTileLayer basemap={DEFAULT_PLAYER_BASEMAP} />
+        <FlyToChallenge
+          challenge={
+            selectedChallengeId
+              ? (liveChallenges.find((c) => c.id === selectedChallengeId) ??
+                null)
+              : null
+          }
+        />
         {territoryOn &&
           showNeighborhoods &&
           neighborhoods.map((n) => {
@@ -808,22 +840,32 @@ export default function LeafletMap({
               finishedByTeam,
             });
             const spotsLeft = Math.max(0, c.numWinners - accepted);
+            const isSelected = selectedChallengeId === c.id;
             return (
               <Marker
                 icon={makeChallengePinIcon({
                   kind,
                   favorited: Boolean(c.favorited),
+                  selected: isSelected,
                 })}
-                key={`${c.id}:${kind}:${c.favorited ? 1 : 0}:${accepted}`}
+                key={`${c.id}:${kind}:${c.favorited ? 1 : 0}:${accepted}:${isSelected ? 1 : 0}`}
                 position={[c.lat ?? SF_CENTER[0], c.lng ?? SF_CENTER[1]]}
+                zIndexOffset={isSelected ? 1000 : 0}
+                eventHandlers={{
+                  click: () => {
+                    onSelectChallenge?.(c.id);
+                  },
+                }}
               >
                 <Popup>
                   <VStack align="stretch" spacing={2} minW="160px">
-                    <Link href={`/challenges?challenge=${c.id}`}>
-                      <Text fontWeight="semibold">
-                        {c.emoji ? `${c.emoji} ${c.title}` : c.title}
-                      </Text>
-                    </Link>
+                    <Text
+                      fontWeight="semibold"
+                      cursor="pointer"
+                      onClick={() => onSelectChallenge?.(c.id)}
+                    >
+                      {c.emoji ? `${c.emoji} ${c.title}` : c.title}
+                    </Text>
                     <Text fontSize="xs" color="gray.600">
                       {accepted}/{c.numWinners} filled
                       {spotsLeft > 0 ? ` · ${spotsLeft} left` : " · full"}
@@ -845,6 +887,13 @@ export default function LeafletMap({
                           : "Favorite for team"}
                       </Button>
                     )}
+                    <Button
+                      size="xs"
+                      colorScheme="blue"
+                      onClick={() => onSelectChallenge?.(c.id)}
+                    >
+                      View details
+                    </Button>
                   </VStack>
                 </Popup>
               </Marker>

@@ -59,6 +59,12 @@ import {
   FeedWithAnnouncements,
   type FeedAnnouncement,
 } from "../components/FeedAnnouncements";
+import ScavTokReel from "../components/ScavTokReel";
+import { FiList } from "react-icons/fi";
+import { FaVideo } from "react-icons/fa";
+
+type ViewMode = "list" | "tok";
+const TOK_PAGE_SIZE = 10;
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -75,18 +81,25 @@ export const getServerSideProps = async (
       ? context.query.submission
       : null;
 
-  const [initialPage, pinnedPage, announcementRows] = await Promise.all([
-    getFeedPage({ userId: user.id }),
-    submissionParam
-      ? getFeedPage({ userId: user.id, ids: [submissionParam], limit: 1 })
-      : Promise.resolve(null),
-    listPublishedAnnouncements(),
-  ]);
+  const [initialPage, tokInitialPage, pinnedPage, announcementRows] =
+    await Promise.all([
+      getFeedPage({ userId: user.id }),
+      getFeedPage({
+        userId: user.id,
+        filters: { videoOnly: true },
+        limit: TOK_PAGE_SIZE,
+      }),
+      submissionParam
+        ? getFeedPage({ userId: user.id, ids: [submissionParam], limit: 1 })
+        : Promise.resolve(null),
+      listPublishedAnnouncements(),
+    ]);
 
   return {
     props: {
       user: publicUser(user),
       initialPage,
+      tokInitialPage,
       pinnedPage: pinnedPage && pinnedPage.items.length > 0 ? pinnedPage : null,
       announcements: announcementRows.map((row) => {
         const s = serializeAnnouncement(row);
@@ -115,12 +128,16 @@ function formatDuration(sec: number | null): string | null {
 export default function FeedPage({
   user,
   initialPage,
+  tokInitialPage,
   pinnedPage,
   announcements,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const submissionSearchParam = searchParams.get("submission");
+  const viewParam = router.query.view;
+  const view: ViewMode =
+    viewParam === "tok" || viewParam === "list" ? viewParam : "list";
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(
     submissionSearchParam,
   );
@@ -138,6 +155,22 @@ export default function FeedPage({
   const ref = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const queue = usePreloadQueue("feed");
+
+  const setQuery = useCallback(
+    (patch: { view?: ViewMode; submission?: string | null }) => {
+      const nextView = patch.view ?? view;
+      const nextSubmission =
+        patch.submission === undefined
+          ? selectedRef.current
+          : patch.submission;
+      const query: Record<string, string> = { view: nextView };
+      if (nextSubmission) query.submission = nextSubmission;
+      void router.push({ pathname: "/feed", query }, undefined, {
+        shallow: true,
+      });
+    },
+    [router, view],
+  );
 
   useEffect(() => {
     reportWebVitals("/feed");
@@ -283,14 +316,13 @@ export default function FeedPage({
       selectedRef.current = opening ? id : null;
       setSelectedSubmission(selectedRef.current);
       queue.setFocus(selectedRef.current);
-      void routerRef.current.push(
-        { pathname: "/feed", query: { submission: id } },
-        undefined,
-        { shallow: true },
-      );
+      setQuery({
+        view: "list",
+        submission: selectedRef.current,
+      });
       return opening;
     },
-    [queue],
+    [queue, setQuery],
   );
 
   const editSubmission = useCallback((id: string) => {
@@ -316,25 +348,85 @@ export default function FeedPage({
   const noSubmissionsAtAll =
     isDefaultFilters && !feed.isLoading && visibleItems.length === 0;
 
+  const viewToggle = (
+    <HStack
+      bg="white"
+      borderRadius="md"
+      boxShadow="sm"
+      borderWidth="1px"
+      p={1}
+      spacing={0}
+    >
+      <Button
+        size="sm"
+        leftIcon={<FiList />}
+        variant={view === "list" ? "solid" : "ghost"}
+        colorScheme={view === "list" ? "blue" : "gray"}
+        onClick={() => setQuery({ view: "list" })}
+      >
+        Feed
+      </Button>
+      <Button
+        size="sm"
+        leftIcon={<FaVideo />}
+        variant={view === "tok" ? "solid" : "ghost"}
+        colorScheme={view === "tok" ? "blue" : "gray"}
+        onClick={() => setQuery({ view: "tok", submission: null })}
+      >
+        ScavTok
+      </Button>
+    </HStack>
+  );
+
+  if (view === "tok") {
+    return (
+      <NavContainer title="ScavTok" fullScreen hideTopBar bgColor="black">
+        <Box position="relative" flex={1} w="100%" h="100%" minH={0}>
+          <Box
+            position="absolute"
+            top={4}
+            right={4}
+            zIndex={40}
+            display={{ base: "none", md: "block" }}
+          >
+            {viewToggle}
+          </Box>
+          <ScavTokReel
+            initialPage={tokInitialPage}
+            onBackToList={() => setQuery({ view: "list", submission: null })}
+          />
+        </Box>
+      </NavContainer>
+    );
+  }
+
   return (
     <NavContainer title="Feed">
       <FeedWithAnnouncements announcements={announcements}>
       {noSubmissionsAtAll ? (
-        <Heading size="lg" color="gray.500" textAlign="center" mt={8}>
-          No Submissions Yet!
-        </Heading>
+        <VStack spacing={4} mt={8}>
+          <Flex w="100%" justify="flex-end">
+            {viewToggle}
+          </Flex>
+          <Heading size="lg" color="gray.500" textAlign="center">
+            No Submissions Yet!
+          </Heading>
+        </VStack>
       ) : (
         <VStack justifyContent="flex-start" width="100%" spacing={4}>
-          <Input
-            placeholder="Search by team name or challenge name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            width="100%"
-            bg="white"
-            borderRadius="md"
-            boxShadow="sm"
-            size="md"
-          />
+          <Flex w="100%" gap={3} align="center">
+            <Input
+              placeholder="Search by team name or challenge name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              flex={1}
+              bg="white"
+              borderRadius="md"
+              boxShadow="sm"
+              size="md"
+            />
+            {viewToggle}
+          </Flex>
           <VStack width="100%" spacing={2}>
             {isAdmin && (
               <HStack
