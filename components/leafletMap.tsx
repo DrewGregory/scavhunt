@@ -26,13 +26,13 @@ import {
 } from "@chakra-ui/react";
 import { LuLayers } from "react-icons/lu";
 import { getPosition, type GeoFix } from "./useSession";
+import { useLocationPermissionUI } from "./LocationPermissionPrompt";
 import {
   centroidOf,
   findNeighborhoodAt,
   SF_CENTER,
   type GeoGeometry,
 } from "../lib/geo";
-import { neighborhoodEmoji } from "../lib/neighborhoodEmoji";
 import { DEFAULT_PLAYER_BASEMAP } from "../lib/mapBasemaps";
 import { BasemapTileLayer } from "./HuntMapShared";
 import {
@@ -209,18 +209,12 @@ function NeighborhoodLabelLayer({
           selectedNeighborhoodId === n.id
             ? "#2B6CB0"
             : (n.claimedBy?.teamColor ?? "#CBD5E0");
-        const nEmoji = neighborhoodEmoji(n.name, n.emoji);
         // Prefix with claiming team's emoji (not the neighborhood's).
         const label = n.claimedBy
           ? `${n.claimedBy.teamEmoji} ${n.name}`
           : n.contested
             ? `~ ${n.name}`
             : n.name;
-        const claimLine = n.contested
-          ? "Contested"
-          : n.claimedBy
-            ? `${n.claimedBy.teamEmoji} ${n.claimedBy.teamName} (${n.claimedBy.points})`
-            : "Unclaimed";
         const totalsLine = n.totals
           .slice(0, 5)
           .map((t) => `${t.teamEmoji} ${t.teamName}: ${t.points}`)
@@ -252,10 +246,16 @@ function NeighborhoodLabelLayer({
                   <strong>
                     {n.claimedBy
                       ? `${n.claimedBy.teamEmoji} ${n.name}`
-                      : `${nEmoji} ${n.name}`}
+                      : n.contested
+                        ? `~ ${n.name}`
+                        : n.name}
                   </strong>
-                  <br />
-                  {claimLine}
+                  {!n.claimedBy && (
+                    <>
+                      <br />
+                      {n.contested ? "Contested" : "Unclaimed"}
+                    </>
+                  )}
                   {totalsLine ? (
                     <>
                       <br />
@@ -306,6 +306,10 @@ export default function LeafletMap({
   onSelectNeighborhood?: (id: string | null) => void;
 }) {
   const toast = useToast();
+  const {
+    state: locationPermission,
+    openHelp: openLocationHelp,
+  } = useLocationPermissionUI();
   const [liveChallenges, setLiveChallenges] = useState(challenges);
   const [liveLocations, setLiveLocations] = useState(locations);
   const [showChallenges, setShowChallenges] = useState(true);
@@ -388,6 +392,10 @@ export default function LeafletMap({
 
   const refreshMyLocation = useCallback(async () => {
     if (!territoryOn || !team) return;
+    if (locationPermission !== "granted") {
+      openLocationHelp();
+      return;
+    }
     setLocating(true);
     try {
       const fix = await getPosition({
@@ -410,12 +418,21 @@ export default function LeafletMap({
     } finally {
       setLocating(false);
     }
-  }, [territoryOn, team, toast, applyFix]);
+  }, [
+    territoryOn,
+    team,
+    toast,
+    applyFix,
+    locationPermission,
+    openLocationHelp,
+  ]);
 
   // Live GPS via watch only — avoid a parallel getCurrentPosition (that was
   // re-prompting / hanging on deposit). Refresh button still does a one-shot.
+  // Gate on granted so we never prompt from the map watch.
   useEffect(() => {
     if (!territoryOn || !team) return;
+    if (locationPermission !== "granted") return;
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
@@ -442,7 +459,7 @@ export default function LeafletMap({
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [territoryOn, team, applyFix]);
+  }, [territoryOn, team, applyFix, locationPermission]);
 
   const currentNeighborhood = useMemo(() => {
     if (!myFix) return null;
@@ -554,6 +571,10 @@ export default function LeafletMap({
 
   const handleDeposit = async () => {
     if (!team || !territoryOn) return;
+    if (locationPermission !== "granted") {
+      openLocationHelp();
+      return;
+    }
     if (!currentNeighborhood) {
       toast({
         title: "Move into a neighborhood first",
@@ -759,11 +780,34 @@ export default function LeafletMap({
             <Text fontSize="sm" fontWeight="semibold">
               {currentNeighborhood
                 ? `Deposit points in ${currentNeighborhood.emoji ? `${currentNeighborhood.emoji} ` : ""}${currentNeighborhood.name}`
-                : locating && !myFix
-                  ? "Finding your location…"
-                  : myFix
-                    ? "Move into a neighborhood to deposit"
-                    : "Allow GPS to deposit"}
+                : locationPermission === "denied" ? (
+                    <>
+                      Location is blocked, so you can&apos;t deposit —{" "}
+                      <Box
+                        as="button"
+                        type="button"
+                        textDecoration="underline"
+                        onClick={openLocationHelp}
+                      >
+                        How to fix
+                      </Box>
+                    </>
+                  ) : locationPermission === "unsupported" ? (
+                    "This browser can't share your location, so you can't deposit."
+                  ) : locationPermission !== "granted" ? (
+                    <Box
+                      as="button"
+                      type="button"
+                      textAlign="left"
+                      onClick={openLocationHelp}
+                    >
+                      Turn on location to deposit points here.
+                    </Box>
+                  ) : !myFix ? (
+                    "Finding your location…"
+                  ) : (
+                    "Move into a neighborhood to deposit"
+                  )}
             </Text>
             <Text fontSize="xs" color="gray.600">
               You have{" "}

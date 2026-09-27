@@ -47,7 +47,7 @@ export default async function handler(
     if (!email) return genericAuthError(res);
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.isActive) {
+    if (!user || user.deletedAt) {
       return unrecognizedAuthError(res, "email");
     }
 
@@ -81,7 +81,7 @@ export default async function handler(
   if (!phoneE164) return genericAuthError(res);
 
   const user = await prisma.user.findUnique({ where: { phoneE164 } });
-  if (!user || !user.isActive) {
+  if (!user || user.deletedAt) {
     return unrecognizedAuthError(res, "phone");
   }
 

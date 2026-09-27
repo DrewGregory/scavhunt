@@ -26,7 +26,7 @@ export type TeamWithPts = SerializedTeam & {
   submissions: SerializedSubmission[];
   members: TeamMember[];
   claimedNeighborhoods: ClaimedNeighborhood[];
-  /** Leaderboard score = earned - deposited (+ bonus) */
+  /** Challenge points earned (accepted submissions). Leaderboard ranks by this. */
   pts: number;
   earned: number;
   deposited: number;
@@ -40,7 +40,9 @@ export type TerritoryRow = {
   teamColor: string;
   neighborhoodsHeld: number;
   totalDeposited: number;
-  /** Spendable bank (earned + bonus − deposited) for teams with no holds. */
+  /** Challenge points earned (accepted submissions). */
+  earned: number;
+  /** Spendable bank (earned + bonus − deposited). */
   bankPts: number;
   members: TeamMember[];
   claimedNeighborhoods: ClaimedNeighborhood[];
@@ -124,10 +126,12 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
     );
 
     const bankByTeam = new Map<string, number>();
+    const earnedByTeam = new Map<string, number>();
     for (const t of teamsRaw) {
       const accepted = t.submissions.filter((s) => s.accepted);
       const earned = accepted.reduce((sum, s) => sum + s.challenge.pts, 0);
       const deposited = t.deposits.reduce((sum, d) => sum + d.points, 0);
+      earnedByTeam.set(t.id, earned);
       bankByTeam.set(t.id, scoreFromParts(earned, deposited, t.bonusPoints));
     }
 
@@ -138,6 +142,7 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
       teamColor: r.teamColor,
       neighborhoodsHeld: r.neighborhoodsHeld,
       totalDeposited: r.totalDeposited,
+      earned: earnedByTeam.get(r.teamId) ?? 0,
       bankPts: bankByTeam.get(r.teamId) ?? 0,
       members:
         teamsRaw
@@ -152,7 +157,6 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
     const ptsArray = accepted.map((s) => s.challenge.pts);
     const earned = ptsArray.reduce((sum, p) => sum + p, 0);
     const deposited = t.deposits.reduce((sum, d) => sum + d.points, 0);
-    const bonus = t.bonusPoints;
     return {
       ...serializeTeam(t),
       members: t.users.map((u) => ({ id: u.id, name: u.name })),
@@ -160,12 +164,12 @@ export async function getLeaderboardPayload(): Promise<LeaderboardPayload> {
       submissions: t.submissions.map(serializeSubmission),
       earned,
       deposited,
-      pts: scoreFromParts(earned, deposited, bonus),
+      pts: earned,
       ptsArray,
     };
   });
 
-  const teamsSortedbyPts = teamsWithPts.sort((t1, t2) => t2.pts - t1.pts);
+  const teamsSortedbyPts = teamsWithPts.sort((t1, t2) => t2.earned - t1.earned);
 
   return {
     teamsSortedbyPts,

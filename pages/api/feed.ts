@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { requireApiUser } from "../../lib/auth";
-import { requireHuntStartedApi } from "../../lib/time";
+import { requireApiUser, requireHuntAccessApi } from "../../lib/auth";
 import { getFeedPage, parseFeedQuery } from "../../lib/feedQuery";
 import type { FeedPage } from "../../lib/feedTypes";
 
@@ -14,7 +13,7 @@ export default async function handler(
 
   const user = await requireApiUser(req, res);
   if (!user) return;
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   try {
     const { filters, cursor, limit } = parseFeedQuery(req.query);

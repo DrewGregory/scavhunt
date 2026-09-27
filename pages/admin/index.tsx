@@ -768,18 +768,25 @@ export default function AdminPage({
       },
       {
         id: "isActive",
-        header: "Active",
+        header: "Active / Approved",
         getSortValue: (u) => u.isActive,
         cell: (u) => (
-          <Switch
-            isChecked={u.isActive}
-            colorScheme="green"
-            onChange={async (e) => {
-              await patchUser(u.id, {
-                isActive: e.target.checked,
-              });
-            }}
-          />
+          <HStack spacing={2}>
+            <Switch
+              isChecked={u.isActive}
+              colorScheme={u.intent === "browsing" ? "blue" : "green"}
+              onChange={async (e) => {
+                await patchUser(u.id, {
+                  isActive: e.target.checked,
+                });
+              }}
+            />
+            {u.intent === "browsing" ? (
+              <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">
+                {u.isActive ? "Approved" : "Pending"}
+              </Text>
+            ) : null}
+          </HStack>
         ),
       },
       {
@@ -1163,22 +1170,19 @@ export default function AdminPage({
   return (
     <NavContainer title="Admin">
       <VStack align="stretch" spacing={6} width="100%">
-        <HStack justify="space-between" flexWrap="wrap" gap={2}>
-          <Heading size="lg">Admin</Heading>
-          <HStack flexWrap="wrap" gap={2}>
-            <Button as={Link} href="/admin/challenges" size="sm" colorScheme="purple" variant="outline">
-              Draft challenges
-            </Button>
-            <Button as={Link} href="/admin/assign" size="sm" colorScheme="purple">
-              Assign teams
-            </Button>
-            <Button as={Link} href="/admin/upload-testing" size="sm" variant="outline">
-              Upload testing
-            </Button>
-            <Button as={Link} href="/admin/telemetry" size="sm" variant="outline">
-              Telemetry
-            </Button>
-          </HStack>
+        <HStack flexWrap="wrap" gap={2}>
+          <Button as={Link} href="/admin/challenges" size="sm" colorScheme="purple" variant="outline">
+            Draft challenges
+          </Button>
+          <Button as={Link} href="/admin/assign" size="sm" colorScheme="purple">
+            Assign teams
+          </Button>
+          <Button as={Link} href="/admin/upload-testing" size="sm" variant="outline">
+            Upload testing
+          </Button>
+          <Button as={Link} href="/admin/telemetry" size="sm" variant="outline">
+            Telemetry
+          </Button>
         </HStack>
 
         {notice && (

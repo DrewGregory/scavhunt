@@ -16,7 +16,14 @@ export type CompressPluginOpts = PluginOpts & {
   /** Shared telemetry fields (attemptId, challengeId, sandbox) for the current attempt. */
   telemetryContext?: (fileId: string) => TelemetryFields;
   onProcessed?: (fileId: string, processed: ProcessedFile) => void;
+  /** On a video timeout, wait for `resolveTimeout` instead of uploading the original right away. */
+  promptOnTimeout?: boolean;
 };
+
+export type TimeoutDecision = "retry" | "original";
+
+/** Each retry multiplies the time budget by this. */
+const RETRY_BUDGET_FACTOR = 4;
 
 /** File meta flags honored by the plugin (used by the sandbox for "upload original" runs). */
 export type CompressMetaFlags = {
@@ -33,6 +40,8 @@ export default class CompressPlugin<M extends Meta, B extends Body> extends Base
 > {
   #results = new Map<string, ProcessedFile>();
   #controllers = new Map<string, AbortController>();
+  #pendingTimeouts = new Map<string, (decision: TimeoutDecision) => void>();
+  #timeoutListeners = new Set<(fileIds: string[]) => void>();
 
   constructor(uppy: Uppy<M, B>, opts: CompressPluginOpts) {
     super(uppy, opts);
@@ -66,15 +75,47 @@ export default class CompressPlugin<M extends Meta, B extends Body> extends Base
     return this.#results.get(fileId);
   }
 
+  /** Files whose compression timed out and are waiting on `resolveTimeout`. */
+  getPendingTimeouts(): string[] {
+    return [...this.#pendingTimeouts.keys()];
+  }
+
+  subscribeTimeouts(listener: (fileIds: string[]) => void): () => void {
+    this.#timeoutListeners.add(listener);
+    return () => this.#timeoutListeners.delete(listener);
+  }
+
+  resolveTimeout(fileId: string, decision: TimeoutDecision) {
+    const resolve = this.#pendingTimeouts.get(fileId);
+    if (!resolve) return;
+    this.#pendingTimeouts.delete(fileId);
+    this.#emitTimeouts();
+    resolve(decision);
+  }
+
+  #emitTimeouts() {
+    const ids = this.getPendingTimeouts();
+    for (const listener of this.#timeoutListeners) listener(ids);
+  }
+
+  #awaitTimeoutDecision(id: string): Promise<TimeoutDecision> {
+    return new Promise((resolve) => {
+      this.#pendingTimeouts.set(id, resolve);
+      this.#emitTimeouts();
+    });
+  }
+
   #onFileRemoved = (file: UppyFile<M, B>) => {
     this.#controllers.get(file.id)?.abort();
     this.#controllers.delete(file.id);
     this.#results.delete(file.id);
+    this.resolveTimeout(file.id, "original");
   };
 
   #onCancelAll = () => {
     for (const controller of this.#controllers.values()) controller.abort();
     this.#controllers.clear();
+    for (const id of this.getPendingTimeouts()) this.resolveTimeout(id, "original");
   };
 
   #telemetry(fileId: string, extra: TelemetryFields): TelemetryFields {
@@ -101,42 +142,65 @@ export default class CompressPlugin<M extends Meta, B extends Body> extends Base
         : new File([file.data], file.name, { type: file.type });
     const flags = file.meta as CompressMetaFlags;
     const kind = mediaKind(original);
-    const { config } = this.opts;
+    let { config } = this.opts;
 
-    const controller = new AbortController();
-    this.#controllers.set(id, controller);
     let compress: CompressResult;
-    try {
-      if (flags.skipCompression || kind === "other") {
-        compress = await compressFile(
-          original,
-          { ...config, video: { ...config.video, enabled: false }, image: { ...config.image, enabled: false } },
-          { signal: controller.signal },
-        );
-      } else {
-        track("compress_start", this.#telemetry(id, { originalBytes: original.size, meta: { kind, type: original.type } }));
-        this.uppy.emit("preprocess-progress", file, {
-          mode: "determinate",
-          message: kind === "video" ? "Compressing video" : "Compressing photo",
-          value: 0,
-        });
-        let lastValue = 0;
-        compress = await compressFile(original, config, {
-          signal: controller.signal,
-          onProgress: (value) => {
-            if (value - lastValue < PROGRESS_STEP || !this.#exists(id)) return;
-            lastValue = value;
-            this.uppy.emit("preprocess-progress", this.uppy.getFile(id), {
-              mode: "determinate",
-              message: kind === "video" ? "Compressing video" : "Compressing photo",
-              value: Math.min(1, value),
-            });
-          },
-        });
-        this.#trackCompress(id, compress);
+    let attempt = 1;
+    for (;;) {
+      const controller = new AbortController();
+      this.#controllers.set(id, controller);
+      try {
+        if (flags.skipCompression || kind === "other") {
+          compress = await compressFile(
+            original,
+            { ...config, video: { ...config.video, enabled: false }, image: { ...config.image, enabled: false } },
+            { signal: controller.signal },
+          );
+        } else {
+          track("compress_start", this.#telemetry(id, { originalBytes: original.size, meta: { kind, type: original.type, attempt } }));
+          this.uppy.emit("preprocess-progress", this.uppy.getFile(id), {
+            mode: "determinate",
+            message: kind === "video" ? "Compressing video" : "Compressing photo",
+            value: 0,
+          });
+          let lastValue = 0;
+          compress = await compressFile(original, config, {
+            signal: controller.signal,
+            onProgress: (value) => {
+              if (value - lastValue < PROGRESS_STEP || !this.#exists(id)) return;
+              lastValue = value;
+              this.uppy.emit("preprocess-progress", this.uppy.getFile(id), {
+                mode: "determinate",
+                message: kind === "video" ? "Compressing video" : "Compressing photo",
+                value: Math.min(1, value),
+              });
+            },
+          });
+          this.#trackCompress(id, compress);
+        }
+      } finally {
+        this.#controllers.delete(id);
       }
-    } finally {
-      this.#controllers.delete(id);
+
+      if (!this.#exists(id)) return;
+      if (!this.opts.promptOnTimeout || kind !== "video" || compress.skippedReason !== "too_slow") break;
+
+      this.uppy.emit("preprocess-progress", this.uppy.getFile(id), {
+        mode: "indeterminate",
+        message: "Compression timed out",
+      });
+      const decision = await this.#awaitTimeoutDecision(id);
+      track("compress_timeout_decision", this.#telemetry(id, { meta: { decision, attempt } }));
+      if (decision !== "retry" || !this.#exists(id)) break;
+      attempt++;
+      config = {
+        ...config,
+        video: {
+          ...config.video,
+          timeBudgetMultiplier: config.video.timeBudgetMultiplier * RETRY_BUDGET_FACTOR,
+          minTimeBudgetSec: config.video.minTimeBudgetSec * RETRY_BUDGET_FACTOR,
+        },
+      };
     }
 
     if (!this.#exists(id)) return;

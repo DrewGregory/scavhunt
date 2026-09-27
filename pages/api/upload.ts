@@ -2,8 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 import { PutObjectAclCommand } from "@aws-sdk/client-s3";
 import { prisma } from "../../lib/prisma";
-import { requireApiUser } from "../../lib/auth";
-import { requireHuntStartedApi } from "../../lib/time";
+import { requireApiUser, requireHuntAccessApi } from "../../lib/auth";
 import { getSpacesConfig } from "../../lib/s3";
 import { parseJsonBody } from "../../lib/serialize";
 import type { SubmissionResponseBody } from "../../lib/types";
@@ -35,7 +34,7 @@ export default async function handler(
   const user = await requireApiUser(req, res);
   if (!user) return;
 
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   if (!user.teamId) {
     return respond(400, {
@@ -73,7 +72,7 @@ export default async function handler(
   if (note == null || note === "") {
     return respond(400, {
       status: "error",
-      message: "Please provide a note",
+      message: "Please title your submission",
     });
   }
 

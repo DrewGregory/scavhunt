@@ -12,8 +12,7 @@ import {
 } from "@chakra-ui/react";
 import { FaVideo } from "react-icons/fa";
 import { useRouter } from "next/router";
-import { requireUserSSP } from "../lib/auth";
-import { requireHuntStartedSSP } from "../lib/time";
+import { requireUserSSP, requireHuntAccessSSP } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 import { getTeamScore } from "../lib/scoring";
 import { formatPhoneDisplay } from "../lib/phone";
@@ -52,7 +51,7 @@ export const getServerSideProps = async (
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
 
-  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  const huntRedirect = await requireHuntAccessSSP(auth.user);
   if (huntRedirect) return { redirect: huntRedirect };
 
   const user = auth.user!;

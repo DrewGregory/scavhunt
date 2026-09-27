@@ -22,8 +22,7 @@ import { parseISO } from "date-fns";
 import { useRouter } from "next/router";
 import { ChevronDownIcon } from "@chakra-ui/icons";
 import { LuMap, LuTrophy } from "react-icons/lu";
-import { requireHuntStartedSSP } from "../lib/time";
-import { requireUserSSP } from "../lib/auth";
+import { requireUserSSP, requireHuntAccessSSP } from "../lib/auth";
 import {
   getLeaderboardPayload,
   type ClaimedNeighborhood,
@@ -45,7 +44,7 @@ export const getServerSideProps = async (
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
 
-  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  const huntRedirect = await requireHuntAccessSSP(auth.user);
   if (huntRedirect) return { redirect: huntRedirect };
 
   return { props: await getLeaderboardPayload() };
@@ -310,6 +309,8 @@ export default function Page(initial: LeaderboardPayload) {
     (max, r) => Math.max(max, r.neighborhoodsHeld),
     0,
   );
+  const heldYMax = Math.max(3, maxHeld + 1);
+  const heldTickValues = Array.from({ length: heldYMax + 1 }, (_, i) => i);
 
   const maxDate =
     new Date() < startTime
@@ -325,7 +326,7 @@ export default function Page(initial: LeaderboardPayload) {
         label: t.name,
         emoji: t.emoji,
         color: t.color,
-        primary: `${t.pts} pts`,
+        primary: `${t.earned} pts`,
       })),
     [teamsSortedbyPts],
   );
@@ -465,7 +466,8 @@ export default function Page(initial: LeaderboardPayload) {
               yScale={{
                 type: "linear",
                 min: 0,
-                max: Math.max(3, maxHeld + 1),
+                max: heldYMax,
+                nice: false,
                 stacked: false,
                 reverse: false,
               }}
@@ -489,6 +491,7 @@ export default function Page(initial: LeaderboardPayload) {
                 legendOffset: -40,
                 legendPosition: "middle",
                 truncateTickAt: 0,
+                tickValues: heldTickValues,
               }}
               pointSize={0}
               colors={{ scheme: "set3" }}
@@ -516,13 +519,10 @@ export default function Page(initial: LeaderboardPayload) {
               members: row.members,
               claimedNeighborhoods: row.claimedNeighborhoods,
               primary: String(row.neighborhoodsHeld),
-              secondary:
-                row.neighborhoodsHeld > 0 || row.totalDeposited > 0
-                  ? `${row.totalDeposited} pts`
-                  : `${row.bankPts} in bank`,
+              secondary: `${row.bankPts}/${row.earned}`,
             }))}
             primaryHeader="Held"
-            secondaryHeader="Deposited"
+            secondaryHeader="Bank / earned"
             expandedId={expandedId}
             onToggle={toggleExpand}
             showNeighborhoods
@@ -536,7 +536,7 @@ export default function Page(initial: LeaderboardPayload) {
             Points
           </Heading>
           <Text fontSize="sm" color="gray.600" mb={3}>
-            Score = points earned − points deposited into neighborhoods
+            Total points earned from accepted challenges
             {territoryEnabled ? " (tiebreaker only)." : "."}
           </Text>
           <Podium items={pointsPodium} />
@@ -549,14 +549,9 @@ export default function Page(initial: LeaderboardPayload) {
               color: t.color || "gray.300",
               members: t.members,
               claimedNeighborhoods: t.claimedNeighborhoods,
-              primary: String(t.pts),
-              secondary:
-                t.deposited > 0
-                  ? `earned ${t.earned} · spent ${t.deposited}`
-                  : undefined,
+              primary: String(t.earned),
             }))}
-            primaryHeader="Score"
-            secondaryHeader="Breakdown"
+            primaryHeader="Pts"
             expandedId={expandedId}
             onToggle={toggleExpand}
             showNeighborhoods={territoryEnabled}
@@ -587,11 +582,12 @@ function LeaderboardTable({
     secondary?: string;
   }>;
   primaryHeader: string;
-  secondaryHeader: string;
+  secondaryHeader?: string;
   expandedId: string | null;
   onToggle: (id: string) => void;
   showNeighborhoods: boolean;
 }) {
+  const colCount = secondaryHeader ? 5 : 4;
   return (
     <Box
       bg="white"
@@ -608,13 +604,15 @@ function LeaderboardTable({
             <Th isNumeric whiteSpace="nowrap">
               {primaryHeader}
             </Th>
-            <Th
-              isNumeric
-              whiteSpace="nowrap"
-              display={{ base: "none", md: "table-cell" }}
-            >
-              {secondaryHeader}
-            </Th>
+            {secondaryHeader && (
+              <Th
+                isNumeric
+                whiteSpace="nowrap"
+                display={{ base: "none", md: "table-cell" }}
+              >
+                {secondaryHeader}
+              </Th>
+            )}
             <Th w="36px" px={1} />
           </Tr>
         </Thead>
@@ -658,16 +656,18 @@ function LeaderboardTable({
                   >
                     {row.primary}
                   </Td>
-                  <Td
-                    isNumeric
-                    whiteSpace="nowrap"
-                    verticalAlign="top"
-                    color="gray.600"
-                    fontSize="sm"
-                    display={{ base: "none", md: "table-cell" }}
-                  >
-                    {row.secondary ?? "—"}
-                  </Td>
+                  {secondaryHeader && (
+                    <Td
+                      isNumeric
+                      whiteSpace="nowrap"
+                      verticalAlign="top"
+                      color="gray.600"
+                      fontSize="sm"
+                      display={{ base: "none", md: "table-cell" }}
+                    >
+                      {row.secondary ?? "—"}
+                    </Td>
+                  )}
                   <Td px={1} verticalAlign="top">
                     <ChevronDownIcon
                       w={4}
@@ -680,7 +680,7 @@ function LeaderboardTable({
                 </Tr>
                 <Tr>
                   <Td
-                    colSpan={5}
+                    colSpan={colCount}
                     p={0}
                     borderBottomWidth={open ? undefined : 0}
                   >

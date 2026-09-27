@@ -25,8 +25,7 @@ import { useRouter } from "next/router";
 import NavContainer from "../components/NavContainer";
 import DataList from "../components/dataList/DataList";
 import DataListToolbar from "../components/dataList/DataListToolbar";
-import { publicUser, requireUserSSP } from "../lib/auth";
-import { requireHuntStartedSSP } from "../lib/time";
+import { publicUser, requireUserSSP, requireHuntAccessSSP } from "../lib/auth";
 import { loadPlayerMapPayload } from "../lib/mapPayload";
 import { findNeighborhoodAt } from "../lib/geo";
 import { neighborhoodEmoji } from "../lib/neighborhoodEmoji";
@@ -82,7 +81,7 @@ export const getServerSideProps = async (
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
 
-  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  const huntRedirect = await requireHuntAccessSSP(auth.user);
   if (huntRedirect) return { redirect: huntRedirect };
 
   const mapPayload = await loadPlayerMapPayload(auth.user);
@@ -535,7 +534,7 @@ export default function ChallengesPage({
         {selectedTerritoryNeighborhood.contested
           ? "Contested"
           : selectedTerritoryNeighborhood.claimedBy
-            ? `Claimed by ${selectedTerritoryNeighborhood.claimedBy.teamEmoji} ${selectedTerritoryNeighborhood.claimedBy.teamName} (${selectedTerritoryNeighborhood.claimedBy.points} pts)`
+            ? `${selectedTerritoryNeighborhood.claimedBy.teamEmoji} ${selectedTerritoryNeighborhood.claimedBy.teamName} (${selectedTerritoryNeighborhood.claimedBy.points} pts)`
             : "Unclaimed"}
       </Text>
       {selectedTerritoryNeighborhood.totals.length > 0 && (
@@ -673,10 +672,11 @@ export default function ChallengesPage({
               <DrawerHeader pr={12}>
                 <Heading size="md" noOfLines={2}>
                   {selectedTerritoryNeighborhood
-                    ? `${neighborhoodEmoji(
-                        selectedTerritoryNeighborhood.name,
-                        selectedTerritoryNeighborhood.emoji,
-                      )} ${selectedTerritoryNeighborhood.name}`
+                    ? selectedTerritoryNeighborhood.claimedBy
+                      ? `${selectedTerritoryNeighborhood.claimedBy.teamEmoji} ${selectedTerritoryNeighborhood.name}`
+                      : selectedTerritoryNeighborhood.contested
+                        ? `~ ${selectedTerritoryNeighborhood.name}`
+                        : selectedTerritoryNeighborhood.name
                     : ""}
                 </Heading>
               </DrawerHeader>

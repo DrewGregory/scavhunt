@@ -1,5 +1,5 @@
 import { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
-import { Badge, Box, Heading, Text } from "@chakra-ui/react";
+import { Badge, Box, Text } from "@chakra-ui/react";
 import { useMemo, useState } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
 import NavContainer from "../components/NavContainer";
@@ -8,8 +8,7 @@ import {
   AnnouncementGotItButton,
   AnnouncementPlayerShell,
 } from "../components/AnnouncementPlayerShell";
-import { requireUserSSP } from "../lib/auth";
-import { requireHuntStartedSSP } from "../lib/time";
+import { requireUserSSP, requireHuntAccessSSP } from "../lib/auth";
 import {
   listPublishedAnnouncements,
   serializeAnnouncement,
@@ -31,7 +30,7 @@ export const getServerSideProps = async (
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
 
-  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  const huntRedirect = await requireHuntAccessSSP(auth.user);
   if (huntRedirect) return { redirect: huntRedirect };
 
   const rows = await listPublishedAnnouncements();
@@ -95,9 +94,6 @@ export default function AnnouncementsPage({
 
   return (
     <NavContainer title="Announcements">
-      <Heading size="md" mb={1} color="gray.800">
-        Announcements
-      </Heading>
       <Text fontSize="sm" color="gray.600" mb={4}>
         Messages from hunt organizers. Tap one to read it again.
       </Text>

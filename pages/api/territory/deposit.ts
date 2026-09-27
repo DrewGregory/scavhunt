@@ -2,13 +2,13 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../../lib/prisma";
-import { assertSameOrigin, requireApiUser } from "../../../lib/auth";
+import { assertSameOrigin, requireApiUser, requireHuntAccessApi } from "../../../lib/auth";
 import { parseJsonBody } from "../../../lib/serialize";
 import { jsonError } from "../../../lib/http";
 import { assertTerritoryEnabled } from "../../../lib/territoryGate";
 import { findNeighborhoodAt } from "../../../lib/geo";
 import { getStandings } from "../../../lib/territory";
-import { getHuntSettings, requireHuntStartedApi } from "../../../lib/time";
+import { getHuntSettings } from "../../../lib/time";
 import { scoreFromParts } from "../../../lib/scoring";
 
 const MAX_ACCURACY_M = 200;
@@ -35,7 +35,7 @@ export default async function handler(
   const user = await requireApiUser(req, res);
   if (!user) return;
 
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   if (!(await assertTerritoryEnabled(res, user))) return;
 

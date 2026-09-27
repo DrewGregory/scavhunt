@@ -80,6 +80,7 @@ export default function DataListToolbar({
       position="sticky"
       top={0}
       zIndex={5}
+      isolation="isolate"
       bg="white"
       mx={{ base: -4, md: 0 }}
       px={{ base: 4, md: 0 }}
@@ -89,8 +90,18 @@ export default function DataListToolbar({
       borderBottomWidth={scrolled ? "1px" : "0"}
       borderColor="gray.100"
       transition="border-color 0.15s ease"
+      sx={{ transform: "translateZ(0)" }}
     >
-      <VStack align="stretch" spacing={2}>
+      {/* Opaque underlay — sticky bg alone can fail to cover scrolling rows
+          in the gaps between search / sort / filter chips. */}
+      <Box
+        aria-hidden
+        position="absolute"
+        inset={0}
+        bg="white"
+        pointerEvents="none"
+      />
+      <VStack align="stretch" spacing={2} position="relative">
         <Input
           placeholder={searchPlaceholder}
           value={search}

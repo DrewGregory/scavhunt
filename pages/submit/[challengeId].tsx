@@ -4,8 +4,7 @@ import { GetServerSideProps, InferGetServerSidePropsType } from "next";
 import NavContainer from "../../components/NavContainer";
 import dynamic from "next/dynamic";
 import { prisma } from "../../lib/prisma";
-import { requireUserSSP } from "../../lib/auth";
-import { requireHuntStartedSSP } from "../../lib/time";
+import { requireUserSSP, requireHuntAccessSSP } from "../../lib/auth";
 
 const MediaUploadForm = dynamic(
   () => import("../../components/MediaUploadForm"),
@@ -18,7 +17,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
 
-  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  const huntRedirect = await requireHuntAccessSSP(auth.user);
   if (huntRedirect) return { redirect: huntRedirect };
 
   const challengeId = context.query.challengeId;

@@ -3,8 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { PutObjectAclCommand } from "@aws-sdk/client-s3";
 import { prisma } from "../../lib/prisma";
-import { requireApiUser } from "../../lib/auth";
-import { requireHuntStartedApi } from "../../lib/time";
+import { requireApiUser, requireHuntAccessApi } from "../../lib/auth";
 import { getSpacesConfig } from "../../lib/s3";
 import { parseJsonBody } from "../../lib/serialize";
 import type { SubmissionResponseBody } from "../../lib/types";
@@ -36,7 +35,7 @@ export default async function handler(
   const user = await requireApiUser(req, res);
   if (!user) return;
 
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   const attemptId = attemptIdFromHeaders(req.headers);
   const validationFailed = (message: string, meta?: Record<string, unknown>) =>

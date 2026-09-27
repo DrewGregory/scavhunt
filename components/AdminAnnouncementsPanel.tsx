@@ -236,8 +236,7 @@ export default function AdminAnnouncementsPanel({
 
   return (
     <VStack align="stretch" spacing={6}>
-      <HStack justify="space-between" align="center" flexWrap="wrap" gap={3}>
-        <Heading size="md">Announcements</Heading>
+      <HStack justify="flex-end" align="center" flexWrap="wrap" gap={3}>
         <Button colorScheme="blue" onClick={openCreate}>
           New announcement
         </Button>

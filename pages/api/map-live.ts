@@ -1,11 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../lib/prisma";
-import { requireApiUser } from "../../lib/auth";
+import { requireApiUser, requireHuntAccessApi } from "../../lib/auth";
 import { listEnabledChallengesWithSubs } from "../../lib/challengeFavorites";
 import { isTerritoryEnabled } from "../../lib/territoryGate";
 import { getStandings } from "../../lib/territory";
 import { getTeamScore } from "../../lib/scoring";
-import { requireHuntStartedApi } from "../../lib/time";
 import type { LatestTeamLocation } from "../../lib/types";
 
 /**
@@ -18,7 +17,7 @@ export default async function handler(
 ) {
   const user = await requireApiUser(req, res);
   if (!user) return;
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });

@@ -127,7 +127,9 @@ export default function DataList<T>({
                         key={cell.id}
                         py={3}
                         px={3}
-                        verticalAlign="top"
+                        verticalAlign={
+                          meta?.isAction || meta?.numeric ? "middle" : "top"
+                        }
                         isNumeric={meta?.numeric}
                         whiteSpace={meta?.numeric ? "nowrap" : undefined}
                         display={

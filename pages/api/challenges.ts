@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { requireApiUser } from "../../lib/auth";
+import { requireApiUser, requireHuntAccessApi } from "../../lib/auth";
 import { listEnabledChallengesWithSubs } from "../../lib/challengeFavorites";
-import { requireHuntStartedApi } from "../../lib/time";
 
 /** Live challenges list (+ team favorite flags) for polling. */
 export default async function handler(
@@ -10,7 +9,7 @@ export default async function handler(
 ) {
   const user = await requireApiUser(req, res);
   if (!user) return;
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });

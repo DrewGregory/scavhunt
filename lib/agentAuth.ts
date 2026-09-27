@@ -32,7 +32,9 @@ export function requireAdminApiKey(
   req: NextApiRequest,
   res: NextApiResponse,
 ): boolean {
-  const expected = process.env.ADMIN_API_KEY?.trim();
+  const expected =
+    process.env.ADMIN_API_KEY?.trim() ||
+    process.env.SCAVHUNT_API_KEY?.trim();
   if (!expected) {
     res.status(503).json({ error: "ADMIN_API_KEY is not configured" });
     return false;

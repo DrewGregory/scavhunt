@@ -34,6 +34,7 @@ import { useRouter } from "next/router";
 import { useSession } from "./useSession";
 import Image from "next/image";
 import { AnnouncementModal } from "./AnnouncementModal";
+import { LocationPermissionProvider } from "./LocationPermissionPrompt";
 
 interface LinkItemProps {
   name: string;
@@ -117,12 +118,16 @@ export default function NavContainer({
   };
 
   const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
+  const locationPromptActive = Boolean(
+    session?.user.teamId || session?.team,
+  );
 
   return (
-    <Box
-      height="100dvh"
-      bg={bgColor ? bgColor : useColorModeValue("gray.100", "gray.900")}
-    >
+    <LocationPermissionProvider active={locationPromptActive}>
+      <Box
+        height="100dvh"
+        bg={bgColor ? bgColor : useColorModeValue("gray.100", "gray.900")}
+      >
       <SidebarContent
         title={"Scavhunt"}
         onClose={() => onClose}
@@ -207,7 +212,8 @@ export default function NavContainer({
         {children}
       </Box>
       {session?.user ? <AnnouncementModal /> : null}
-    </Box>
+      </Box>
+    </LocationPermissionProvider>
   );
 }
 
@@ -489,6 +495,8 @@ const MobileNav = ({
       borderBottomColor={useColorModeValue("gray.200", "gray.700")}
       justifyContent="flex-start"
       gap={2}
+      position="relative"
+      zIndex={6}
       {...rest}
     >
       <IconButton

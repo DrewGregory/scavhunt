@@ -49,6 +49,7 @@ type PreprocessInfo = {
 };
 
 const CONFIG_TIMEOUT_MS = 4000;
+const BIG_FILE_BYTES = 500 * 1024 * 1024;
 const POSTER_WAIT_MS = 10_000;
 
 let configPromise: Promise<UploadConfig> | null = null;
@@ -103,6 +104,8 @@ export default function MediaUploadForm({
   const [fileStatus, setFileStatus] = useState<FileStatus | null>(null);
   const [mediaURL, setMediaURL] = useState<string>("");
   const [preprocess, setPreprocess] = useState<PreprocessInfo | null>(null);
+  const [fileBytes, setFileBytes] = useState<number | null>(null);
+  const [timedOutIds, setTimedOutIds] = useState<string[]>([]);
   const posterRef = useRef<Promise<string | null> | null>(null);
   const { challengeId } = formData;
 
@@ -111,7 +114,7 @@ export default function MediaUploadForm({
     let created: Uploader | null = null;
     void loadUploadConfig().then((config) => {
       if (cancelled) return;
-      created = createUploader({ config, challengeId, webcam: true });
+      created = createUploader({ config, challengeId, webcam: true, promptOnCompressTimeout: true });
       setUploader(created);
     });
     return () => {
@@ -130,11 +133,13 @@ export default function MediaUploadForm({
       setFileStatus(null);
       setMediaURL("");
       setPreprocess(null);
+      setFileBytes(null);
       posterRef.current = null;
     };
     const handleFileAdded = (file: UppyFile<Meta, Body>) => {
       reset();
       setFileId(file.id);
+      setFileBytes(file.size ?? null);
       setFileStatus("processing");
       setResult(null);
     };
@@ -164,8 +169,10 @@ export default function MediaUploadForm({
     uppy.on("upload-start", handleUploadStart);
     uppy.on("upload-success", handleUploadSuccess);
     uppy.on("upload-error", handleUploadError);
+    const unsubscribeTimeouts = uploader.compressor.subscribeTimeouts(setTimedOutIds);
 
     return () => {
+      unsubscribeTimeouts();
       uppy.off("file-added", handleFileAdded);
       uppy.off("file-removed", reset);
       uppy.off("preprocess-progress", handlePreprocessProgress);
@@ -211,7 +218,7 @@ export default function MediaUploadForm({
     }
 
     if (showNoteField && noteRequired && !note.trim()) {
-      setResult({ success: false, message: "Please provide a note." });
+      setResult({ success: false, message: "Please title your submission." });
       return;
     }
 
@@ -274,9 +281,34 @@ export default function MediaUploadForm({
     fileId != null &&
     preprocess?.mode === "determinate" &&
     uploader.compressor.isCompressing(fileId);
+  const compressTimedOut = fileId != null && timedOutIds.includes(fileId);
 
   return (
       <VStack spacing={5} width="100%">
+
+      {showNoteField && (
+        <FormControl as="fieldset" width="100%" isRequired={noteRequired}>
+          <FormLabel
+            as="legend"
+            fontWeight="semibold"
+            color="gray.700"
+            mb={2}
+          >
+            Title your submission
+          </FormLabel>
+          <Input
+            type="text"
+            onChange={(e) => setNote(e.target.value)}
+            value={note}
+            placeholder="Something catchy for the feed"
+            borderRadius="md"
+            _focus={{ borderColor: "blue.400", boxShadow: "0 0 0 1px var(--chakra-colors-blue-400)" }}
+          />
+          <FormHelperText fontSize="sm" color="gray.600">
+            Shown with your video on the feed — give it a fun title.
+          </FormHelperText>
+        </FormControl>
+      )}
       
       <FormControl as="fieldset" width="100%">
         <FormLabel 
@@ -335,6 +367,35 @@ export default function MediaUploadForm({
             />
           </Box>
         )}
+        {compressTimedOut && (
+          <Alert status="info" borderRadius="md" mt={3} flexDirection="column" alignItems="stretch" gap={2}>
+            <Text fontSize="sm">
+              Compression took too long. Try again with more time, or upload the full-size video.
+            </Text>
+            <HStack spacing={2} justify="flex-end">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => fileId && uploader?.compressor.resolveTimeout(fileId, "original")}
+              >
+                Upload full size
+              </Button>
+              <Button
+                size="sm"
+                colorScheme="blue"
+                onClick={() => fileId && uploader?.compressor.resolveTimeout(fileId, "retry")}
+              >
+                Retry with more time
+              </Button>
+            </HStack>
+          </Alert>
+        )}
+        {fileBytes != null && fileBytes > BIG_FILE_BYTES && (
+          <Alert status="warning" borderRadius="md" mt={3} fontSize="sm">
+            Hey, this is a big video. Give it a try, but no promises. If it doesn&apos;t work, try making it
+            smaller or feel free to message one of the hosts and send them the video through text.
+          </Alert>
+        )}
       </FormControl>
 
       {showSkipUpload && (
@@ -355,26 +416,6 @@ export default function MediaUploadForm({
               {skipUploadHelperText}
             </FormHelperText>
           )}
-        </FormControl>
-      )}
-
-      {showNoteField && (
-        <FormControl as="fieldset" width="100%">
-          <FormLabel 
-            as="legend"
-            fontWeight="semibold"
-            color="gray.700"
-            mb={2}
-          >
-            Add note
-          </FormLabel>
-          <Input
-            type="text"
-            onChange={(e) => setNote(e.target.value)}
-            value={note}
-            borderRadius="md"
-            _focus={{ borderColor: "blue.400", boxShadow: "0 0 0 1px var(--chakra-colors-blue-400)" }}
-          />
         </FormControl>
       )}
 

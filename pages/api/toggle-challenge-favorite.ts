@@ -1,9 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
-import { assertSameOrigin, requireApiUser } from "../../lib/auth";
+import { assertSameOrigin, requireApiUser, requireHuntAccessApi } from "../../lib/auth";
 import { toggleChallengeFavorite } from "../../lib/challengeFavorites";
 import { jsonError } from "../../lib/http";
-import { requireHuntStartedApi } from "../../lib/time";
 
 const bodySchema = z.object({
   challengeId: z.string().min(1),
@@ -16,7 +15,7 @@ export default async function handler(
 ) {
   const user = await requireApiUser(req, res);
   if (!user) return;
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });

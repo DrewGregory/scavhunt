@@ -80,6 +80,8 @@ export default async function handler(
           intent === "playing" ? competitiveness!.trim() : null,
         timeCommitment:
           intent === "playing" ? timeCommitment!.trim() : null,
+        // Browsers need admin approval (isActive) before entering the hunt app.
+        isActive: intent === "playing",
         surveyCompletedAt: new Date(),
       },
     });
@@ -87,6 +89,7 @@ export default async function handler(
     return res.status(200).json({
       ok: true,
       intent: updated.intent,
+      isActive: updated.isActive,
       teamPreferences: updated.teamPreferences,
       competitiveness: updated.competitiveness,
       timeCommitment: updated.timeCommitment,

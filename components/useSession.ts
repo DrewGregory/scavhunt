@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import type { PublicUser } from "../lib/auth";
+import { useLocationPermission } from "./useLocationPermission";
 
 export type SessionData = {
   user: PublicUser;
@@ -20,9 +21,9 @@ async function postTeamLocation(location?: { lat: number; lng: number }) {
 export const useSession = (): SessionData | null => {
   const router = useRouter();
   const [session, setSession] = useState<SessionData | null>(null);
+  const { state: locationPermission } = useLocationPermission();
 
   useEffect(() => {
-    let watchId: number | null = null;
     let cancelled = false;
 
     (async () => {
@@ -38,43 +39,50 @@ export const useSession = (): SessionData | null => {
       }
       if (cancelled) return;
       setSession({ user: data.user, team: data.team ?? data.user.team });
-
-      const disableTracking =
-        process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING === "true" ||
-        process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING === "1";
-
-      if (
-        !disableTracking &&
-        data.user.teamId &&
-        typeof navigator !== "undefined" &&
-        navigator.geolocation
-      ) {
-        watchId = navigator.geolocation.watchPosition(
-          (pos) => {
-            void postTeamLocation({
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-            });
-          },
-          () => {
-            /* permission denied / unavailable — ignore */
-          },
-          {
-            enableHighAccuracy: false,
-            maximumAge: 60_000,
-            timeout: 15_000,
-          },
-        );
-      }
     })();
 
     return () => {
       cancelled = true;
-      if (watchId != null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchId);
-      }
     };
   }, [router]);
+
+  // Only start GPS watch after permission is granted — never prompt on load.
+  useEffect(() => {
+    const disableTracking =
+      process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING === "true" ||
+      process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING === "1";
+
+    if (
+      disableTracking ||
+      locationPermission !== "granted" ||
+      !session?.user.teamId ||
+      typeof navigator === "undefined" ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        void postTeamLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      },
+      () => {
+        /* permission revoked / unavailable — ignore */
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 60_000,
+        timeout: 15_000,
+      },
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [locationPermission, session?.user.teamId]);
 
   return session;
 };

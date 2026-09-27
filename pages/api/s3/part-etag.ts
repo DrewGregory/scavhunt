@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { HeadObjectCommand, ListPartsCommand } from "@aws-sdk/client-s3";
-import { requireApiUser } from "../../../lib/auth";
-import { requireHuntStartedApi } from "../../../lib/time";
+import { requireApiUser, requireHuntAccessApi } from "../../../lib/auth";
 import { getSpacesConfig } from "../../../lib/s3";
 
 /**
@@ -29,7 +28,7 @@ export default async function handler(
   const user = await requireApiUser(req, res);
   if (!user) return;
 
-  if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+  if (!(await requireHuntAccessApi(res, user))) return;
 
   const { key, uploadId, partNumber } = req.query;
   if (typeof key !== "string" || !key) {

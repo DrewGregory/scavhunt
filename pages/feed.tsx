@@ -27,8 +27,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { useSearchParams } from "next/navigation";
 import { formatDistance } from "date-fns";
 import { useRouter } from "next/router";
-import { publicUser, requireUserSSP } from "../lib/auth";
-import { requireHuntStartedSSP } from "../lib/time";
+import { publicUser, requireUserSSP, requireHuntAccessSSP } from "../lib/auth";
 import { getFeedPage } from "../lib/feedQuery";
 import { useFeed } from "../lib/feedClient";
 import {
@@ -80,6 +79,37 @@ const STATUS_FILTERS: FeedFilterId[] = [
   "statusRejected",
 ];
 
+function ordinal(n: number): string {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  if (mod10 === 1) return `${n}st`;
+  if (mod10 === 2) return `${n}nd`;
+  if (mod10 === 3) return `${n}rd`;
+  return `${n}th`;
+}
+
+/** Short standing for list rows, e.g. "4th of 5". */
+function submissionStandingShort(
+  number: number,
+  numWinners: number,
+): string {
+  return `${ordinal(number)} of ${numWinners}`;
+}
+
+/** Verbose standing for expanded detail. */
+function submissionStandingLong(
+  number: number,
+  challenge: FeedChallenge,
+  accepted: boolean,
+): string {
+  const place = `${ordinal(number)} submission of this challenge`;
+  if (accepted) {
+    return `${place} (out of ${challenge.numWinners})`;
+  }
+  return `${place} (${challenge.acceptedCount} accepted, ${challenge.pendingCount} pending out of ${challenge.numWinners})`;
+}
+
 const columnHelper = createColumnHelper<FeedItem>();
 
 
@@ -89,7 +119,7 @@ export const getServerSideProps = async (
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
 
-  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  const huntRedirect = await requireHuntAccessSSP(auth.user);
   if (huntRedirect) return { redirect: huntRedirect };
 
   const user = auth.user!;
@@ -537,7 +567,7 @@ export default function FeedPage({
                 {team.emoji} {team.name} ·{" "}
                 {formatDistance(new Date(s.createdAt), new Date())} ago
                 {!s.rejected && s.submissionNumber != null
-                  ? ` · #${s.submissionNumber}`
+                  ? ` · ${submissionStandingShort(s.submissionNumber, challenge.numWinners)}`
                   : ""}
               </Text>
             </Box>
@@ -837,10 +867,7 @@ const FeedExpandedDetail = memo(function FeedExpandedDetail({
         {!s.rejected && s.submissionNumber != null && (
           <>
             {" "}
-            · #{s.submissionNumber}
-            {s.accepted
-              ? ` of ${challenge.numWinners}`
-              : ` (${challenge.acceptedCount} accepted, ${challenge.pendingCount} pending / ${challenge.numWinners})`}
+            · {submissionStandingLong(s.submissionNumber, challenge, s.accepted)}
           </>
         )}
         {duration ? ` · ${duration}` : ""}

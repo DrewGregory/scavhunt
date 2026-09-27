@@ -12,6 +12,7 @@ import {
   decodeSession,
   sessionCookieOptions,
 } from "./session";
+import { requireHuntStartedApi, requireHuntStartedSSP } from "./time";
 
 export type UserWithTeam = User & { team: Team | null };
 
@@ -51,7 +52,8 @@ export async function getUserFromReq(
     where: { id: session.userId },
     include: { team: true },
   });
-  if (!user || !user.isActive || user.deletedAt) return null;
+  // Soft-deleted only — inactive browsers may still hold a session (home lock).
+  if (!user || user.deletedAt) return null;
 
   void prisma.user
     .update({
@@ -61,6 +63,43 @@ export async function getUserFromReq(
     .catch(() => undefined);
 
   return user;
+}
+
+/** Admins and active users may enter feed/challenges/etc. Inactive = pending browse approval. */
+export function canAccessHuntApp(user: {
+  isAdmin: boolean;
+  isActive: boolean;
+}): boolean {
+  return user.isAdmin || user.isActive;
+}
+
+/**
+ * Redirect home if inactive (non-admin) or if the hunt has not started.
+ * Call after requireUserSSP.
+ */
+export async function requireHuntAccessSSP(user: {
+  isAdmin: boolean;
+  isActive: boolean;
+}): Promise<{ destination: string; permanent: false } | null> {
+  if (!canAccessHuntApp(user)) {
+    return { destination: "/", permanent: false };
+  }
+  return requireHuntStartedSSP(user.isAdmin);
+}
+
+/**
+ * 403 if inactive (non-admin) or hunt not started.
+ * Returns true if the request should proceed.
+ */
+export async function requireHuntAccessApi(
+  res: NextApiResponse,
+  user: { isAdmin: boolean; isActive: boolean },
+): Promise<boolean> {
+  if (!canAccessHuntApp(user)) {
+    res.status(403).json({ error: "Account not approved yet" });
+    return false;
+  }
+  return requireHuntStartedApi(res, user.isAdmin);
 }
 
 export type RequireUserResult =
@@ -149,6 +188,7 @@ export function publicUser(user: UserWithTeam) {
     name: user.name,
     email: user.email,
     isAdmin: user.isAdmin,
+    isActive: user.isActive,
     teamId: user.teamId,
     team: user.team
       ? {

@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../lib/prisma";
-import { requireApiUser } from "../../lib/auth";
-import { requireHuntStartedApi } from "../../lib/time";
+import { requireApiUser, requireHuntAccessApi } from "../../lib/auth";
 
 export default async function handler(
   req: NextApiRequest,
@@ -15,7 +14,7 @@ export default async function handler(
     const user = await requireApiUser(req, res);
     if (!user) return;
 
-    if (!(await requireHuntStartedApi(res, user.isAdmin))) return;
+    if (!(await requireHuntAccessApi(res, user))) return;
 
     const favoriteCounts = await prisma.favorite.groupBy({
       by: ["submissionId"],

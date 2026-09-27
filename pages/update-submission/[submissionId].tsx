@@ -10,14 +10,13 @@ import { GetServerSideProps, InferGetServerSidePropsType } from "next";
 import NavContainer from "../../components/NavContainer";
 import MediaUploadForm from "../../components/MediaUploadForm";
 import { prisma } from "../../lib/prisma";
-import { requireUserSSP } from "../../lib/auth";
-import { requireHuntStartedSSP } from "../../lib/time";
+import { requireUserSSP, requireHuntAccessSSP } from "../../lib/auth";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const auth = await requireUserSSP(context);
   if (auth.redirect) return { redirect: auth.redirect };
 
-  const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
+  const huntRedirect = await requireHuntAccessSSP(auth.user);
   if (huntRedirect) return { redirect: huntRedirect };
 
   const user = auth.user;
@@ -195,7 +194,7 @@ export default function UpdateSubmission({
               buttonText={submission.mediaURL ? "Update" : "Upload"}
               showNoteField={true}
               initialNote={submission.note}
-              noteRequired={false}
+              noteRequired={true}
               showSkipUpload={false}
             />
           </Box>

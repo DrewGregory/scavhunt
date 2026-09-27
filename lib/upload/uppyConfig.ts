@@ -82,6 +82,8 @@ export type CreateUploaderOptions = {
   restrictions?: Partial<Restrictions>;
   autoProceed?: boolean;
   webcam?: boolean;
+  /** Pause on a compression timeout until `compressor.resolveTimeout` is called. */
+  promptOnCompressTimeout?: boolean;
 };
 
 export type Uploader = {
@@ -407,6 +409,7 @@ export function createUploader(opts: CreateUploaderOptions): Uploader {
     config,
     telemetryContext: (fileId) => telemetry(fileId),
     onProcessed: hooks.onProcessed,
+    promptOnTimeout: opts.promptOnCompressTimeout,
   });
 
   uppy.use(AwsS3, {

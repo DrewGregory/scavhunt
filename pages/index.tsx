@@ -16,7 +16,7 @@ import Link from "next/link";
 import { formatISO, parseISO } from "date-fns";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { getUserFromReq, publicUser } from "../lib/auth";
+import { canAccessHuntApp, getUserFromReq, publicUser } from "../lib/auth";
 import { getStartTime } from "../lib/time";
 import sfBg from "../public/sf_bg.webp";
 import { AuthModal } from "../components/AuthModal";
@@ -76,7 +76,11 @@ export default function HomePage({
       isOpen={surveyOpen}
       onClose={() => setSurveyOpen(false)}
       required={false}
-      onCompleted={() => setSurveyDone(true)}
+      onCompleted={() => {
+        setSurveyDone(true);
+        // Intent may flip isActive (browsers need approval) — refresh props.
+        void router.replace(router.asPath);
+      }}
     />
   ) : null;
 
@@ -298,57 +302,79 @@ export default function HomePage({
         >
           <VStack spacing={5}>
             <Heading size="xl">{scavengerHuntName}</Heading>
-            <Text fontSize="lg" opacity={0.95}>
-              {user
-                ? `Hey ${user.name} — the hunt is on.`
-                : "The scavenger hunt has started."}
-            </Text>
-            <HStack spacing={4} flexWrap="wrap" justify="center" pt={2}>
-              {user ? (
-                <>
-                  <Button as={Link} href="/feed" colorScheme="yellow" size="lg">
-                    Open feed
-                  </Button>
-                  <Button
-                    as={Link}
-                    href="/challenges"
-                    variant="outline"
-                    size="lg"
-                    color="white"
-                    borderColor="whiteAlpha.700"
-                  >
-                    Challenges
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    color="white"
-                    onClick={() => setSurveyOpen(true)}
-                  >
-                    {surveyDone ? "Edit survey" : "Player survey"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    colorScheme="yellow"
-                    size="lg"
-                    onClick={() => openAuth("login")}
-                  >
-                    Log in
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    color="white"
-                    borderColor="whiteAlpha.700"
-                    onClick={() => openAuth("signup")}
-                  >
-                    Sign up
-                  </Button>
-                </>
-              )}
-            </HStack>
+            {user && !canAccessHuntApp(user) ? (
+              <>
+                <Text fontSize="lg" opacity={0.95}>
+                  Hey {user.name}
+                  {user.intent === "browsing" ? " — you signed up to browse." : "."}
+                </Text>
+                <Text fontSize="md" opacity={0.95} px={2}>
+                  Tell an admin to approve you to see more.
+                </Text>
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  color="white"
+                  onClick={() => setSurveyOpen(true)}
+                >
+                  {surveyDone ? "Edit survey" : "Player survey"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Text fontSize="lg" opacity={0.95}>
+                  {user
+                    ? `Hey ${user.name} — the hunt is on.`
+                    : "The scavenger hunt has started."}
+                </Text>
+                <HStack spacing={4} flexWrap="wrap" justify="center" pt={2}>
+                  {user ? (
+                    <>
+                      <Button as={Link} href="/feed" colorScheme="yellow" size="lg">
+                        Open feed
+                      </Button>
+                      <Button
+                        as={Link}
+                        href="/challenges"
+                        variant="outline"
+                        size="lg"
+                        color="white"
+                        borderColor="whiteAlpha.700"
+                      >
+                        Challenges
+                      </Button>
+                      <Button
+                        size="lg"
+                        variant="ghost"
+                        color="white"
+                        onClick={() => setSurveyOpen(true)}
+                      >
+                        {surveyDone ? "Edit survey" : "Player survey"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        colorScheme="yellow"
+                        size="lg"
+                        onClick={() => openAuth("login")}
+                      >
+                        Log in
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        color="white"
+                        borderColor="whiteAlpha.700"
+                        onClick={() => openAuth("signup")}
+                      >
+                        Sign up
+                      </Button>
+                    </>
+                  )}
+                </HStack>
+              </>
+            )}
           </VStack>
         </Box>
       </Container>

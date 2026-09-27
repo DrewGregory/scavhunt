@@ -61,7 +61,7 @@ export default async function handler(
     user = await prisma.user.findUnique({ where: { phoneE164 } });
   }
 
-  if (!user || !user.isActive) {
+  if (!user || user.deletedAt) {
     return unrecognizedAuthError(res, channel === "email" ? "email" : "phone");
   }
 
