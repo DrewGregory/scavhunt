@@ -22,6 +22,7 @@ export default async function handler(
       filters,
       cursor,
       limit,
+      includeChallengePrompt: user.isAdmin,
     });
     res.setHeader("Cache-Control", "private, no-store");
     return res.status(200).json(page);

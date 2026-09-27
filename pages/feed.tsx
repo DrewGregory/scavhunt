@@ -128,11 +128,16 @@ export const getServerSideProps = async (
   const teamIdParam =
     typeof context.query.teamId === "string" ? context.query.teamId : null;
 
+  const feedOpts = {
+    includeChallengePrompt: user.isAdmin,
+  } as const;
+
   const [initialPage, tokInitialPage, pinnedPage, pinnedAnnouncementRow] =
     await Promise.all([
-      getFeedPage({ userId: user.id }),
+      getFeedPage({ userId: user.id, ...feedOpts }),
       getFeedPage({
         userId: user.id,
+        ...feedOpts,
         filters: {
           videoOnly: true,
           ...(teamIdParam ? { teamId: teamIdParam } : {}),
@@ -140,7 +145,12 @@ export const getServerSideProps = async (
         limit: TOK_PAGE_SIZE,
       }),
       submissionParam
-        ? getFeedPage({ userId: user.id, ids: [submissionParam], limit: 1 })
+        ? getFeedPage({
+            userId: user.id,
+            ...feedOpts,
+            ids: [submissionParam],
+            limit: 1,
+          })
         : Promise.resolve(null),
       getPinnedAnnouncement(),
     ]);
@@ -791,6 +801,7 @@ export default function FeedPage({
                         challenge={challenge}
                         queue={queue}
                         isOpen={selectedSubmission === s.id}
+                        isAdmin={isAdmin}
                       />
                     );
                   }}
@@ -827,6 +838,7 @@ type FeedExpandedProps = {
   challenge: FeedChallenge;
   queue: PreloadQueue;
   isOpen: boolean;
+  isAdmin: boolean;
 };
 
 const FeedExpandedDetail = memo(function FeedExpandedDetail({
@@ -836,6 +848,7 @@ const FeedExpandedDetail = memo(function FeedExpandedDetail({
   challenge,
   queue,
   isOpen,
+  isAdmin,
 }: FeedExpandedProps) {
   const mediaRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -894,6 +907,38 @@ const FeedExpandedDetail = memo(function FeedExpandedDetail({
         )}
         {duration ? ` · ${duration}` : ""}
       </Text>
+
+      {isAdmin && challenge.prompt?.trim() ? (
+        <Box>
+          <Text
+            fontSize="xs"
+            fontWeight="semibold"
+            color="gray.500"
+            textTransform="uppercase"
+            letterSpacing="wide"
+            mb={1}
+          >
+            Prompt
+          </Text>
+          <Text
+            fontSize="sm"
+            color="gray.700"
+            lineHeight="tall"
+            sx={{
+              "& a": {
+                color: "blue.600",
+                textDecoration: "underline",
+              },
+            }}
+            dangerouslySetInnerHTML={{
+              __html: challenge.prompt.replace(
+                /(https?:\/\/[^\s]+)/g,
+                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
+              ),
+            }}
+          />
+        </Box>
+      ) : null}
 
       {(isVideo || isImage) && (
         <Box

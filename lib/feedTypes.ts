@@ -28,6 +28,8 @@ export type FeedChallenge = {
   acceptedCount: number;
   pendingCount: number;
   totalCount: number;
+  /** Included for admins reviewing submissions in the feed. */
+  prompt?: string;
 };
 
 export type FeedPage = {

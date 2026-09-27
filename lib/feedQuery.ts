@@ -180,6 +180,8 @@ export async function getFeedPage(opts: {
   cursor?: string | null;
   limit?: number;
   ids?: string[];
+  /** When true, challenge objects include the full prompt (admin review). */
+  includeChallengePrompt?: boolean;
 }): Promise<FeedPage> {
   const filters = opts.filters ?? {};
   const limit = Math.min(opts.limit ?? FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT);
@@ -198,6 +200,7 @@ export async function getFeedPage(opts: {
           emoji: true,
           pts: true,
           numWinners: true,
+          ...(opts.includeChallengePrompt ? { prompt: true } : {}),
         },
       },
       favorites: { where: { userId: opts.userId }, select: { id: true } },
@@ -225,11 +228,17 @@ export async function getFeedPage(opts: {
     if (!challenges[s.challengeId]) {
       const st = stats.get(s.challengeId);
       challenges[s.challengeId] = {
-        ...s.challenge,
+        id: s.challenge.id,
+        title: s.challenge.title,
         emoji: s.challenge.emoji ?? null,
+        pts: s.challenge.pts,
+        numWinners: s.challenge.numWinners,
         acceptedCount: st?.accepted ?? 0,
         pendingCount: st?.pending ?? 0,
         totalCount: st?.total ?? 0,
+        ...(opts.includeChallengePrompt && "prompt" in s.challenge
+          ? { prompt: s.challenge.prompt }
+          : {}),
       };
     }
     const { team: _team, challenge: _challenge, favorites, _count, ...sub } = s;
