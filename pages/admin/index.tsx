@@ -24,7 +24,9 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import NavContainer from "../../components/NavContainer";
+import TeamColorPicker from "../../components/TeamColorPicker";
 import { publicUser, requireAdminSSP } from "../../lib/auth";
+import { DEFAULT_TEAM_COLOR } from "../../lib/teamColors";
 import type { SerializedChallenge, SerializedTeam } from "../../lib/types";
 import { formatPhoneDisplay } from "../../lib/phone";
 import AdminMapPanel from "../../components/AdminMapPanel";
@@ -879,26 +881,11 @@ export default function AdminPage({
         header: "Color",
         getSortValue: (t) => t.color || "",
         cell: (team) => (
-          <HStack>
-            <input
-              type="color"
-              value={team.color || "#3182CE"}
-              onChange={(e) =>
-                void handleTeamColorChange(team.id, e.target.value)
-              }
-              style={{
-                width: 36,
-                height: 28,
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-              }}
-              aria-label={`Color for ${team.name}`}
-            />
-            <Text fontSize="xs" color="gray.500">
-              {team.color || "#3182CE"}
-            </Text>
-          </HStack>
+          <TeamColorPicker
+            value={team.color || DEFAULT_TEAM_COLOR}
+            ariaLabel={`Color for ${team.name}`}
+            onChange={(color) => void handleTeamColorChange(team.id, color)}
+          />
         ),
       },
       {

@@ -168,10 +168,16 @@ function DetailRows({
   members,
   claimedNeighborhoods,
   showNeighborhoods,
+  bankPts,
+  earned,
 }: {
   members: TeamMember[];
   claimedNeighborhoods: ClaimedNeighborhood[];
   showNeighborhoods: boolean;
+  /** Spendable bank — neighborhoods board expand only. */
+  bankPts?: number;
+  /** All-time challenge points earned — neighborhoods board expand only. */
+  earned?: number;
 }) {
   return (
     <Box px={1} py={2}>
@@ -188,6 +194,22 @@ function DetailRows({
           </Text>
           {formatNeighborhoods(claimedNeighborhoods)}
         </Text>
+      )}
+      {bankPts != null && earned != null && (
+        <>
+          <Text fontSize="sm" color="gray.500" lineHeight="short" mt={1}>
+            <Text as="span" fontWeight="medium" color="gray.600">
+              Spendable:{" "}
+            </Text>
+            {bankPts}
+          </Text>
+          <Text fontSize="sm" color="gray.500" lineHeight="short" mt={1}>
+            <Text as="span" fontWeight="medium" color="gray.600">
+              All-time earned:{" "}
+            </Text>
+            {earned}
+          </Text>
+        </>
       )}
     </Box>
   );
@@ -506,7 +528,8 @@ export default function Page(initial: LeaderboardPayload) {
             Neighborhoods
           </Heading>
           <Text fontSize="sm" color="gray.600" mb={3}>
-            Ranked by neighborhoods held, then points earned.
+            Ranked by neighborhoods held, then points earned. Expand a row for
+            spendable and all-time points.
           </Text>
           <Podium items={territoryPodium} />
           <LeaderboardTable
@@ -519,13 +542,14 @@ export default function Page(initial: LeaderboardPayload) {
               members: row.members,
               claimedNeighborhoods: row.claimedNeighborhoods,
               primary: String(row.neighborhoodsHeld),
-              secondary: `${row.bankPts}/${row.earned}`,
+              bankPts: row.bankPts,
+              earned: row.earned,
             }))}
             primaryHeader="Held"
-            secondaryHeader="Bank / earned"
             expandedId={expandedId}
             onToggle={toggleExpand}
             showNeighborhoods
+            showPointBreakdown
           />
         </>
       )}
@@ -565,10 +589,10 @@ export default function Page(initial: LeaderboardPayload) {
 function LeaderboardTable({
   rows,
   primaryHeader,
-  secondaryHeader,
   expandedId,
   onToggle,
   showNeighborhoods,
+  showPointBreakdown = false,
 }: {
   rows: Array<{
     id: string;
@@ -579,15 +603,17 @@ function LeaderboardTable({
     members: TeamMember[];
     claimedNeighborhoods: ClaimedNeighborhood[];
     primary: string;
-    secondary?: string;
+    bankPts?: number;
+    earned?: number;
   }>;
   primaryHeader: string;
-  secondaryHeader?: string;
   expandedId: string | null;
   onToggle: (id: string) => void;
   showNeighborhoods: boolean;
+  /** Neighborhoods board: show spendable + all-time in the expand panel. */
+  showPointBreakdown?: boolean;
 }) {
-  const colCount = secondaryHeader ? 5 : 4;
+  const colCount = 4;
   return (
     <Box
       bg="white"
@@ -604,15 +630,6 @@ function LeaderboardTable({
             <Th isNumeric whiteSpace="nowrap">
               {primaryHeader}
             </Th>
-            {secondaryHeader && (
-              <Th
-                isNumeric
-                whiteSpace="nowrap"
-                display={{ base: "none", md: "table-cell" }}
-              >
-                {secondaryHeader}
-              </Th>
-            )}
             <Th w="36px" px={1} />
           </Tr>
         </Thead>
@@ -656,18 +673,6 @@ function LeaderboardTable({
                   >
                     {row.primary}
                   </Td>
-                  {secondaryHeader && (
-                    <Td
-                      isNumeric
-                      whiteSpace="nowrap"
-                      verticalAlign="top"
-                      color="gray.600"
-                      fontSize="sm"
-                      display={{ base: "none", md: "table-cell" }}
-                    >
-                      {row.secondary ?? "—"}
-                    </Td>
-                  )}
                   <Td px={1} verticalAlign="top">
                     <ChevronDownIcon
                       w={4}
@@ -690,6 +695,10 @@ function LeaderboardTable({
                           members={row.members}
                           claimedNeighborhoods={row.claimedNeighborhoods}
                           showNeighborhoods={showNeighborhoods}
+                          bankPts={
+                            showPointBreakdown ? row.bankPts : undefined
+                          }
+                          earned={showPointBreakdown ? row.earned : undefined}
                         />
                       </Box>
                     </Collapse>

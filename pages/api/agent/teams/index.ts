@@ -4,19 +4,7 @@ import { requireAdminApiKey, wantsIncludeDeleted, optionalCreatedAtSchema } from
 import { includeDeletedWhere } from "../../../../lib/softDelete";
 import { prisma } from "../../../../lib/prisma";
 import { parseJsonBody, serializeTeam } from "../../../../lib/serialize";
-
-const TEAM_COLORS = [
-  "#E53E3E",
-  "#DD6B20",
-  "#D69E2E",
-  "#38A169",
-  "#319795",
-  "#3182CE",
-  "#5A67D8",
-  "#805AD5",
-  "#D53F8C",
-  "#718096",
-] as const;
+import { TEAM_COLORS } from "../../../../lib/teamColors";
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(80),

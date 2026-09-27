@@ -4,19 +4,7 @@ import { prisma } from "../../../lib/prisma";
 import { assertSameOrigin, requireApiAdmin } from "../../../lib/auth";
 import { parseJsonBody, serializeTeam } from "../../../lib/serialize";
 import { jsonError } from "../../../lib/http";
-
-const TEAM_COLORS = [
-  "#E53E3E",
-  "#DD6B20",
-  "#D69E2E",
-  "#38A169",
-  "#319795",
-  "#3182CE",
-  "#5A67D8",
-  "#805AD5",
-  "#D53F8C",
-  "#718096",
-] as const;
+import { TEAM_COLORS } from "../../../lib/teamColors";
 
 const patchSchema = z.object({
   id: z.string().min(1),
