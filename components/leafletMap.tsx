@@ -5,7 +5,9 @@ import {
   MapContainer,
   Marker,
   Popup,
+  Tooltip,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 import { LatLngExpression, PathOptions, divIcon, type Path } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -22,8 +24,7 @@ import {
   VStack,
   useToast,
 } from "@chakra-ui/react";
-import { FiHeart, FiLayers } from "react-icons/fi";
-import { AiFillHeart } from "react-icons/ai";
+import { LuLayers } from "react-icons/lu";
 import { getPosition, type GeoFix } from "./useSession";
 import {
   centroidOf,
@@ -31,12 +32,21 @@ import {
   SF_CENTER,
   type GeoGeometry,
 } from "../lib/geo";
+import { neighborhoodEmoji } from "../lib/neighborhoodEmoji";
 import { DEFAULT_PLAYER_BASEMAP } from "../lib/mapBasemaps";
 import { BasemapTileLayer } from "./HuntMapShared";
 import {
   challengePinKind,
   makeChallengePinIcon,
 } from "../lib/challengePins";
+
+/** Show neighborhood name pills at this zoom and above (polygons always show). */
+const NEIGHBORHOOD_LABEL_MIN_ZOOM = 14;
+
+function canHover(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+}
 
 type ChallengeWithSubmissions = {
   id: string;
@@ -85,19 +95,178 @@ type Bank = {
   score: number;
 };
 
-function FlyToChallenge({
+function FlyToSelection({
   challenge,
+  neighborhood,
+  zoomChallengeId,
+  zoomNeighborhoodId,
+  onDeepLinkZoomConsumed,
 }: {
   challenge: ChallengeWithSubmissions | null;
+  neighborhood: TerritoryNeighborhood | null;
+  zoomChallengeId?: string | null;
+  zoomNeighborhoodId?: string | null;
+  onDeepLinkZoomConsumed?: (kind: "challenge" | "neighborhood") => void;
 }) {
   const map = useMap();
+  const lastChallengeId = useRef<string | null>(null);
+  const lastNeighborhoodId = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!challenge) return;
+    if (!challenge) {
+      lastChallengeId.current = null;
+      return;
+    }
+    if (lastChallengeId.current === challenge.id) return;
+    lastChallengeId.current = challenge.id;
     const lat = challenge.lat ?? SF_CENTER[0];
     const lng = challenge.lng ?? SF_CENTER[1];
-    map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
-  }, [map, challenge?.id, challenge?.lat, challenge?.lng]);
+    const shouldZoom = zoomChallengeId === challenge.id;
+    if (shouldZoom) {
+      map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+      onDeepLinkZoomConsumed?.("challenge");
+    } else {
+      map.panTo([lat, lng], { animate: true });
+    }
+  }, [
+    map,
+    challenge?.id,
+    challenge?.lat,
+    challenge?.lng,
+    zoomChallengeId,
+    onDeepLinkZoomConsumed,
+  ]);
+
+  useEffect(() => {
+    if (!neighborhood) {
+      lastNeighborhoodId.current = null;
+      return;
+    }
+    if (lastNeighborhoodId.current === neighborhood.id) return;
+    lastNeighborhoodId.current = neighborhood.id;
+    const fromBoundary =
+      neighborhood.boundary != null
+        ? centroidOf(neighborhood.boundary as GeoGeometry)
+        : null;
+    const lat = fromBoundary?.lat ?? neighborhood.centerLat;
+    const lng = fromBoundary?.lng ?? neighborhood.centerLng;
+    if (lat == null || lng == null) return;
+    const shouldZoom = zoomNeighborhoodId === neighborhood.id;
+    if (shouldZoom) {
+      map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+      onDeepLinkZoomConsumed?.("neighborhood");
+    } else {
+      map.panTo([lat, lng], { animate: true });
+    }
+  }, [
+    map,
+    neighborhood?.id,
+    neighborhood?.boundary,
+    neighborhood?.centerLat,
+    neighborhood?.centerLng,
+    zoomNeighborhoodId,
+    onDeepLinkZoomConsumed,
+  ]);
+
   return null;
+}
+
+function NeighborhoodLabelLayer({
+  neighborhoods,
+  standingsKey,
+  selectedNeighborhoodId,
+  onSelectNeighborhood,
+}: {
+  neighborhoods: TerritoryNeighborhood[];
+  standingsKey: string;
+  selectedNeighborhoodId?: string | null;
+  onSelectNeighborhood?: (id: string | null) => void;
+}) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+  const [hoverOk, setHoverOk] = useState(false);
+
+  useMapEvents({
+    zoomend: () => setZoom(map.getZoom()),
+    zoom: () => setZoom(map.getZoom()),
+  });
+
+  useEffect(() => {
+    setHoverOk(canHover());
+  }, []);
+
+  if (zoom < NEIGHBORHOOD_LABEL_MIN_ZOOM) return null;
+
+  return (
+    <>
+      {neighborhoods.map((n) => {
+        const fromBoundary =
+          n.boundary != null ? centroidOf(n.boundary as GeoGeometry) : null;
+        const lat = fromBoundary?.lat ?? n.centerLat;
+        const lng = fromBoundary?.lng ?? n.centerLng;
+        if (lat == null || lng == null) return null;
+        const borderColor =
+          selectedNeighborhoodId === n.id
+            ? "#2B6CB0"
+            : (n.claimedBy?.teamColor ?? "#CBD5E0");
+        const nEmoji = neighborhoodEmoji(n.name, n.emoji);
+        const label = n.claimedBy
+          ? `${n.claimedBy.teamEmoji} ${nEmoji} ${n.name}`
+          : n.contested
+            ? `~ ${nEmoji} ${n.name}`
+            : `${nEmoji} ${n.name}`;
+        const claimLine = n.contested
+          ? "Contested"
+          : n.claimedBy
+            ? `${n.claimedBy.teamEmoji} ${n.claimedBy.teamName} (${n.claimedBy.points})`
+            : "Unclaimed";
+        const totalsLine = n.totals
+          .slice(0, 5)
+          .map((t) => `${t.teamEmoji} ${t.teamName}: ${t.points}`)
+          .join(" · ");
+        return (
+          <Marker
+            key={`label-${n.id}-${standingsKey}`}
+            position={[lat, lng]}
+            icon={divIcon({
+              className: "neighborhood-label-icon",
+              html: `<div class="neighborhood-label-pill${
+                selectedNeighborhoodId === n.id ? " is-selected" : ""
+              }" style="border-color:${borderColor}">${label}</div>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 0],
+            })}
+            interactive
+            zIndexOffset={selectedNeighborhoodId === n.id ? 600 : 400}
+            eventHandlers={{
+              click: (e) => {
+                e.originalEvent.stopPropagation();
+                onSelectNeighborhood?.(n.id);
+              },
+            }}
+          >
+            {hoverOk && (
+              <Tooltip direction="top" offset={[0, -12]} opacity={0.95}>
+                <div>
+                  <strong>
+                    {nEmoji} {n.name}
+                  </strong>
+                  <br />
+                  {claimLine}
+                  {totalsLine ? (
+                    <>
+                      <br />
+                      {totalsLine}
+                    </>
+                  ) : null}
+                </div>
+              </Tooltip>
+            )}
+          </Marker>
+        );
+      })}
+    </>
+  );
 }
 
 export default function LeafletMap({
@@ -109,7 +278,12 @@ export default function LeafletMap({
   initialNeighborhoods = [],
   initialBank = null,
   selectedChallengeId = null,
+  selectedNeighborhoodId = null,
+  zoomChallengeId = null,
+  zoomNeighborhoodId = null,
+  onDeepLinkZoomConsumed,
   onSelectChallenge,
+  onSelectNeighborhood,
 }: {
   locations: Array<LatestTeamLocation>;
   challenges: Array<ChallengeWithSubmissions>;
@@ -120,7 +294,13 @@ export default function LeafletMap({
   initialNeighborhoods?: TerritoryNeighborhood[];
   initialBank?: Bank | null;
   selectedChallengeId?: string | null;
+  selectedNeighborhoodId?: string | null;
+  /** Deep-link ids that should zoom once on first selection. */
+  zoomChallengeId?: string | null;
+  zoomNeighborhoodId?: string | null;
+  onDeepLinkZoomConsumed?: (kind: "challenge" | "neighborhood") => void;
   onSelectChallenge?: (id: string | null) => void;
+  onSelectNeighborhood?: (id: string | null) => void;
 }) {
   const toast = useToast();
   const [liveChallenges, setLiveChallenges] = useState(challenges);
@@ -131,7 +311,6 @@ export default function LeafletMap({
   const [hideCompleted, setHideCompleted] = useState(true);
   const [hideFullChallenges, setHideFullChallenges] = useState(true);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
-  const [favBusyId, setFavBusyId] = useState<string | null>(null);
   /** Admin-only local toggle (does not change HuntSettings). */
   const [previewTerritory, setPreviewTerritory] = useState(
     () => territoryEnabled || isAdmin,
@@ -146,12 +325,17 @@ export default function LeafletMap({
   const [myFix, setMyFix] = useState<GeoFix | null>(null);
   const [locating, setLocating] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [hoverCapable, setHoverCapable] = useState(false);
   const myFixRef = useRef<GeoFix | null>(null);
   /** Only one neighborhood highlight at a time (fast mouse moves skip mouseout). */
   const highlightedLayerRef = useRef<{
     layer: Path;
     style: PathOptions;
   } | null>(null);
+
+  useEffect(() => {
+    setHoverCapable(canHover());
+  }, []);
 
   useEffect(() => {
     setLiveChallenges(challenges);
@@ -324,51 +508,6 @@ export default function LeafletMap({
     ? capacityFiltered.filter((c) => c.favorited)
     : capacityFiltered;
 
-  const toggleFavorite = async (challengeId: string) => {
-    if (!team) {
-      toast({ title: "Join a team to favorite challenges", status: "warning" });
-      return;
-    }
-    setFavBusyId(challengeId);
-    const prev = liveChallenges.find((c) => c.id === challengeId)?.favorited;
-    setLiveChallenges((list) =>
-      list.map((c) =>
-        c.id === challengeId ? { ...c, favorited: !c.favorited } : c,
-      ),
-    );
-    try {
-      const res = await fetch("/api/toggle-challenge-favorite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challengeId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setLiveChallenges((list) =>
-          list.map((c) =>
-            c.id === challengeId ? { ...c, favorited: Boolean(prev) } : c,
-          ),
-        );
-        toast({ title: data.error || "Favorite failed", status: "error" });
-        return;
-      }
-      setLiveChallenges((list) =>
-        list.map((c) =>
-          c.id === challengeId ? { ...c, favorited: Boolean(data.favorited) } : c,
-        ),
-      );
-    } catch {
-      setLiveChallenges((list) =>
-        list.map((c) =>
-          c.id === challengeId ? { ...c, favorited: Boolean(prev) } : c,
-        ),
-      );
-      toast({ title: "Favorite failed", status: "error" });
-    } finally {
-      setFavBusyId(null);
-    }
-  };
-
   const standingsKey = useMemo(
     () =>
       neighborhoods
@@ -485,7 +624,7 @@ export default function LeafletMap({
       <Box position="absolute" top={4} right={4} zIndex={1000}>
         <IconButton
           aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
-          icon={<FiLayers />}
+          icon={<LuLayers />}
           size="md"
           colorScheme="blackAlpha"
           bg="white"
@@ -695,13 +834,22 @@ export default function LeafletMap({
         style={{ height: "100%", width: "100%" }}
       >
         <BasemapTileLayer basemap={DEFAULT_PLAYER_BASEMAP} />
-        <FlyToChallenge
+        <FlyToSelection
           challenge={
             selectedChallengeId
               ? (liveChallenges.find((c) => c.id === selectedChallengeId) ??
                 null)
               : null
           }
+          neighborhood={
+            selectedNeighborhoodId
+              ? (neighborhoods.find((n) => n.id === selectedNeighborhoodId) ??
+                null)
+              : null
+          }
+          zoomChallengeId={zoomChallengeId}
+          zoomNeighborhoodId={zoomNeighborhoodId}
+          onDeepLinkZoomConsumed={onDeepLinkZoomConsumed}
         />
         {territoryOn &&
           showNeighborhoods &&
@@ -712,55 +860,30 @@ export default function LeafletMap({
               properties: { id: n.id, name: n.name },
               geometry: n.boundary,
             };
+            const isSelected = selectedNeighborhoodId === n.id;
             return (
               <GeoJSON
-                key={`${n.id}-${standingsKey}-${currentNeighborhood?.id ?? "none"}`}
+                key={`${n.id}-${standingsKey}-${currentNeighborhood?.id ?? "none"}-${isSelected ? "sel" : ""}`}
                 data={feature as never}
-                style={() => styleFor(n)}
+                style={() => {
+                  const base = styleFor(n);
+                  if (!isSelected) return base;
+                  return {
+                    ...base,
+                    weight: Math.max(base.weight ?? 2, 3.5),
+                    fillOpacity: Math.min((base.fillOpacity ?? 0.35) + 0.15, 0.6),
+                  };
+                }}
                 onEachFeature={(_feat, layer) => {
                   const baseStyle = styleFor(n);
-                  const claimLabel = n.contested
-                    ? "Contested"
-                    : n.claimedBy
-                      ? `${n.claimedBy.teamEmoji} ${n.claimedBy.teamName} (${n.claimedBy.points})`
-                      : "Unclaimed";
-                  const totalsHtml = n.totals
-                    .slice(0, 5)
-                    .map(
-                      (t) =>
-                        `<div>${t.teamEmoji} ${t.teamName}: ${t.points}</div>`,
-                    )
-                    .join("");
-                  const hereNote =
-                    currentNeighborhood?.id === n.id
-                      ? "<br/><em>You are here</em>"
-                      : "";
-                  layer.bindPopup(
-                    `<strong>${n.emoji ?? ""} ${n.name}</strong><br/>${claimLabel}<br/>${totalsHtml || "<em>No deposits yet</em>"}${hereNote}`,
-                  );
-                  if (currentNeighborhood?.id === n.id) {
-                    // Keep "you are here" zone above neighbors for visibility
+                  if (currentNeighborhood?.id === n.id || isSelected) {
                     if (typeof (layer as Path).bringToFront === "function") {
                       (layer as Path).bringToFront();
                     }
                   }
                   layer.on({
-                    click: (e) => {
-                      const target = e.target as Path & {
-                        getBounds: () => import("leaflet").LatLngBounds;
-                      };
-                      const map = (e.target as { _map?: import("leaflet").Map })
-                        ._map;
-                      if (map && typeof target.getBounds === "function") {
-                        const bounds = target.getBounds();
-                        if (bounds.isValid()) {
-                          map.fitBounds(bounds, {
-                            padding: [40, 40],
-                            maxZoom: 15,
-                            animate: true,
-                          });
-                        }
-                      }
+                    click: () => {
+                      onSelectNeighborhood?.(n.id);
                     },
                     mouseover: (e) => {
                       const target = e.target as Path;
@@ -786,7 +909,17 @@ export default function LeafletMap({
                     },
                     mouseout: (e) => {
                       const target = e.target as Path;
-                      target.setStyle(baseStyle);
+                      const restore = isSelected
+                        ? {
+                            ...baseStyle,
+                            weight: Math.max(baseStyle.weight ?? 2, 3.5),
+                            fillOpacity: Math.min(
+                              (baseStyle.fillOpacity ?? 0.35) + 0.15,
+                              0.6,
+                            ),
+                          }
+                        : baseStyle;
+                      target.setStyle(restore);
                       if (highlightedLayerRef.current?.layer === target) {
                         highlightedLayerRef.current = null;
                       }
@@ -796,37 +929,14 @@ export default function LeafletMap({
               />
             );
           })}
-        {territoryOn &&
-          showNeighborhoods &&
-          neighborhoods.map((n) => {
-            const fromBoundary =
-              n.boundary != null
-                ? centroidOf(n.boundary as GeoGeometry)
-                : null;
-            const lat = fromBoundary?.lat ?? n.centerLat;
-            const lng = fromBoundary?.lng ?? n.centerLng;
-            if (lat == null || lng == null) return null;
-            const borderColor = n.claimedBy?.teamColor ?? "#CBD5E0";
-            const label = n.claimedBy
-              ? `${n.claimedBy.teamEmoji} ${n.name}`
-              : n.contested
-                ? `~ ${n.name}`
-                : n.name;
-            return (
-              <Marker
-                key={`label-${n.id}-${standingsKey}`}
-                position={[lat, lng]}
-                icon={divIcon({
-                  className: "neighborhood-label-icon",
-                  html: `<div class="neighborhood-label-pill" style="border-color:${borderColor}">${label}</div>`,
-                  iconSize: [0, 0],
-                  iconAnchor: [0, 0],
-                })}
-                interactive={false}
-                zIndexOffset={400}
-              />
-            );
-          })}
+        {territoryOn && showNeighborhoods && (
+          <NeighborhoodLabelLayer
+            neighborhoods={neighborhoods}
+            standingsKey={standingsKey}
+            selectedNeighborhoodId={selectedNeighborhoodId}
+            onSelectNeighborhood={onSelectNeighborhood}
+          />
+        )}
         {showChallenges &&
           filteredChallenges.map((c) => {
             const accepted = c.submissions.filter((s) => s.accepted).length;
@@ -857,45 +967,19 @@ export default function LeafletMap({
                   },
                 }}
               >
-                <Popup>
-                  <VStack align="stretch" spacing={2} minW="160px">
-                    <Text
-                      fontWeight="semibold"
-                      cursor="pointer"
-                      onClick={() => onSelectChallenge?.(c.id)}
-                    >
-                      {c.emoji ? `${c.emoji} ${c.title}` : c.title}
-                    </Text>
-                    <Text fontSize="xs" color="gray.600">
+                {hoverCapable && (
+                  <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
+                    <div>
+                      <strong>
+                        {c.emoji ? `${c.emoji} ${c.title}` : c.title}
+                      </strong>
+                      <br />
                       {accepted}/{c.numWinners} filled
                       {spotsLeft > 0 ? ` · ${spotsLeft} left` : " · full"}
                       {c.pts != null ? ` · ${c.pts} pts` : ""}
-                    </Text>
-                    {team && (
-                      <Button
-                        size="xs"
-                        leftIcon={
-                          c.favorited ? <AiFillHeart /> : <FiHeart />
-                        }
-                        colorScheme={c.favorited ? "pink" : "gray"}
-                        variant={c.favorited ? "solid" : "outline"}
-                        isLoading={favBusyId === c.id}
-                        onClick={() => void toggleFavorite(c.id)}
-                      >
-                        {c.favorited
-                          ? "Unfavorite for team"
-                          : "Favorite for team"}
-                      </Button>
-                    )}
-                    <Button
-                      size="xs"
-                      colorScheme="blue"
-                      onClick={() => onSelectChallenge?.(c.id)}
-                    >
-                      View details
-                    </Button>
-                  </VStack>
-                </Popup>
+                    </div>
+                  </Tooltip>
+                )}
               </Marker>
             );
           })}

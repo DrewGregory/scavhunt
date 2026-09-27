@@ -3,12 +3,20 @@ import {
   Badge,
   Box,
   Button,
+  Flex,
   FormControl,
   FormHelperText,
   FormLabel,
   Heading,
   HStack,
   Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   Table,
   Tbody,
   Td,
@@ -16,7 +24,9 @@ import {
   Textarea,
   Th,
   Thead,
+  Tooltip,
   Tr,
+  useDisclosure,
   VStack,
 } from "@chakra-ui/react";
 import { MarkdownBody } from "./MarkdownBody";
@@ -60,6 +70,9 @@ type AnnouncementRow = {
   metrics: Metrics;
 };
 
+const PIN_TOOLTIP =
+  "Pins a blue banner at the top of the feed so everyone sees it first. You can still open the full message from the announcements sidebar.";
+
 export default function AdminAnnouncementsPanel({
   onNotice,
 }: {
@@ -67,6 +80,7 @@ export default function AdminAnnouncementsPanel({
 }) {
   const [rows, setRows] = useState<AnnouncementRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const createModal = useDisclosure();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [creating, setCreating] = useState(false);
@@ -96,6 +110,16 @@ export default function AdminAnnouncementsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, [load]);
 
+  const resetCreateForm = () => {
+    setTitle("");
+    setBody("");
+  };
+
+  const openCreate = () => {
+    resetCreateForm();
+    createModal.onOpen();
+  };
+
   const create = async (publish: boolean) => {
     if (!title.trim() || !body.trim()) {
       onNotice("error", "Title and body are required");
@@ -117,8 +141,8 @@ export default function AdminAnnouncementsPanel({
         onNotice("error", data.error || "Failed to create");
         return;
       }
-      setTitle("");
-      setBody("");
+      resetCreateForm();
+      createModal.onClose();
       await load();
       onNotice(
         "success",
@@ -158,7 +182,11 @@ export default function AdminAnnouncementsPanel({
   };
 
   const archive = async (id: string) => {
-    if (!confirm("Archive this announcement? Players who have not seen it will stop seeing it.")) {
+    if (
+      !confirm(
+        "Archive this announcement? Players who have not seen it will stop seeing it.",
+      )
+    ) {
       return;
     }
     setBusyId(id);
@@ -193,41 +221,95 @@ export default function AdminAnnouncementsPanel({
 
   return (
     <VStack align="stretch" spacing={6}>
-      <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
-        <Heading size="md" mb={2}>
+      <HStack justify="space-between" align="center" flexWrap="wrap" gap={3}>
+        <Heading size="md">Announcements</Heading>
+        <Button colorScheme="blue" onClick={openCreate}>
           New announcement
-        </Heading>
-        <Text fontSize="sm" color="gray.600" mb={4}>
-          Draft first, then publish when ready. Published announcements block
-          the app until each player taps Got it. Dismissals are tracked
-          per-user so you can see coverage by team.
-        </Text>
-        <VStack align="stretch" spacing={3}>
-          <FormControl>
-            <FormLabel>Title</FormLabel>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Territory mode is live"
-              maxLength={200}
-            />
-          </FormControl>
-          <FormControl>
-            <FormLabel>Body (markdown)</FormLabel>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder={"**Territory is live**\n\n- Deposit points on the map\n- Most points wins the neighborhood"}
-              rows={6}
-              maxLength={20_000}
-              fontFamily="mono"
-              fontSize="sm"
-            />
-            <FormHelperText>
-              Supports markdown: bold, lists, links, headings.
-            </FormHelperText>
-          </FormControl>
-          <HStack flexWrap="wrap" gap={2}>
+        </Button>
+      </HStack>
+
+      <Modal
+        isOpen={createModal.isOpen}
+        onClose={createModal.onClose}
+        size="4xl"
+        scrollBehavior="inside"
+      >
+        <ModalOverlay />
+        <ModalContent mx={4}>
+          <ModalHeader>New announcement</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack align="stretch" spacing={4}>
+              <FormControl>
+                <FormLabel>Title</FormLabel>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Territory mode is live"
+                  maxLength={200}
+                />
+              </FormControl>
+              <Flex
+                direction={{ base: "column", md: "row" }}
+                gap={4}
+                align="stretch"
+              >
+                <FormControl flex={1}>
+                  <FormLabel>Body (markdown)</FormLabel>
+                  <Textarea
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder={
+                      "**Territory is live**\n\n- Deposit points on the map\n- Most points wins the neighborhood"
+                    }
+                    rows={12}
+                    maxLength={20_000}
+                    fontFamily="mono"
+                    fontSize="sm"
+                  />
+                  <FormHelperText>
+                    Bold, lists, links, and headings.
+                  </FormHelperText>
+                </FormControl>
+                <Box
+                  flex={1}
+                  borderWidth="1px"
+                  borderColor="gray.200"
+                  borderRadius="md"
+                  p={4}
+                  bg="gray.50"
+                  minH="200px"
+                >
+                  <Text
+                    fontSize="xs"
+                    fontWeight="bold"
+                    color="gray.500"
+                    textTransform="uppercase"
+                    letterSpacing="wide"
+                    mb={3}
+                  >
+                    Preview
+                  </Text>
+                  {title.trim() && (
+                    <Heading size="sm" mb={3}>
+                      {title.trim()}
+                    </Heading>
+                  )}
+                  {body.trim() ? (
+                    <MarkdownBody fontSize="sm">{body}</MarkdownBody>
+                  ) : (
+                    <Text fontSize="sm" color="gray.400">
+                      Markdown preview appears here
+                    </Text>
+                  )}
+                </Box>
+              </Flex>
+            </VStack>
+          </ModalBody>
+          <ModalFooter gap={2}>
+            <Button variant="ghost" onClick={createModal.onClose}>
+              Cancel
+            </Button>
             <Button
               colorScheme="blue"
               variant="outline"
@@ -243,9 +325,9 @@ export default function AdminAnnouncementsPanel({
             >
               Publish now
             </Button>
-          </HStack>
-        </VStack>
-      </Box>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <VStack align="stretch" spacing={4}>
         {rows.length === 0 && (
@@ -263,9 +345,17 @@ export default function AdminAnnouncementsPanel({
               borderRadius="md"
               boxShadow="sm"
               borderWidth="1px"
-              borderColor={row.status === "published" ? "blue.200" : "gray.200"}
+              borderColor={
+                row.status === "published" ? "blue.200" : "gray.200"
+              }
             >
-              <HStack justify="space-between" align="flex-start" flexWrap="wrap" gap={2} mb={2}>
+              <HStack
+                justify="space-between"
+                align="flex-start"
+                flexWrap="wrap"
+                gap={2}
+                mb={2}
+              >
                 <VStack align="stretch" spacing={1} flex="1" minW={0}>
                   <HStack flexWrap="wrap" gap={2}>
                     <Heading size="sm">{row.title}</Heading>
@@ -291,7 +381,11 @@ export default function AdminAnnouncementsPanel({
                   </Text>
                 </VStack>
                 <HStack flexWrap="wrap" gap={2}>
-                  <Button size="xs" variant="outline" onClick={() => startEdit(row)}>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => startEdit(row)}
+                  >
                     {isExpanded ? "Editing" : "Edit"}
                   </Button>
                   {row.status === "draft" ? (
@@ -307,27 +401,40 @@ export default function AdminAnnouncementsPanel({
                     </Button>
                   ) : (
                     <>
-                      <Button
-                        size="xs"
-                        colorScheme={row.pinned ? "blue" : "gray"}
-                        variant={row.pinned ? "solid" : "outline"}
-                        isLoading={busyId === row.id}
-                        onClick={() =>
-                          void patch(
-                            row.id,
-                            { pinned: !row.pinned },
-                            row.pinned ? "Unpinned" : "Pinned to feed",
-                          )
-                        }
+                      <Tooltip
+                        label={PIN_TOOLTIP}
+                        hasArrow
+                        placement="top"
+                        openDelay={300}
                       >
-                        {row.pinned ? "Unpin" : "Pin"}
-                      </Button>
+                        <Box as="span" display="inline-block">
+                          <Button
+                            size="xs"
+                            colorScheme={row.pinned ? "blue" : "gray"}
+                            variant={row.pinned ? "solid" : "outline"}
+                            isLoading={busyId === row.id}
+                            onClick={() =>
+                              void patch(
+                                row.id,
+                                { pinned: !row.pinned },
+                                row.pinned ? "Unpinned" : "Pinned to feed",
+                              )
+                            }
+                          >
+                            {row.pinned ? "Unpin" : "Pin"}
+                          </Button>
+                        </Box>
+                      </Tooltip>
                       <Button
                         size="xs"
                         variant="outline"
                         isLoading={busyId === row.id}
                         onClick={() =>
-                          void patch(row.id, { publish: false }, "Unpublished to draft")
+                          void patch(
+                            row.id,
+                            { publish: false },
+                            "Unpublished to draft",
+                          )
                         }
                       >
                         Unpublish
@@ -362,18 +469,23 @@ export default function AdminAnnouncementsPanel({
                       onChange={(e) => setEditTitle(e.target.value)}
                     />
                   </FormControl>
-                  <FormControl>
-                    <FormLabel fontSize="sm">Body (markdown)</FormLabel>
-                    <Textarea
-                      size="sm"
-                      value={editBody}
-                      onChange={(e) => setEditBody(e.target.value)}
-                      rows={6}
-                      fontFamily="mono"
-                    />
-                  </FormControl>
-                  {editBody.trim() && (
+                  <Flex
+                    direction={{ base: "column", md: "row" }}
+                    gap={3}
+                    align="stretch"
+                  >
+                    <FormControl flex={1}>
+                      <FormLabel fontSize="sm">Body (markdown)</FormLabel>
+                      <Textarea
+                        size="sm"
+                        value={editBody}
+                        onChange={(e) => setEditBody(e.target.value)}
+                        rows={6}
+                        fontFamily="mono"
+                      />
+                    </FormControl>
                     <Box
+                      flex={1}
                       borderWidth="1px"
                       borderColor="gray.200"
                       borderRadius="md"
@@ -383,9 +495,15 @@ export default function AdminAnnouncementsPanel({
                       <Text fontSize="xs" color="gray.500" mb={2}>
                         Preview
                       </Text>
-                      <MarkdownBody fontSize="sm">{editBody}</MarkdownBody>
+                      {editBody.trim() ? (
+                        <MarkdownBody fontSize="sm">{editBody}</MarkdownBody>
+                      ) : (
+                        <Text fontSize="sm" color="gray.400">
+                          Markdown preview
+                        </Text>
+                      )}
                     </Box>
-                  )}
+                  </Flex>
                   <HStack>
                     <Button
                       size="sm"
@@ -394,14 +512,21 @@ export default function AdminAnnouncementsPanel({
                       onClick={() =>
                         void patch(
                           row.id,
-                          { title: editTitle.trim(), body: editBody.trim() },
+                          {
+                            title: editTitle.trim(),
+                            body: editBody.trim(),
+                          },
                           "Saved",
                         )
                       }
                     >
                       Save changes
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setExpandedId(null)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setExpandedId(null)}
+                    >
                       Close
                     </Button>
                   </HStack>
@@ -466,7 +591,9 @@ export default function AdminAnnouncementsPanel({
                                     </Td>
                                     <Td>
                                       <Badge
-                                        colorScheme={t.covered ? "green" : "red"}
+                                        colorScheme={
+                                          t.covered ? "green" : "red"
+                                        }
                                       >
                                         {t.covered ? "yes" : "no"}
                                       </Badge>
@@ -511,7 +638,9 @@ export default function AdminAnnouncementsPanel({
                                         : "—"}
                                     </Td>
                                     <Td whiteSpace="nowrap">
-                                      {new Date(v.dismissedAt).toLocaleString()}
+                                      {new Date(
+                                        v.dismissedAt,
+                                      ).toLocaleString()}
                                     </Td>
                                   </Tr>
                                 ))}

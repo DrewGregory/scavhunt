@@ -46,6 +46,13 @@ body {
   font-size: 36px;
 }
 
+/* Allow favorite heart to sit half off the pin corner. */
+.leaflet-marker-icon.challenge-map-pin {
+  overflow: visible !important;
+  background: transparent !important;
+  border: none !important;
+}
+
 /* Neighborhood name pills — reset Leaflet divIcon defaults, center on point */
 .neighborhood-label-icon {
   background: transparent !important;
@@ -65,8 +72,12 @@ body {
   color: #1a202c;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   line-height: 1.2;
+}
+.neighborhood-label-pill.is-selected {
+  box-shadow: 0 0 0 2px rgba(43, 108, 176, 0.55), 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 /* Clicking GeoJSON paths focuses them; browser draws a blue bbox outline — hide it. */

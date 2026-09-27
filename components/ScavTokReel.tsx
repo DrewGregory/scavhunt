@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Button, Flex, IconButton, Text } from "@chakra-ui/react";
-import { FiArrowLeft, FiList } from "react-icons/fi";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Flex, IconButton, Text } from "@chakra-ui/react";
+import { LuArrowLeft } from "react-icons/lu";
 import { useFeed } from "../lib/feedClient";
 import type { FeedFilters, FeedPage } from "../lib/feedTypes";
 import { useNearEndTrigger, usePreloadQueue } from "../lib/preloadQueue";
@@ -13,25 +13,32 @@ import TopNavbar from "../pages/components/TopNavbar";
 const PAGE_SIZE = 10;
 const LOAD_MORE_FROM_END = 3;
 const UNMUTE_KEY = "scavtok.unmuted";
-const FILTERS: FeedFilters = { videoOnly: true };
 
 export default function ScavTokReel({
   initialPage,
   onBackToList,
+  teamId,
 }: {
   initialPage: FeedPage;
   onBackToList: () => void;
+  /** When set, only show this team's video submissions. */
+  teamId?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
 
+  const filters: FeedFilters = useMemo(
+    () => ({ videoOnly: true, ...(teamId ? { teamId } : {}) }),
+    [teamId],
+  );
+
   const queue = usePreloadQueue("reel", {
     rootRef: containerRef,
     onCurrentChange: setCurrentId,
   });
-  const feed = useFeed(FILTERS, { limit: PAGE_SIZE, fallback: initialPage });
+  const feed = useFeed(filters, { limit: PAGE_SIZE, fallback: initialPage });
   const { updateItems } = feed;
 
   useEffect(() => {
@@ -95,34 +102,19 @@ export default function ScavTokReel({
       overflow="hidden"
       suppressHydrationWarning
     >
-      <Flex
+      <IconButton
+        aria-label="Back to feed"
+        icon={<LuArrowLeft />}
+        size="md"
         position="absolute"
         top={3}
         left={3}
         zIndex={30}
-        gap={2}
-        align="center"
-      >
-        <IconButton
-          aria-label="Back to feed"
-          icon={<FiArrowLeft />}
-          size="md"
-          bg="blackAlpha.600"
-          color="white"
-          _hover={{ bg: "blackAlpha.700" }}
-          onClick={onBackToList}
-        />
-        <Button
-          size="sm"
-          leftIcon={<FiList />}
-          bg="blackAlpha.600"
-          color="white"
-          _hover={{ bg: "blackAlpha.700" }}
-          onClick={onBackToList}
-        >
-          Feed
-        </Button>
-      </Flex>
+        bg="blackAlpha.600"
+        color="white"
+        _hover={{ bg: "blackAlpha.700" }}
+        onClick={onBackToList}
+      />
       <div className="app">
         <div className="container" ref={containerRef}>
           <TopNavbar />

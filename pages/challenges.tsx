@@ -3,31 +3,28 @@ import dynamic from "next/dynamic";
 import {
   Box,
   Button,
-  Card,
   Drawer,
   DrawerBody,
   DrawerCloseButton,
   DrawerContent,
   DrawerFooter,
   DrawerHeader,
-  DrawerOverlay,
   Flex,
   Heading,
   HStack,
   IconButton,
-  Input,
-  Select,
-  Switch,
+  Tag,
   Text,
   VStack,
   useToast,
 } from "@chakra-ui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDownIcon } from "@chakra-ui/icons";
-import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
-import { FiList, FiMap } from "react-icons/fi";
+import { createColumnHelper } from "@tanstack/react-table";
+import { LuHeart, LuList, LuMap } from "react-icons/lu";
 import { useRouter } from "next/router";
 import NavContainer from "../components/NavContainer";
+import DataList from "../components/dataList/DataList";
+import DataListToolbar from "../components/dataList/DataListToolbar";
 import { publicUser, requireUserSSP } from "../lib/auth";
 import { requireHuntStartedSSP } from "../lib/time";
 import { loadPlayerMapPayload } from "../lib/mapPayload";
@@ -44,8 +41,40 @@ const LeafletMap = dynamic(() => import("../components/leafletMap"), {
   ),
 });
 
-type SortOption = "default" | "points-high" | "points-low";
+type SortOption =
+  | "favorites"
+  | "points-high"
+  | "points-low"
+  | "spots-left"
+  | "a-z";
 type ViewMode = "list" | "map";
+type FilterId = "onlyFavorites" | "hideCompleted" | "hideFull";
+
+const SORT_OPTIONS = [
+  { id: "favorites", label: "Favorites" },
+  { id: "points-high", label: "Points: High → Low" },
+  { id: "points-low", label: "Points: Low → High" },
+  { id: "spots-left", label: "Most spots left" },
+  { id: "a-z", label: "A–Z" },
+] as const;
+
+const FILTER_OPTIONS: Array<{ id: FilterId; label: string }> = [
+  { id: "onlyFavorites", label: "Team favorites only" },
+  { id: "hideCompleted", label: "Hide finished" },
+  { id: "hideFull", label: "Hide full" },
+];
+
+const columnHelper = createColumnHelper<ChallengeWithSubsAndFav>();
+
+function spotsFilled(c: ChallengeWithSubsAndFav) {
+  return c.submissions.filter((s) => s.accepted).length;
+}
+function spotsPending(c: ChallengeWithSubsAndFav) {
+  return c.submissions.filter((s) => !s.accepted && !s.rejected).length;
+}
+function spotsLeft(c: ChallengeWithSubsAndFav) {
+  return Math.max(0, c.numWinners - spotsFilled(c));
+}
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -85,18 +114,38 @@ export default function ChallengesPage({
     typeof router.query.challenge === "string"
       ? router.query.challenge
       : null;
+  const neighborhoodParam =
+    typeof router.query.neighborhood === "string"
+      ? router.query.neighborhood
+      : null;
+  // Deep-link zoom only on the first map paint for this page load.
+  const [zoomChallengeOnce, setZoomChallengeOnce] = useState<string | null>(
+    () =>
+      viewParam === "map" && typeof router.query.challenge === "string"
+        ? router.query.challenge
+        : null,
+  );
+  const [zoomNeighborhoodOnce, setZoomNeighborhoodOnce] = useState<
+    string | null
+  >(
+    () =>
+      viewParam === "map" && typeof router.query.neighborhood === "string"
+        ? router.query.neighborhood
+        : null,
+  );
 
   const [challenges, setChallenges] =
     useState<ChallengeWithSubsAndFav[]>(initialChallenges);
-  const [sortOption, setSortOption] = useState<SortOption>("default");
+  const [sortOption, setSortOption] = useState<SortOption>("favorites");
   const [searchQuery, setSearchQuery] = useState("");
-  const [hideCompleted, setHideCompleted] = useState(true);
-  const [hideFullChallenges, setHideFullChallenges] = useState(true);
-  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<FilterId[]>([
+    "hideCompleted",
+    "hideFull",
+  ]);
   const [favBusyId, setFavBusyId] = useState<string | null>(null);
   const [mapNeighborhoods, setMapNeighborhoods] = useState(neighborhoods);
 
-  const ref = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLTableRowElement>(null);
 
   useEffect(() => {
     setChallenges(initialChallenges);
@@ -108,7 +157,7 @@ export default function ChallengesPage({
 
   useEffect(() => {
     if (view !== "list" || !challengeParam) return;
-    ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [view, challengeParam]);
 
   useEffect(() => {
@@ -138,17 +187,36 @@ export default function ChallengesPage({
   }, [view]);
 
   const setQuery = useCallback(
-    (patch: { view?: ViewMode; challenge?: string | null }) => {
+    (patch: {
+      view?: ViewMode;
+      challenge?: string | null;
+      neighborhood?: string | null;
+    }) => {
       const nextView = patch.view ?? view;
-      const nextChallenge =
+      let nextChallenge =
         patch.challenge === undefined ? challengeParam : patch.challenge;
+      let nextNeighborhood =
+        patch.neighborhood === undefined
+          ? neighborhoodParam
+          : patch.neighborhood;
+
+      // Mutual exclusion + list view ignores neighborhoods.
+      if (nextView === "list") nextNeighborhood = null;
+      if (patch.challenge !== undefined && patch.challenge) {
+        nextNeighborhood = null;
+      }
+      if (patch.neighborhood !== undefined && patch.neighborhood) {
+        nextChallenge = null;
+      }
+
       const query: Record<string, string> = { view: nextView };
       if (nextChallenge) query.challenge = nextChallenge;
+      if (nextNeighborhood) query.neighborhood = nextNeighborhood;
       void router.push({ pathname: "/challenges", query }, undefined, {
         shallow: true,
       });
     },
-    [router, view, challengeParam],
+    [router, view, challengeParam, neighborhoodParam],
   );
 
   const toggleFavorite = useCallback(
@@ -204,45 +272,180 @@ export default function ChallengesPage({
     [challenges, team, toast],
   );
 
-  const searchFiltered =
-    searchQuery.trim() === ""
-      ? challenges
-      : challenges.filter(
-          (c) =>
-            c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.prompt.toLowerCase().includes(searchQuery.toLowerCase()),
-        );
+  const hideCompleted = activeFilters.includes("hideCompleted");
+  const hideFull = activeFilters.includes("hideFull");
+  const onlyFavorites = activeFilters.includes("onlyFavorites");
 
-  const completedFiltered =
-    hideCompleted && team
-      ? searchFiltered.filter(
-          (c) =>
-            !c.submissions.some((s) => s.teamId === team.id && s.accepted),
-        )
-      : searchFiltered;
+  const sortedChallenges = useMemo(() => {
+    let list = challenges;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.prompt.toLowerCase().includes(q),
+      );
+    }
+    if (hideCompleted && team) {
+      list = list.filter(
+        (c) =>
+          !c.submissions.some((s) => s.teamId === team.id && s.accepted),
+      );
+    }
+    if (hideFull) {
+      list = list.filter((c) => spotsFilled(c) < c.numWinners);
+    }
+    if (onlyFavorites) {
+      list = list.filter((c) => c.favorited);
+    }
 
-  const capacityFiltered = hideFullChallenges
-    ? completedFiltered.filter(
-        (c) => c.submissions.filter((s) => s.accepted).length < c.numWinners,
-      )
-    : completedFiltered;
-
-  const favoritesFiltered = onlyFavorites
-    ? capacityFiltered.filter((c) => c.favorited)
-    : capacityFiltered;
-
-  const sortedChallenges =
-    sortOption === "default"
-      ? favoritesFiltered
-      : [...favoritesFiltered].sort((a, b) => {
-          if (sortOption === "points-high") return b.pts - a.pts;
-          if (sortOption === "points-low") return a.pts - b.pts;
-          return 0;
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortOption === "favorites") {
+        if (a.favorited !== b.favorited) return a.favorited ? -1 : 1;
+        return 0;
+      }
+      if (sortOption === "points-high") return b.pts - a.pts;
+      if (sortOption === "points-low") return a.pts - b.pts;
+      if (sortOption === "spots-left") return spotsLeft(b) - spotsLeft(a);
+      if (sortOption === "a-z") {
+        return a.title.localeCompare(b.title, undefined, {
+          sensitivity: "base",
         });
+      }
+      return 0;
+    });
+    return sorted;
+  }, [
+    challenges,
+    searchQuery,
+    hideCompleted,
+    hideFull,
+    onlyFavorites,
+    sortOption,
+    team,
+  ]);
+
+  const toggleFilter = useCallback((id: string) => {
+    const fid = id as FilterId;
+    setActiveFilters((prev) =>
+      prev.includes(fid) ? prev.filter((x) => x !== fid) : [...prev, fid],
+    );
+  }, []);
+
+  const clearFilter = useCallback((id: string) => {
+    setActiveFilters((prev) => prev.filter((x) => x !== id));
+  }, []);
+
+  const teamCompleted = useCallback(
+    (c: ChallengeWithSubsAndFav) =>
+      !!team &&
+      c.submissions.some((s) => s.teamId === team.id && s.accepted),
+    [team],
+  );
+
+  const columns = useMemo(
+    () => [
+      columnHelper.display({
+        id: "primary",
+        header: "Challenge",
+        cell: ({ row }) => {
+          const c = row.original;
+          const filled = spotsFilled(c);
+          const pending = spotsPending(c);
+          const done = teamCompleted(c);
+          return (
+            <Box minW={0}>
+              <Flex align="center" gap={2} minW={0}>
+                <Text
+                  fontWeight="semibold"
+                  color="gray.800"
+                  noOfLines={2}
+                  lineHeight="short"
+                >
+                  {c.emoji ? `${c.emoji} ${c.title}` : c.title}
+                </Text>
+                {done && (
+                  <Tag size="sm" colorScheme="green" flexShrink={0}>
+                    Done
+                  </Tag>
+                )}
+              </Flex>
+              <Text fontSize="sm" color="gray.500" mt={0.5} noOfLines={1}>
+                {`${filled} of ${c.numWinners} spot${
+                  c.numWinners === 1 ? "" : "s"
+                }${pending > 0 ? ` · ${pending} pending` : ""}`}
+              </Text>
+            </Box>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "spots",
+        header: "Spots",
+        meta: { hideBelow: "md", numeric: true },
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <Text fontSize="sm" color="gray.600">
+              {spotsFilled(c)}/{c.numWinners}
+            </Text>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "pts",
+        header: "Pts",
+        meta: { numeric: true },
+        cell: ({ row }) => (
+          <Text fontWeight="semibold" color="gray.700">
+            {row.original.pts}
+          </Text>
+        ),
+      }),
+      columnHelper.display({
+        id: "fav",
+        header: "",
+        meta: { isAction: true },
+        cell: ({ row }) => {
+          const c = row.original;
+          if (!team) return null;
+          return (
+            <IconButton
+              aria-label={
+                c.favorited ? "Unfavorite for team" : "Favorite for team"
+              }
+              icon={
+                c.favorited ? (
+                  <LuHeart fill="currentColor" />
+                ) : (
+                  <LuHeart />
+                )
+              }
+              size="sm"
+              variant="ghost"
+              color={c.favorited ? "pink.500" : "gray.400"}
+              isLoading={favBusyId === c.id}
+              onClick={() => void toggleFavorite(c.id)}
+            />
+          );
+        },
+      }),
+    ],
+    [team, teamCompleted, favBusyId, toggleFavorite],
+  );
 
   const selected = useMemo(
     () => challenges.find((c) => c.id === challengeParam) ?? null,
     [challenges, challengeParam],
+  );
+
+  const selectedTerritoryNeighborhood = useMemo(
+    () =>
+      neighborhoodParam
+        ? (mapNeighborhoods.find((n) => n.id === neighborhoodParam) ?? null)
+        : null,
+    [mapNeighborhoods, neighborhoodParam],
   );
 
   const selectedNeighborhood = useMemo(() => {
@@ -268,34 +471,20 @@ export default function ChallengesPage({
     return findNeighborhoodAt(selected.lng, selected.lat, geo);
   }, [selected, mapNeighborhoods]);
 
-  const viewToggle = (
-    <HStack
-      bg="white"
-      borderRadius="md"
-      boxShadow="sm"
-      borderWidth="1px"
-      p={1}
-      spacing={0}
-    >
-      <Button
-        size="sm"
-        leftIcon={<FiList />}
-        variant={view === "list" ? "solid" : "ghost"}
-        colorScheme={view === "list" ? "blue" : "gray"}
-        onClick={() => setQuery({ view: "list" })}
-      >
-        List
-      </Button>
-      <Button
-        size="sm"
-        leftIcon={<FiMap />}
-        variant={view === "map" ? "solid" : "ghost"}
-        colorScheme={view === "map" ? "blue" : "gray"}
-        onClick={() => setQuery({ view: "map" })}
-      >
-        Map
-      </Button>
-    </HStack>
+  const mapNavButton = (
+    <IconButton
+      aria-label={view === "map" ? "Show challenge list" : "Show map"}
+      icon={view === "map" ? <LuList /> : <LuMap />}
+      variant="ghost"
+      size="md"
+      onClick={() =>
+        setQuery({
+          view: view === "map" ? "list" : "map",
+          challenge: null,
+          neighborhood: null,
+        })
+      }
+    />
   );
 
   const challengeDetails = (c: ChallengeWithSubsAndFav) => {
@@ -315,8 +504,9 @@ export default function ChallengesPage({
           </Text>
         )}
         <Text fontSize="sm" color="gray.600">
-          {accepted} of {c.numWinners} spot
-          {c.numWinners === 1 ? "" : "s"} filled • {pending} pending approval
+          {`${accepted} of ${c.numWinners} spot${
+            c.numWinners === 1 ? "" : "s"
+          } filled • ${pending} pending approval`}
         </Text>
         <Text
           fontSize="sm"
@@ -339,13 +529,34 @@ export default function ChallengesPage({
     );
   };
 
+  const neighborhoodDrawerBody = selectedTerritoryNeighborhood && (
+    <VStack align="stretch" spacing={3}>
+      <Text fontSize="sm" color="gray.600">
+        {selectedTerritoryNeighborhood.contested
+          ? "Contested"
+          : selectedTerritoryNeighborhood.claimedBy
+            ? `Claimed by ${selectedTerritoryNeighborhood.claimedBy.teamEmoji} ${selectedTerritoryNeighborhood.claimedBy.teamName} (${selectedTerritoryNeighborhood.claimedBy.points} pts)`
+            : "Unclaimed"}
+      </Text>
+      {selectedTerritoryNeighborhood.totals.length > 0 && (
+        <VStack align="stretch" spacing={1}>
+          {selectedTerritoryNeighborhood.totals.slice(0, 8).map((t) => (
+            <HStack key={t.teamId} justify="space-between" fontSize="sm">
+              <Text>
+                {t.teamEmoji} {t.teamName}
+              </Text>
+              <Text fontWeight="semibold">{t.points}</Text>
+            </HStack>
+          ))}
+        </VStack>
+      )}
+    </VStack>
+  );
+
   if (view === "map") {
     return (
-      <NavContainer title="Challenges" fullScreen hideTopBar>
+      <NavContainer title="Challenges" fullScreen right={mapNavButton}>
         <Box position="relative" flex={1} w="100%" h="100%" minH={0}>
-          <Box position="absolute" top={4} left={4} zIndex={1100}>
-            {viewToggle}
-          </Box>
           <LeafletMap
             challenges={challenges}
             locations={locations}
@@ -355,8 +566,18 @@ export default function ChallengesPage({
             initialNeighborhoods={mapNeighborhoods}
             initialBank={bank}
             selectedChallengeId={challengeParam}
+            selectedNeighborhoodId={neighborhoodParam}
+            zoomChallengeId={zoomChallengeOnce}
+            zoomNeighborhoodId={zoomNeighborhoodOnce}
+            onDeepLinkZoomConsumed={(kind) => {
+              if (kind === "challenge") setZoomChallengeOnce(null);
+              if (kind === "neighborhood") setZoomNeighborhoodOnce(null);
+            }}
             onSelectChallenge={(id) =>
-              setQuery({ view: "map", challenge: id })
+              setQuery({ view: "map", challenge: id, neighborhood: null })
+            }
+            onSelectNeighborhood={(id) =>
+              setQuery({ view: "map", neighborhood: id, challenge: null })
             }
           />
           <Drawer
@@ -364,13 +585,15 @@ export default function ChallengesPage({
             placement="bottom"
             onClose={() => setQuery({ view: "map", challenge: null })}
             size="md"
+            blockScrollOnMount={false}
+            autoFocus={false}
           >
-            <DrawerOverlay />
             <DrawerContent
               borderTopRadius="xl"
               maxH="85dvh"
               mx="auto"
               maxW={{ base: "100%", md: "560px" }}
+              boxShadow="0 -8px 30px rgba(0,0,0,0.18)"
             >
               <DrawerCloseButton />
               <DrawerHeader pr={12}>
@@ -398,9 +621,9 @@ export default function ChallengesPage({
                       }
                       icon={
                         selected.favorited ? (
-                          <AiFillHeart />
+                          <LuHeart fill="currentColor" />
                         ) : (
-                          <AiOutlineHeart />
+                          <LuHeart />
                         )
                       }
                       color={selected.favorited ? "pink.500" : "gray.400"}
@@ -431,221 +654,102 @@ export default function ChallengesPage({
               )}
             </DrawerContent>
           </Drawer>
+          <Drawer
+            isOpen={!!selectedTerritoryNeighborhood}
+            placement="bottom"
+            onClose={() => setQuery({ view: "map", neighborhood: null })}
+            size="md"
+            blockScrollOnMount={false}
+            autoFocus={false}
+          >
+            <DrawerContent
+              borderTopRadius="xl"
+              maxH="70dvh"
+              mx="auto"
+              maxW={{ base: "100%", md: "560px" }}
+              boxShadow="0 -8px 30px rgba(0,0,0,0.18)"
+            >
+              <DrawerCloseButton />
+              <DrawerHeader pr={12}>
+                <Heading size="md" noOfLines={2}>
+                  {selectedTerritoryNeighborhood
+                    ? `${neighborhoodEmoji(
+                        selectedTerritoryNeighborhood.name,
+                        selectedTerritoryNeighborhood.emoji,
+                      )} ${selectedTerritoryNeighborhood.name}`
+                    : ""}
+                </Heading>
+              </DrawerHeader>
+              <DrawerBody overflowY="auto" pb={6}>
+                {neighborhoodDrawerBody}
+              </DrawerBody>
+            </DrawerContent>
+          </Drawer>
         </Box>
       </NavContainer>
     );
   }
 
   return (
-    <NavContainer title="Challenges">
-      <VStack spacing={4} align="stretch">
-        <HStack justify="space-between" flexWrap="wrap" gap={2}>
-          <Input
-            placeholder="Search challenges..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            flex="1"
-            minW="160px"
-            bg="white"
-            borderRadius="md"
-            boxShadow="sm"
-            size="md"
-          />
-          {viewToggle}
-        </HStack>
-        <Select
-          value={sortOption}
-          onChange={(e) => setSortOption(e.target.value as SortOption)}
-          width="100%"
-          bg="white"
-          borderRadius="md"
-          boxShadow="sm"
-        >
-          <option value="default">Default</option>
-          <option value="points-high">Points: High to Low</option>
-          <option value="points-low">Points: Low to High</option>
-        </Select>
-        {team && (
-          <VStack width="100%" spacing={2}>
-            <HStack
-              width="100%"
-              bg="white"
-              p={3}
-              borderRadius="md"
-              boxShadow="sm"
-              justifyContent="space-between"
-            >
-              <Text fontSize="sm" fontWeight="medium" color="gray.700">
-                Only show team favorites
-              </Text>
-              <Switch
-                isChecked={onlyFavorites}
-                onChange={(e) => setOnlyFavorites(e.target.checked)}
-                colorScheme="pink"
-              />
-            </HStack>
-            <HStack
-              width="100%"
-              bg="white"
-              p={3}
-              borderRadius="md"
-              boxShadow="sm"
-              justifyContent="space-between"
-            >
-              <Text fontSize="sm" fontWeight="medium" color="gray.700">
-                Hide challenges you&apos;ve finished
-              </Text>
-              <Switch
-                isChecked={hideCompleted}
-                onChange={(e) => setHideCompleted(e.target.checked)}
-                colorScheme="blue"
-              />
-            </HStack>
-            <HStack
-              width="100%"
-              bg="white"
-              p={3}
-              borderRadius="md"
-              boxShadow="sm"
-              justifyContent="space-between"
-            >
-              <Text fontSize="sm" fontWeight="medium" color="gray.700">
-                Hide challenges at max capacity
-              </Text>
-              <Switch
-                isChecked={hideFullChallenges}
-                onChange={(e) => setHideFullChallenges(e.target.checked)}
-                colorScheme="blue"
-              />
-            </HStack>
+    <NavContainer title="Challenges" right={mapNavButton}>
+      <DataListToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search challenges…"
+        sortOptions={[...SORT_OPTIONS]}
+        sortId={sortOption}
+        onSortChange={(id) => setSortOption(id as SortOption)}
+        filterOptions={
+          team
+            ? FILTER_OPTIONS
+            : FILTER_OPTIONS.filter((f) => f.id === "hideFull")
+        }
+        activeFilterIds={
+          team
+            ? activeFilters
+            : activeFilters.filter((f) => f === "hideFull")
+        }
+        onToggleFilter={toggleFilter}
+        onClearFilter={clearFilter}
+      />
+      <DataList
+        rows={sortedChallenges}
+        columns={columns}
+        getRowId={(c) => c.id}
+        expandedId={challengeParam}
+        onToggle={(id) =>
+          setQuery({
+            view: "list",
+            challenge: id === challengeParam ? null : id,
+          })
+        }
+        rowRef={rowRef}
+        emptyMessage="No challenges match"
+        renderExpanded={(c) => (
+          <VStack align="stretch" spacing={3}>
+            {challengeDetails(c)}
+            {team != null && (
+              <HStack flexWrap="wrap">
+                <Button
+                  colorScheme="blue"
+                  size="md"
+                  onClick={() => void router.push(`/submit/${c.id}`)}
+                >
+                  Submit Challenge
+                </Button>
+                <Button
+                  size="md"
+                  variant="outline"
+                  leftIcon={<LuMap />}
+                  onClick={() => setQuery({ view: "map", challenge: c.id })}
+                >
+                  Show on map
+                </Button>
+              </HStack>
+            )}
           </VStack>
         )}
-        {sortedChallenges.map((c) => {
-          const isOpen = c.id === challengeParam;
-          return (
-            <Card
-              ref={c.id === challengeParam ? ref : null}
-              key={c.id}
-              width="100%"
-              className={isOpen ? "card open" : "card"}
-              boxShadow="sm"
-              _hover={{ boxShadow: "md" }}
-              transition="all 0.2s"
-              borderRadius="lg"
-              borderWidth={c.favorited ? "2px" : undefined}
-              borderColor={c.favorited ? "pink.300" : undefined}
-            >
-              <Flex direction="column">
-                <Flex
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                  p={4}
-                  gap={3}
-                  cursor="pointer"
-                  onClick={() =>
-                    setQuery({
-                      view: "list",
-                      challenge: isOpen ? null : c.id,
-                    })
-                  }
-                >
-                  <Heading size="md" flex={1} color="gray.800">
-                    {c.emoji ? `${c.emoji} ${c.title}` : c.title}
-                  </Heading>
-                  <Flex alignItems="center" gap={1}>
-                    {team && (
-                      <IconButton
-                        aria-label={
-                          c.favorited
-                            ? "Unfavorite for team"
-                            : "Favorite for team"
-                        }
-                        icon={
-                          c.favorited ? <AiFillHeart /> : <AiOutlineHeart />
-                        }
-                        size="sm"
-                        variant="ghost"
-                        color={c.favorited ? "pink.500" : "gray.400"}
-                        isLoading={favBusyId === c.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void toggleFavorite(c.id);
-                        }}
-                      />
-                    )}
-                    <Text
-                      fontWeight="semibold"
-                      color="gray.700"
-                      fontSize="md"
-                    >
-                      {c.pts} pts
-                    </Text>
-                    <ChevronDownIcon
-                      w={5}
-                      h={5}
-                      color="gray.500"
-                      className={isOpen ? "chevron rotate" : "chevron"}
-                    />
-                  </Flex>
-                </Flex>
-                <Flex direction="row" px={4} pb={isOpen ? 2 : 4}>
-                  <Text fontSize="sm" color="gray.600">
-                    {c.submissions.filter((s) => s.accepted).length} of{" "}
-                    {c.numWinners} spot
-                    {c.numWinners === 1 ? "" : "s"} filled •{" "}
-                    {
-                      c.submissions.filter((s) => !s.accepted && !s.rejected)
-                        .length
-                    }{" "}
-                    pending approval
-                  </Text>
-                </Flex>
-                {isOpen && (
-                  <VStack
-                    px={4}
-                    pb={4}
-                    spacing={3}
-                    alignItems="left"
-                    borderTop="1px"
-                    borderColor="gray.100"
-                    pt={3}
-                    className="expandable-content"
-                  >
-                    {challengeDetails(c)}
-                    {team != null && (
-                      <HStack>
-                        <Button
-                          colorScheme="blue"
-                          size="md"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void router.push(`/submit/${c.id}`);
-                          }}
-                          width="fit-content"
-                        >
-                          Submit Challenge
-                        </Button>
-                        <Button
-                          size="md"
-                          variant="outline"
-                          leftIcon={<FiMap />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setQuery({ view: "map", challenge: c.id });
-                          }}
-                        >
-                          Show on map
-                        </Button>
-                      </HStack>
-                    )}
-                  </VStack>
-                )}
-              </Flex>
-            </Card>
-          );
-        })}
-      </VStack>
+      />
     </NavContainer>
   );
 }

@@ -11,7 +11,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import type { DragEvent } from "react";
-import { FiEdit2, FiMenu, FiTrash2 } from "react-icons/fi";
+import { LuPencil, LuMenu, LuTrash2 } from "react-icons/lu";
 import { challengeHeading } from "../lib/challengeDisplay";
 import EmojiInput from "./EmojiInput";
 
@@ -111,13 +111,13 @@ function CardChrome({
           borderRadius="sm"
           _hover={{ bg: "gray.100", color: "gray.600" }}
         >
-          <FiMenu />
+          <LuMenu />
         </Box>
         {onStartEdit && (
           <Tooltip label="Edit fields" placement="right">
             <IconButton
               aria-label="Edit"
-              icon={<FiEdit2 />}
+              icon={<LuPencil />}
               size="xs"
               variant="ghost"
               minW="auto"
@@ -272,7 +272,7 @@ export default function ChallengeDraftCard({
               {onArchive && (
                 <IconButton
                   aria-label="Archive"
-                  icon={<FiTrash2 />}
+                  icon={<LuTrash2 />}
                   size="xs"
                   variant="ghost"
                   colorScheme="red"

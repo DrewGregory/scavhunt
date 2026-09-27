@@ -16,7 +16,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { FiLayers } from "react-icons/fi";
+import { LuLayers } from "react-icons/lu";
 import { SF_CENTER } from "../lib/geo";
 import { challengeHeading } from "../lib/challengeDisplay";
 import type { DraftChallenge } from "./ChallengeDraftCard";
@@ -230,7 +230,7 @@ export default function ChallengeDraftMap({
           <Box>
             <IconButton
               aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
-              icon={<FiLayers />}
+              icon={<LuLayers />}
               size="sm"
               bg="white"
               boxShadow="md"

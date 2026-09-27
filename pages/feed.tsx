@@ -2,13 +2,10 @@ import NavContainer from "../components/NavContainer";
 import { GetServerSidePropsContext, InferGetServerSidePropsType } from "next";
 import {
   Button,
-  Card,
   Flex,
   Heading,
   HStack,
-  Input,
   Link,
-  Switch,
   Tag,
   Text,
   VStack,
@@ -22,11 +19,11 @@ import {
   Spinner,
   chakra,
 } from "@chakra-ui/react";
-import { ChevronDownIcon } from "@chakra-ui/icons";
 import { HiDotsVertical } from "react-icons/hi";
-import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
+import { LuHeart } from "react-icons/lu";
 import { FaPlay } from "react-icons/fa";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createColumnHelper } from "@tanstack/react-table";
 import { useSearchParams } from "next/navigation";
 import { formatDistance } from "date-fns";
 import { useRouter } from "next/router";
@@ -41,6 +38,7 @@ import {
   type FeedFilters,
   type FeedItem,
   type FeedPage,
+  type FeedStatus,
 } from "../lib/feedTypes";
 import type { SerializedTeam } from "../lib/types";
 import {
@@ -60,11 +58,30 @@ import {
   type FeedAnnouncement,
 } from "../components/FeedAnnouncements";
 import ScavTokReel from "../components/ScavTokReel";
-import { FiList } from "react-icons/fi";
+import DataList from "../components/dataList/DataList";
+import DataListToolbar from "../components/dataList/DataListToolbar";
 import { FaVideo } from "react-icons/fa";
 
 type ViewMode = "list" | "tok";
 const TOK_PAGE_SIZE = 10;
+
+type FeedSortId = "newest" | "favorites";
+type FeedFilterId =
+  | "myFavorites"
+  | "myTeam"
+  | "videoOnly"
+  | "statusPending"
+  | "statusAccepted"
+  | "statusRejected";
+
+const STATUS_FILTERS: FeedFilterId[] = [
+  "statusPending",
+  "statusAccepted",
+  "statusRejected",
+];
+
+const columnHelper = createColumnHelper<FeedItem>();
+
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -80,13 +97,18 @@ export const getServerSideProps = async (
     typeof context.query.submission === "string"
       ? context.query.submission
       : null;
+  const teamIdParam =
+    typeof context.query.teamId === "string" ? context.query.teamId : null;
 
   const [initialPage, tokInitialPage, pinnedPage, announcementRows] =
     await Promise.all([
       getFeedPage({ userId: user.id }),
       getFeedPage({
         userId: user.id,
-        filters: { videoOnly: true },
+        filters: {
+          videoOnly: true,
+          ...(teamIdParam ? { teamId: teamIdParam } : {}),
+        },
         limit: TOK_PAGE_SIZE,
       }),
       submissionParam
@@ -100,6 +122,7 @@ export const getServerSideProps = async (
       user: publicUser(user),
       initialPage,
       tokInitialPage,
+      tokTeamId: teamIdParam,
       pinnedPage: pinnedPage && pinnedPage.items.length > 0 ? pinnedPage : null,
       announcements: announcementRows.map((row) => {
         const s = serializeAnnouncement(row);
@@ -117,8 +140,6 @@ export const getServerSideProps = async (
 
 type AdminAction = "approve" | "reject" | "reset" | "delete";
 
-const LOAD_MORE_FROM_END = 5;
-
 function formatDuration(sec: number | null): string | null {
   if (sec == null || !Number.isFinite(sec)) return null;
   const s = Math.max(0, Math.round(sec));
@@ -129,6 +150,7 @@ export default function FeedPage({
   user,
   initialPage,
   tokInitialPage,
+  tokTeamId,
   pinnedPage,
   announcements,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
@@ -138,21 +160,24 @@ export default function FeedPage({
   const viewParam = router.query.view;
   const view: ViewMode =
     viewParam === "tok" || viewParam === "list" ? viewParam : "list";
+  const teamIdFromQuery =
+    typeof router.query.teamId === "string"
+      ? router.query.teamId
+      : tokTeamId;
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(
     submissionSearchParam,
   );
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
-  const [sortByFavorites, setSortByFavorites] = useState<boolean>(false);
-  const [showOnlyMyFavorites, setShowOnlyMyFavorites] =
-    useState<boolean>(false);
+  const [sortId, setSortId] = useState<FeedSortId>("newest");
+  const [activeFilters, setActiveFilters] = useState<FeedFilterId[]>([]);
   const [pinned, setPinned] = useState<FeedPage | null>(pinnedPage);
 
   const isAdmin = user.isAdmin;
   const selectedRef = useRef(selectedSubmission);
   const routerRef = useRef(router);
   routerRef.current = router;
-  const ref = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLTableRowElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const queue = usePreloadQueue("feed");
 
@@ -181,14 +206,42 @@ export default function FeedPage({
     return () => clearTimeout(t);
   }, [searchQuery]);
 
+  const favoritedOnly = activeFilters.includes("myFavorites");
+  const myTeamOnly = activeFilters.includes("myTeam");
+  const videoOnly = activeFilters.includes("videoOnly");
+  const statusFilter: FeedStatus | undefined = activeFilters.includes(
+    "statusPending",
+  )
+    ? "pending"
+    : activeFilters.includes("statusAccepted")
+      ? "accepted"
+      : activeFilters.includes("statusRejected")
+        ? "rejected"
+        : undefined;
+
   const filters: FeedFilters = useMemo(
     () => ({
       q: debouncedQuery || undefined,
-      favoritedOnly: showOnlyMyFavorites || undefined,
+      favoritedOnly: favoritedOnly || undefined,
+      videoOnly: videoOnly || undefined,
+      teamId: myTeamOnly && user.teamId ? user.teamId : undefined,
+      status: statusFilter,
     }),
-    [debouncedQuery, showOnlyMyFavorites],
+    [
+      debouncedQuery,
+      favoritedOnly,
+      videoOnly,
+      myTeamOnly,
+      user.teamId,
+      statusFilter,
+    ],
   );
-  const isDefaultFilters = !filters.q && !filters.favoritedOnly;
+  const isDefaultFilters =
+    !filters.q &&
+    !filters.favoritedOnly &&
+    !filters.videoOnly &&
+    !filters.teamId &&
+    !filters.status;
 
   const feed = useFeed(filters, {
     fallback: isDefaultFilters ? initialPage : undefined,
@@ -207,13 +260,33 @@ export default function FeedPage({
   const visibleItems = useMemo(() => {
     const pinnedItem = pinned?.items[0];
     const base =
-      pinnedItem && isDefaultFilters && !feed.items.some((i) => i.id === pinnedItem.id)
+      pinnedItem &&
+      isDefaultFilters &&
+      !feed.items.some((i) => i.id === pinnedItem.id)
         ? [pinnedItem, ...feed.items]
         : feed.items;
-    return sortByFavorites
+    return sortId === "favorites"
       ? [...base].sort((a, b) => b.favoriteCount - a.favoriteCount)
       : base;
-  }, [pinned, feed.items, isDefaultFilters, sortByFavorites]);
+  }, [pinned, feed.items, isDefaultFilters, sortId]);
+
+  const toggleFilter = useCallback((id: string) => {
+    const fid = id as FeedFilterId;
+    setActiveFilters((prev) => {
+      if (STATUS_FILTERS.includes(fid)) {
+        const withoutStatus = prev.filter((x) => !STATUS_FILTERS.includes(x));
+        if (prev.includes(fid)) return withoutStatus;
+        return [...withoutStatus, fid];
+      }
+      return prev.includes(fid)
+        ? prev.filter((x) => x !== fid)
+        : [...prev, fid];
+    });
+  }, []);
+
+  const clearFilter = useCallback((id: string) => {
+    setActiveFilters((prev) => prev.filter((x) => x !== id));
+  }, []);
 
   const patchItem = useCallback(
     (
@@ -244,7 +317,7 @@ export default function FeedPage({
         patchItem(submissionId, (i) =>
           i.favorited === data.favorited
             ? i
-            : showOnlyMyFavorites && !data.favorited
+            : favoritedOnly && !data.favorited
               ? null
               : {
                   ...i,
@@ -256,7 +329,7 @@ export default function FeedPage({
         console.error("Failed to toggle favorite", error);
       }
     },
-    [patchItem, showOnlyMyFavorites],
+    [patchItem, favoritedOnly],
   );
 
   const runAdminAction = useCallback(
@@ -334,8 +407,9 @@ export default function FeedPage({
   }, [queue, selectedSubmission]);
 
   useEffect(() => {
-    ref.current?.scrollIntoView();
-  }, []);
+    if (!selectedSubmission) return;
+    rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedSubmission]);
 
   useNearEndTrigger(
     queue,
@@ -344,210 +418,369 @@ export default function FeedPage({
     feed.hasMore && !feed.isLoadingMore && !feed.error,
   );
 
-  const triggerIndex = Math.max(0, visibleItems.length - LOAD_MORE_FROM_END);
   const noSubmissionsAtAll =
     isDefaultFilters && !feed.isLoading && visibleItems.length === 0;
 
-  const viewToggle = (
-    <HStack
-      bg="white"
-      borderRadius="md"
-      boxShadow="sm"
-      borderWidth="1px"
-      p={1}
-      spacing={0}
-    >
-      <Button
-        size="sm"
-        leftIcon={<FiList />}
-        variant={view === "list" ? "solid" : "ghost"}
-        colorScheme={view === "list" ? "blue" : "gray"}
-        onClick={() => setQuery({ view: "list" })}
-      >
-        Feed
-      </Button>
-      <Button
-        size="sm"
-        leftIcon={<FaVideo />}
-        variant={view === "tok" ? "solid" : "ghost"}
-        colorScheme={view === "tok" ? "blue" : "gray"}
-        onClick={() => setQuery({ view: "tok", submission: null })}
-      >
-        ScavTok
-      </Button>
-    </HStack>
+  const sortOptions = useMemo(
+    () => [
+      { id: "newest", label: "Newest" },
+      ...(isAdmin
+        ? [{ id: "favorites", label: "Most favorited" }]
+        : []),
+    ],
+    [isAdmin],
+  );
+
+  const filterOptions = useMemo(() => {
+    const opts: Array<{ id: FeedFilterId; label: string }> = [
+      { id: "myFavorites", label: "My favorites" },
+    ];
+    if (user.teamId) {
+      opts.push({ id: "myTeam", label: "My team" });
+    }
+    opts.push(
+      { id: "videoOnly", label: "Videos only" },
+      { id: "statusPending", label: "Pending" },
+      { id: "statusAccepted", label: "Accepted" },
+      { id: "statusRejected", label: "Rejected" },
+    );
+    return opts;
+  }, [user.teamId]);
+
+  const columns = useMemo(
+    () => [
+      columnHelper.display({
+        id: "thumb",
+        header: "",
+        cell: ({ row }) => {
+          const s = row.original;
+          const isVideo = isVideoUrl(s.mediaURL);
+          const isImage = !isVideo && isImageUrl(s.mediaURL);
+          const src = isVideo
+            ? s.posterURL
+            : isImage
+              ? s.mediaURL
+              : null;
+          return (
+            <Box
+              w="48px"
+              h="48px"
+              borderRadius="md"
+              overflow="hidden"
+              bg="gray.100"
+              flexShrink={0}
+              position="relative"
+            >
+              {src ? (
+                <Image
+                  src={src}
+                  alt=""
+                  w="100%"
+                  h="100%"
+                  objectFit="cover"
+                />
+              ) : null}
+              {isVideo && (
+                <Flex
+                  position="absolute"
+                  inset={0}
+                  align="center"
+                  justify="center"
+                  bg="blackAlpha.400"
+                >
+                  <FaPlay color="white" size={10} />
+                </Flex>
+              )}
+            </Box>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "primary",
+        header: "Submission",
+        cell: ({ row }) => {
+          const s = row.original;
+          const challenge = challenges[s.challengeId];
+          const team = teams[s.teamId];
+          if (!challenge || !team) return null;
+          return (
+            <Box minW={0}>
+              <Flex align="center" gap={2} flexWrap="wrap">
+                <Text
+                  fontWeight="semibold"
+                  color="gray.800"
+                  noOfLines={2}
+                  lineHeight="short"
+                >
+                  {challenge.emoji
+                    ? `${challenge.emoji} ${challenge.title}`
+                    : challenge.title}
+                </Text>
+                <Tag
+                  size="sm"
+                  colorScheme={
+                    s.accepted ? "green" : s.rejected ? "red" : "orange"
+                  }
+                >
+                  {s.accepted
+                    ? "Accepted"
+                    : s.rejected
+                      ? "Rejected"
+                      : "Pending"}
+                </Tag>
+              </Flex>
+              <Text fontSize="sm" color="gray.500" mt={0.5} noOfLines={1}>
+                {team.emoji} {team.name} ·{" "}
+                {formatDistance(new Date(s.createdAt), new Date())} ago
+                {!s.rejected && s.submissionNumber != null
+                  ? ` · #${s.submissionNumber}`
+                  : ""}
+              </Text>
+            </Box>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "pts",
+        header: "Pts",
+        meta: { numeric: true },
+        cell: ({ row }) => {
+          const challenge = challenges[row.original.challengeId];
+          return (
+            <Text fontWeight="semibold" color="gray.700">
+              {challenge?.pts ?? "—"}
+            </Text>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "actions",
+        header: "",
+        meta: { isAction: true },
+        cell: ({ row }) => {
+          const s = row.original;
+          const canManage = isAdmin || user.teamId === s.teamId;
+          return (
+            <HStack spacing={0} onClick={(e) => e.stopPropagation()}>
+              <IconButton
+                aria-label="Toggle favorite"
+                icon={
+                  s.favorited ? (
+                    <LuHeart fill="currentColor" />
+                  ) : (
+                    <LuHeart />
+                  )
+                }
+                onClick={() => toggleFavorite(s.id)}
+                variant="ghost"
+                color={s.favorited ? "red.500" : "gray.400"}
+                size="sm"
+              />
+              {isAdmin && sortId === "favorites" && (
+                <Text fontSize="xs" color="gray.500" minW="14px">
+                  {s.favoriteCount}
+                </Text>
+              )}
+              {canManage && (
+                <Menu>
+                  <MenuButton
+                    as={IconButton}
+                    icon={<HiDotsVertical />}
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Options"
+                  />
+                  <MenuList>
+                    {isAdmin && (
+                      <>
+                        {!s.accepted && (
+                          <MenuItem
+                            onClick={() =>
+                              void runAdminAction(s.id, "approve")
+                            }
+                          >
+                            Approve
+                          </MenuItem>
+                        )}
+                        {!s.rejected && (
+                          <MenuItem
+                            onClick={() =>
+                              void runAdminAction(s.id, "reject")
+                            }
+                          >
+                            Reject
+                          </MenuItem>
+                        )}
+                        {(s.accepted || s.rejected) && (
+                          <MenuItem
+                            onClick={() =>
+                              void runAdminAction(s.id, "reset")
+                            }
+                          >
+                            Reset to pending
+                          </MenuItem>
+                        )}
+                      </>
+                    )}
+                    <MenuItem onClick={() => editSubmission(s.id)}>
+                      {s.mediaURL ? "Update media" : "Add media"}
+                    </MenuItem>
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => void runAdminAction(s.id, "delete")}
+                        color="red.600"
+                      >
+                        Delete
+                      </MenuItem>
+                    )}
+                  </MenuList>
+                </Menu>
+              )}
+            </HStack>
+          );
+        },
+      }),
+    ],
+    [
+      challenges,
+      teams,
+      isAdmin,
+      user.teamId,
+      sortId,
+      toggleFavorite,
+      runAdminAction,
+      editSubmission,
+    ],
+  );
+
+  const scavTokNavButton = (
+    <IconButton
+      aria-label="Open ScavTok"
+      icon={<FaVideo />}
+      variant="ghost"
+      size="md"
+      onClick={() => setQuery({ view: "tok", submission: null })}
+    />
   );
 
   if (view === "tok") {
     return (
-      <NavContainer title="ScavTok" fullScreen hideTopBar bgColor="black">
-        <Box position="relative" flex={1} w="100%" h="100%" minH={0}>
-          <Box
-            position="absolute"
-            top={4}
-            right={4}
-            zIndex={40}
-            display={{ base: "none", md: "block" }}
-          >
-            {viewToggle}
-          </Box>
-          <ScavTokReel
-            initialPage={tokInitialPage}
-            onBackToList={() => setQuery({ view: "list", submission: null })}
-          />
-        </Box>
+      <NavContainer
+        title="ScavTok"
+        fullScreen
+        hideTopBar
+        hideMenu
+        bgColor="black"
+      >
+        <ScavTokReel
+          initialPage={tokInitialPage}
+          teamId={teamIdFromQuery ?? undefined}
+          onBackToList={() => {
+            if (teamIdFromQuery) {
+              void router.push("/my-team");
+              return;
+            }
+            setQuery({ view: "list", submission: null });
+          }}
+        />
       </NavContainer>
     );
   }
 
   return (
-    <NavContainer title="Feed">
+    <NavContainer title="Feed" right={scavTokNavButton}>
       <FeedWithAnnouncements announcements={announcements}>
-      {noSubmissionsAtAll ? (
-        <VStack spacing={4} mt={8}>
-          <Flex w="100%" justify="flex-end">
-            {viewToggle}
-          </Flex>
-          <Heading size="lg" color="gray.500" textAlign="center">
+        {noSubmissionsAtAll ? (
+          <Heading size="lg" color="gray.500" textAlign="center" mt={8}>
             No Submissions Yet!
           </Heading>
-        </VStack>
-      ) : (
-        <VStack justifyContent="flex-start" width="100%" spacing={4}>
-          <Flex w="100%" gap={3} align="center">
-            <Input
-              placeholder="Search by team name or challenge name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              flex={1}
-              bg="white"
-              borderRadius="md"
-              boxShadow="sm"
-              size="md"
+        ) : (
+          <Box>
+            <DataListToolbar
+              search={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="Search by team or challenge…"
+              sortOptions={sortOptions}
+              sortId={sortId}
+              onSortChange={(id) => setSortId(id as FeedSortId)}
+              filterOptions={filterOptions}
+              activeFilterIds={activeFilters}
+              onToggleFilter={toggleFilter}
+              onClearFilter={clearFilter}
             />
-            {viewToggle}
-          </Flex>
-          <VStack width="100%" spacing={2}>
-            {isAdmin && (
-              <HStack
-                width="100%"
-                bg="white"
-                p={3}
-                borderRadius="md"
-                boxShadow="sm"
-                justifyContent="space-between"
-              >
-                <Text fontSize="sm" fontWeight="medium" color="gray.700">
-                  Sort by favorites{" "}
-                  <Text as="span" fontSize="xs" color="gray.500">
-                    [Visible to Admins Only · loaded items]
-                  </Text>
-                </Text>
-                <Switch
-                  isChecked={sortByFavorites}
-                  onChange={(e) => setSortByFavorites(e.target.checked)}
-                  colorScheme="red"
-                />
-              </HStack>
-            )}
-            <HStack
-              width="100%"
-              bg="white"
-              p={3}
-              borderRadius="md"
-              boxShadow="sm"
-              justifyContent="space-between"
-            >
-              <Text fontSize="sm" fontWeight="medium" color="gray.700">
-                Show only my favorites
-              </Text>
-              <Switch
-                isChecked={showOnlyMyFavorites}
-                onChange={(e) => setShowOnlyMyFavorites(e.target.checked)}
-                colorScheme="red"
+            {feed.isLoading && visibleItems.length === 0 ? (
+              <Flex justify="center" py={10}>
+                <Spinner color="gray.400" />
+              </Flex>
+            ) : (
+              <DataList
+                rows={visibleItems}
+                columns={columns}
+                getRowId={(s) => s.id}
+                expandedId={selectedSubmission}
+                onToggle={(id) => {
+                  toggleOpen(id);
+                }}
+                rowRef={rowRef}
+                emptyMessage="No submissions match"
+                renderExpanded={(s) => {
+                  const challenge = challenges[s.challengeId];
+                  const team = teams[s.teamId];
+                  if (!challenge || !team) return null;
+                  const index = visibleItems.findIndex((i) => i.id === s.id);
+                  return (
+                    <FeedExpandedDetail
+                      item={s}
+                      index={index < 0 ? 0 : index}
+                      team={team}
+                      challenge={challenge}
+                      queue={queue}
+                      isOpen={selectedSubmission === s.id}
+                    />
+                  );
+                }}
               />
-            </HStack>
-          </VStack>
-          {!feed.isLoading && visibleItems.length === 0 ? (
-            <Heading size="md" color="gray.500" textAlign="center" mt={8}>
-              No submissions match your search.
-            </Heading>
-          ) : null}
-          {feed.isLoading && visibleItems.length === 0 ? (
-            <Spinner color="gray.400" mt={8} />
-          ) : null}
-          {visibleItems.map((s, index) => {
-            const challenge = challenges[s.challengeId];
-            const team = teams[s.teamId];
-            if (!challenge || !team) return null;
-            return (
-              <Box key={s.id} width="100%">
-                {index === triggerIndex && <Box ref={loadMoreRef} h={0} />}
-                <FeedCard
-                  item={s}
-                  index={index}
-                  team={team}
-                  challenge={challenge}
-                  queue={queue}
-                  cardRef={s.id === submissionSearchParam ? ref : undefined}
-                  isOpen={s.id === selectedSubmission}
-                  isAdmin={isAdmin}
-                  canManage={isAdmin || user.teamId === s.teamId}
-                  showFavoriteCount={isAdmin && sortByFavorites}
-                  onToggleOpen={toggleOpen}
-                  onToggleFavorite={toggleFavorite}
-                  onAdminAction={runAdminAction}
-                  onEdit={editSubmission}
-                />
-              </Box>
-            );
-          })}
-          {feed.isLoadingMore && <Spinner color="gray.400" my={4} />}
-          {feed.error && (
-            <Button size="sm" variant="outline" onClick={() => feed.mutate()}>
-              Couldn&apos;t load more — retry
-            </Button>
-          )}
-        </VStack>
-      )}
+            )}
+            <Box ref={loadMoreRef} h={1} />
+            {feed.isLoadingMore && (
+              <Flex justify="center" my={4}>
+                <Spinner color="gray.400" />
+              </Flex>
+            )}
+            {feed.error && (
+              <Button
+                size="sm"
+                variant="outline"
+                mt={2}
+                onClick={() => feed.mutate()}
+              >
+                Couldn&apos;t load more — retry
+              </Button>
+            )}
+          </Box>
+        )}
       </FeedWithAnnouncements>
     </NavContainer>
   );
 }
 
-type FeedCardProps = {
+type FeedExpandedProps = {
   item: FeedItem;
   index: number;
   team: SerializedTeam;
   challenge: FeedChallenge;
   queue: PreloadQueue;
-  cardRef?: React.Ref<HTMLDivElement>;
   isOpen: boolean;
-  isAdmin: boolean;
-  canManage: boolean;
-  showFavoriteCount: boolean;
-  onToggleOpen: (id: string) => boolean;
-  onToggleFavorite: (id: string) => void;
-  onAdminAction: (id: string, action: AdminAction) => void;
-  onEdit: (id: string) => void;
 };
 
-const FeedCard = memo(function FeedCard({
+const FeedExpandedDetail = memo(function FeedExpandedDetail({
   item: s,
   index,
   team,
   challenge,
   queue,
-  cardRef,
   isOpen,
-  isAdmin,
-  canManage,
-  showFavoriteCount,
-  onToggleOpen,
-  onToggleFavorite,
-  onAdminAction,
-  onEdit,
-}: FeedCardProps) {
+}: FeedExpandedProps) {
   const mediaRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVideo = isVideoUrl(s.mediaURL);
@@ -571,328 +804,106 @@ const FeedCard = memo(function FeedCard({
     sizeBytes: s.sizeBytes,
   });
 
-  const handleToggle = () => {
-    const opening = onToggleOpen(s.id);
+  useEffect(() => {
+    if (!isOpen || !isVideo) return;
     const v = videoRef.current;
     if (!v) return;
-    if (opening) {
-      markPlayIntent("tap");
-      v.play().catch(() => undefined);
-    } else {
+    markPlayIntent("tap");
+    v.play().catch(() => undefined);
+    return () => {
       v.pause();
-    }
-  };
+    };
+  }, [isOpen, isVideo, markPlayIntent]);
 
   const duration = formatDuration(s.durationSec);
   const aspect =
     s.width && s.height ? `${s.width} / ${s.height}` : "16 / 9";
 
   return (
-    <Card
-      ref={cardRef}
-      width="100%"
-      className={isOpen ? "card open" : "card"}
-      boxShadow="sm"
-      _hover={{ boxShadow: "md" }}
-      transition="all 0.2s"
-      borderRadius="lg"
-    >
-      <Flex
-        direction="row"
-        justifyContent="space-between"
-        alignItems="flex-start"
-        p={4}
-        gap={3}
-      >
-        <Flex
-          flex={1}
-          direction="column"
-          gap={2}
-          cursor="pointer"
-          onClick={handleToggle}
+    <VStack align="stretch" spacing={3}>
+      <Text fontSize="sm" color="gray.600">
+        <Link
+          href={`/teams?team=${s.teamId}`}
+          fontWeight="medium"
+          color="gray.700"
+          _hover={{ textDecoration: "underline" }}
         >
-          <Flex alignItems="center" gap={2} flexWrap="wrap">
-            <Text fontSize="lg" fontWeight="semibold" color="gray.800">
-              {challenge.emoji
-                ? `${challenge.emoji} ${challenge.title}`
-                : challenge.title}
-            </Text>
-            <Tag
-              size="sm"
-              colorScheme={s.accepted ? "green" : s.rejected ? "red" : "orange"}
-              fontWeight="medium"
-            >
-              {s.accepted ? "Accepted" : s.rejected ? "Rejected" : "Pending"}
-            </Tag>
-          </Flex>
-          <Text fontSize="sm" color="gray.600" suppressHydrationWarning>
-            {formatDistance(new Date(s.createdAt), new Date())} ago by{" "}
-            <Link
-              href={`/teams?team=${s.teamId}`}
-              fontWeight="medium"
-              color="gray.700"
-              _hover={{ color: "gray.900", textDecoration: "underline" }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {team.emoji} {team.name}
-            </Link>
-          </Text>
-          {!s.rejected && s.submissionNumber != null && (
-            <Text fontSize="xs" color="gray.500" fontWeight="medium">
-              {s.accepted ? (
-                <>
-                  Submission #{s.submissionNumber} of {challenge.numWinners}{" "}
-                  spot{challenge.numWinners === 1 ? "" : "s"}
-                </>
-              ) : (
-                <>
-                  Submission #{s.submissionNumber} ({challenge.acceptedCount}{" "}
-                  accepted, {challenge.pendingCount} pending /{" "}
-                  {challenge.numWinners} spot
-                  {challenge.numWinners === 1 ? "" : "s"})
-                </>
-              )}
-            </Text>
-          )}
-        </Flex>
-
-        <Flex alignItems="center" gap={1} flexShrink={0}>
-          <Flex
-            alignItems="center"
-            justifyContent="center"
-            bg="blue.50"
-            borderRadius="md"
-            px={3}
-            py={1}
-            minWidth="fit-content"
-          >
-            <Text fontSize="md" fontWeight="bold" color="blue.700">
-              {challenge.pts} pts
-            </Text>
-          </Flex>
-          <Flex alignItems="center" gap={0}>
-            <IconButton
-              aria-label="Toggle favorite"
-              icon={s.favorited ? <AiFillHeart /> : <AiOutlineHeart />}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleFavorite(s.id);
-              }}
-              variant="ghost"
-              color={s.favorited ? "red.500" : "gray.400"}
-              _hover={{
-                color: s.favorited ? "red.600" : "gray.500",
-                bg: "transparent",
-              }}
-              size="md"
-              fontSize="xl"
-            />
-            {showFavoriteCount && (
-              <Text
-                fontSize="sm"
-                fontWeight="semibold"
-                color="gray.600"
-                minW="15px"
-              >
-                {s.favoriteCount}
-              </Text>
-            )}
-          </Flex>
-          {canManage && (
-            <Box visibility={isOpen ? "visible" : "hidden"} width="32px">
-              <Menu>
-                <MenuButton
-                  as={IconButton}
-                  icon={<HiDotsVertical />}
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Options"
-                  onClick={(e) => e.stopPropagation()}
-                  _hover={{ bg: "gray.100" }}
-                />
-                <MenuList>
-                  {isAdmin && (
-                    <>
-                      {!s.accepted && (
-                        <MenuItem
-                          onClick={() => onAdminAction(s.id, "approve")}
-                          color={s.rejected ? "green.600" : undefined}
-                          fontWeight={s.rejected ? "semibold" : undefined}
-                        >
-                          {s.rejected
-                            ? "✓ Approve Submission"
-                            : "Approve Submission"}
-                        </MenuItem>
-                      )}
-                      {!s.rejected && (
-                        <MenuItem
-                          onClick={() => onAdminAction(s.id, "reject")}
-                          color={s.accepted ? "red.600" : undefined}
-                          fontWeight={s.accepted ? "semibold" : undefined}
-                        >
-                          {s.accepted
-                            ? "✗ Reject Submission"
-                            : "Reject Submission"}
-                        </MenuItem>
-                      )}
-                      {(s.accepted || s.rejected) && (
-                        <MenuItem
-                          onClick={() => onAdminAction(s.id, "reset")}
-                          color="blue.600"
-                        >
-                          ↺ Reset to Pending
-                        </MenuItem>
-                      )}
-                    </>
-                  )}
-                  <MenuItem onClick={() => onEdit(s.id)}>
-                    {s.mediaURL ? "Update Video" : "Add Video"}
-                  </MenuItem>
-                  {isAdmin && (
-                    <MenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAdminAction(s.id, "delete");
-                      }}
-                      color="red.600"
-                      _hover={{ bg: "red.50" }}
-                    >
-                      Delete Submission
-                    </MenuItem>
-                  )}
-                </MenuList>
-              </Menu>
-            </Box>
-          )}
-          <ChevronDownIcon
-            w={5}
-            h={5}
-            color="gray.500"
-            className={isOpen ? "chevron rotate" : "chevron"}
-          />
-        </Flex>
-      </Flex>
+          {team.emoji} {team.name}
+        </Link>
+        {!s.rejected && s.submissionNumber != null && (
+          <>
+            {" "}
+            · #{s.submissionNumber}
+            {s.accepted
+              ? ` of ${challenge.numWinners}`
+              : ` (${challenge.acceptedCount} accepted, ${challenge.pendingCount} pending / ${challenge.numWinners})`}
+          </>
+        )}
+        {duration ? ` · ${duration}` : ""}
+      </Text>
 
       {(isVideo || isImage) && (
-        <Box px={4} pb={isOpen ? 2 : 4}>
-          <Box
-            ref={mediaRef}
-            position="relative"
-            width="100%"
-            bg="gray.100"
-            borderRadius="md"
-            overflow="hidden"
-            display="flex"
-            justifyContent="center"
-            cursor={isOpen ? undefined : "pointer"}
-            onClick={isOpen ? undefined : handleToggle}
-          >
-            {isVideo && (
-              <chakra.video
-                ref={videoRef}
-                controls={isOpen}
-                playsInline
-                poster={posterReady && s.posterURL ? s.posterURL : undefined}
+        <Box
+          ref={mediaRef}
+          position="relative"
+          width="100%"
+          bg="gray.100"
+          borderRadius="md"
+          overflow="hidden"
+          display="flex"
+          justifyContent="center"
+        >
+          {isVideo && (
+            <chakra.video
+              ref={videoRef}
+              controls
+              playsInline
+              poster={posterReady && s.posterURL ? s.posterURL : undefined}
+              width="100%"
+              maxWidth="800px"
+              maxHeight="500px"
+              objectFit="contain"
+              sx={{ aspectRatio: aspect }}
+            />
+          )}
+          {isImage &&
+            (posterReady ? (
+              <Image
+                src={s.mediaURL!}
+                alt={s.note}
                 width="100%"
-                maxWidth={isOpen ? "800px" : undefined}
-                height={isOpen ? undefined : "200px"}
-                maxHeight={isOpen ? "500px" : undefined}
-                objectFit={isOpen ? "contain" : "cover"}
-                sx={isOpen ? { aspectRatio: aspect } : undefined}
+                maxHeight="500px"
+                objectFit="contain"
               />
-            )}
-            {isImage &&
-              (posterReady ? (
-                <Image
-                  src={s.mediaURL!}
-                  alt={s.note}
-                  width="100%"
-                  height={isOpen ? undefined : "200px"}
-                  maxHeight={isOpen ? "500px" : undefined}
-                  objectFit={isOpen ? "contain" : "cover"}
-                />
-              ) : (
-                <Box height="200px" width="100%" />
-              ))}
-            {isVideo && !isOpen && (
-              <Flex
-                position="absolute"
-                inset={0}
-                alignItems="center"
-                justifyContent="center"
-                pointerEvents="none"
-              >
-                <Flex
-                  bg="blackAlpha.600"
-                  color="white"
-                  borderRadius="full"
-                  w="44px"
-                  h="44px"
-                  alignItems="center"
-                  justifyContent="center"
-                  pl="3px"
-                >
-                  <FaPlay />
-                </Flex>
-              </Flex>
-            )}
-            {isVideo && !isOpen && duration && (
-              <Text
-                position="absolute"
-                bottom={2}
-                right={2}
-                bg="blackAlpha.700"
-                color="white"
-                fontSize="xs"
-                fontWeight="semibold"
-                px={2}
-                py={0.5}
-                borderRadius="md"
-                pointerEvents="none"
-              >
-                {duration}
-              </Text>
-            )}
-          </Box>
+            ) : (
+              <Box height="200px" width="100%" />
+            ))}
         </Box>
       )}
 
-      {isOpen && (s.note || (s.mediaURL && !isVideo && !isImage)) && (
-        <Flex
-          direction="column"
-          gap={4}
-          px={4}
-          pb={4}
-          pt={2}
-          borderTop="1px"
-          borderColor="gray.100"
-          className="expandable-content"
+      {s.mediaURL && !isVideo && !isImage && (
+        <Link
+          href={s.mediaURL}
+          color="blue.600"
+          fontWeight="medium"
+          _hover={{ textDecoration: "underline" }}
         >
-          {s.mediaURL && !isVideo && !isImage && (
-            <Link
-              href={s.mediaURL}
-              color="blue.600"
-              fontWeight="medium"
-              _hover={{ textDecoration: "underline" }}
-            >
-              View media
-            </Link>
-          )}
-          {s.note && (
-            <Box
-              bg="gray.50"
-              p={4}
-              borderRadius="md"
-              borderLeft="3px solid"
-              borderColor="gray.300"
-            >
-              <Text color="gray.700" lineHeight="tall">
-                {s.note}
-              </Text>
-            </Box>
-          )}
-        </Flex>
+          View media
+        </Link>
       )}
-    </Card>
+      {s.note && (
+        <Box
+          bg="white"
+          p={3}
+          borderRadius="md"
+          borderLeft="3px solid"
+          borderColor="gray.300"
+        >
+          <Text color="gray.700" lineHeight="tall">
+            {s.note}
+          </Text>
+        </Box>
+      )}
+    </VStack>
   );
 });

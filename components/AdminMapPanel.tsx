@@ -22,7 +22,7 @@ import {
   useDisclosure,
   useToast,
 } from "@chakra-ui/react";
-import { FiEdit2, FiTrash2 } from "react-icons/fi";
+import { LuPencil, LuTrash2 } from "react-icons/lu";
 import AdminDataTable, { type AdminColumn } from "./AdminDataTable";
 import EmojiInput from "./EmojiInput";
 
@@ -300,7 +300,7 @@ function NeighborhoodDepositsPanel({
                         <Tooltip label="Edit points">
                           <IconButton
                             aria-label="Edit points"
-                            icon={<FiEdit2 />}
+                            icon={<LuPencil />}
                             size="xs"
                             variant="ghost"
                             onClick={() => startEditDeposit(d)}
@@ -309,7 +309,7 @@ function NeighborhoodDepositsPanel({
                         <Tooltip label="Delete deposit">
                           <IconButton
                             aria-label="Delete deposit"
-                            icon={<FiTrash2 />}
+                            icon={<LuTrash2 />}
                             size="xs"
                             variant="ghost"
                             colorScheme="red"
@@ -727,7 +727,7 @@ export default function AdminMapPanel({
                 <Tooltip label="Edit neighborhood">
                   <IconButton
                     aria-label="Edit"
-                    icon={<FiEdit2 />}
+                    icon={<LuPencil />}
                     size="xs"
                     variant="ghost"
                     onClick={() => {

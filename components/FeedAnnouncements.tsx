@@ -34,25 +34,25 @@ export function FeedWithAnnouncements({
     <VStack align="stretch" spacing={4} width="100%">
       {pinned.length > 0 && <PinnedBanners items={pinned} />}
       <Flex
-        direction={{ base: "column", lg: "row" }}
-        gap={4}
+        direction={{ base: "column", md: "row" }}
+        gap={{ base: 3, md: 4 }}
         align="flex-start"
         width="100%"
       >
-        <Box flex="1" minW={0} width="100%">
+        <Box flex="1" minW={0} width="100%" order={{ base: 2, md: 1 }}>
           {children}
         </Box>
-        {announcements.length > 0 && (
-          <Box
-            width={{ base: "100%", lg: "260px" }}
-            flexShrink={0}
-            position={{ lg: "sticky" }}
-            top={{ lg: 4 }}
-            order={{ base: -1, lg: 0 }}
-          >
-            <AnnouncementsSidebar announcements={announcements} />
-          </Box>
-        )}
+        <Box
+          width={{ base: "100%", md: "240px", lg: "260px" }}
+          flexShrink={0}
+          position={{ md: "sticky" }}
+          top={{ md: 0 }}
+          alignSelf="flex-start"
+          order={{ base: 1, md: 2 }}
+          zIndex={1}
+        >
+          <AnnouncementsSidebar announcements={announcements} />
+        </Box>
       </Flex>
     </VStack>
   );
@@ -127,45 +127,51 @@ function AnnouncementsSidebar({
             Announcements
           </Heading>
         </Box>
-        <VStack
-          align="stretch"
-          spacing={0}
-          maxH={{ base: "200px", lg: "70vh" }}
-          overflowY="auto"
-        >
-          {announcements.map((a) => (
-            <Box
-              key={a.id}
-              as="button"
-              textAlign="left"
-              px={3}
-              py={2.5}
-              borderBottomWidth="1px"
-              borderColor="gray.50"
-              _hover={{ bg: "blue.50" }}
-              _active={{ bg: "blue.100" }}
-              onClick={() => setSelected(a)}
-            >
-              <Flex align="flex-start" gap={2}>
-                {a.pinned && (
-                  <Badge colorScheme="blue" flexShrink={0} mt={0.5}>
-                    Pin
-                  </Badge>
-                )}
-                <Box minW={0} flex={1}>
-                  <Text fontSize="sm" fontWeight="medium" noOfLines={2}>
-                    {a.title}
-                  </Text>
-                  {a.publishedAt && (
-                    <Text fontSize="2xs" color="gray.500" mt={0.5}>
-                      {new Date(a.publishedAt).toLocaleDateString()}
-                    </Text>
+        {announcements.length === 0 ? (
+          <Text px={3} py={3} fontSize="sm" color="gray.400">
+            None yet
+          </Text>
+        ) : (
+          <VStack
+            align="stretch"
+            spacing={0}
+            maxH={{ base: "180px", md: "70vh" }}
+            overflowY="auto"
+          >
+            {announcements.map((a) => (
+              <Box
+                key={a.id}
+                as="button"
+                textAlign="left"
+                px={3}
+                py={2.5}
+                borderBottomWidth="1px"
+                borderColor="gray.50"
+                _hover={{ bg: "blue.50" }}
+                _active={{ bg: "blue.100" }}
+                onClick={() => setSelected(a)}
+              >
+                <Flex align="flex-start" gap={2}>
+                  {a.pinned && (
+                    <Badge colorScheme="blue" flexShrink={0} mt={0.5}>
+                      Pin
+                    </Badge>
                   )}
-                </Box>
-              </Flex>
-            </Box>
-          ))}
-        </VStack>
+                  <Box minW={0} flex={1}>
+                    <Text fontSize="sm" fontWeight="medium" noOfLines={2}>
+                      {a.title}
+                    </Text>
+                    {a.publishedAt && (
+                      <Text fontSize="2xs" color="gray.500" mt={0.5}>
+                        {new Date(a.publishedAt).toLocaleDateString()}
+                      </Text>
+                    )}
+                  </Box>
+                </Flex>
+              </Box>
+            ))}
+          </VStack>
+        )}
       </Box>
       <AnnouncementDetailModal
         announcement={selected}

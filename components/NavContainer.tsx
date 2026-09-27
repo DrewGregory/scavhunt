@@ -16,18 +16,22 @@ import {
   Button,
   Tooltip,
 } from "@chakra-ui/react";
-import { FiChevronLeft, FiChevronRight, FiMenu } from "react-icons/fi";
 import {
-  GiPodium,
-  GiNotebook,
-  GiRuleBook,
-  GiScrollUnfurled,
-} from "react-icons/gi";
+  LuBookOpen,
+  LuChevronLeft,
+  LuChevronRight,
+  LuListChecks,
+  LuLogOut,
+  LuMenu,
+  LuNewspaper,
+  LuShieldCheck,
+  LuTrophy,
+  LuUsers,
+} from "react-icons/lu";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useSession } from "./useSession";
 import Image from "next/image";
-import { RegistrationSurveyModal } from "./RegistrationSurveyModal";
 import { AnnouncementModal } from "./AnnouncementModal";
 
 interface LinkItemProps {
@@ -41,19 +45,20 @@ interface LinkItemProps {
 const LinkItems: Array<LinkItemProps> = [
   {
     name: "Feed",
-    icon: GiScrollUnfurled,
+    icon: LuNewspaper,
     url: "/feed",
     matchPaths: ["/feed", "/scavtok"],
   },
   {
     name: "Challenges",
-    icon: GiNotebook,
+    icon: LuListChecks,
     url: "/challenges",
     matchPaths: ["/challenges", "/map"],
   },
-  { name: "Leaderboard", icon: GiPodium, url: "/teams" },
-  { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" },
-  { name: "Admin", icon: GiNotebook, url: "/admin", adminOnly: true },
+  { name: "Leaderboard", icon: LuTrophy, url: "/teams" },
+  { name: "My Team", icon: LuUsers, url: "/my-team" },
+  { name: "How to Play", icon: LuBookOpen, url: "/how-to-play" },
+  { name: "Admin", icon: LuShieldCheck, url: "/admin", adminOnly: true },
 ];
 
 const SIDEBAR_EXPANDED = "20vw";
@@ -67,6 +72,8 @@ export default function NavContainer({
   bgColor,
   hgt,
   hideTopBar,
+  hideMenu,
+  right,
 }: {
   title: string;
   children: ReactNode;
@@ -74,13 +81,13 @@ export default function NavContainer({
   bgColor?: string;
   hgt?: string;
   hideTopBar?: boolean;
+  /** Hide the floating mobile menu button (e.g. immersive ScavTok). */
+  hideMenu?: boolean;
+  /** Optional actions rendered on the right side of the top navbar. */
+  right?: ReactNode;
 }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const session = useSession();
-  const [surveyOpen, setSurveyOpen] = useState(false);
-  const [surveyDoneOverride, setSurveyDoneOverride] = useState<boolean | null>(
-    null,
-  );
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -103,9 +110,6 @@ export default function NavContainer({
     });
   };
 
-  const surveyDone =
-    surveyDoneOverride ?? Boolean(session?.user.surveyCompletedAt);
-  const surveyLabel = surveyDone ? "Edit survey" : "Player survey";
   const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
 
   return (
@@ -117,8 +121,6 @@ export default function NavContainer({
         title={"Scavhunt"}
         onClose={() => onClose}
         display={{ base: "none", md: "block" }}
-        onOpenSurvey={() => setSurveyOpen(true)}
-        surveyLabel={surveyLabel}
         collapsed={collapsed}
         onToggleCollapse={toggleCollapsed}
         w={sidebarW}
@@ -135,8 +137,6 @@ export default function NavContainer({
           <SidebarContent
             title={"Scavhunt"}
             onClose={onClose}
-            onOpenSurvey={() => setSurveyOpen(true)}
-            surveyLabel={surveyLabel}
             collapsed={false}
           />
         </DrawerContent>
@@ -147,11 +147,12 @@ export default function NavContainer({
           height="10dvh"
           title={title}
           onOpen={onOpen}
+          rightSlot={right}
         />
       )}
-      {hideTopBar && (
+      {hideTopBar && !hideMenu && (
         <IconButton
-          display={{ base: "block", md: "none" }}
+          display={{ base: "inline-flex", md: "none" }}
           position="fixed"
           top={4}
           left={4}
@@ -159,7 +160,7 @@ export default function NavContainer({
           variant="solid"
           onClick={onOpen}
           aria-label="open menu"
-          icon={<FiMenu />}
+          icon={<LuMenu />}
           bg="whiteAlpha.600"
           backdropFilter="blur(8px)"
           _hover={{ bg: "whiteAlpha.700" }}
@@ -178,12 +179,14 @@ export default function NavContainer({
           gap={3}
           transition="margin-left 0.2s ease, width 0.2s ease"
         >
-          <Text flex={1} fontSize="2xl" fontFamily="monospace" fontWeight="bold">
+          <Text flex={1} fontSize="2xl" fontWeight="bold">
             {title}
           </Text>
+          {right}
         </Flex>
       )}
       <Box
+        data-nav-scroll
         ml={{ base: 0, md: sidebarW }}
         p={fullScreen ? 0 : 4}
         width={{ base: "100vw", md: `calc(100vw - ${sidebarW})` }}
@@ -197,13 +200,6 @@ export default function NavContainer({
       >
         {children}
       </Box>
-      {session?.user ? (
-        <RegistrationSurveyModal
-          isOpen={surveyOpen}
-          onClose={() => setSurveyOpen(false)}
-          onCompleted={() => setSurveyDoneOverride(true)}
-        />
-      ) : null}
       {session?.user ? <AnnouncementModal /> : null}
     </Box>
   );
@@ -211,8 +207,6 @@ export default function NavContainer({
 
 interface SidebarProps extends BoxProps {
   onClose: () => void;
-  onOpenSurvey?: () => void;
-  surveyLabel?: string;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -220,8 +214,6 @@ interface SidebarProps extends BoxProps {
 const SidebarContent = ({
   onClose,
   title,
-  onOpenSurvey,
-  surveyLabel = "Player survey",
   collapsed = false,
   onToggleCollapse,
   ...rest
@@ -242,9 +234,10 @@ const SidebarContent = ({
       w={{ base: "full", md: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
       pos="fixed"
       h="full"
-      overflowY="auto"
       overflowX="hidden"
       transition="width 0.2s ease"
+      display="flex"
+      flexDirection="column"
       {...rest}
     >
       <Flex
@@ -253,6 +246,7 @@ const SidebarContent = ({
         mx={collapsed ? 2 : 8}
         justifyContent={collapsed ? "center" : "space-between"}
         gap={2}
+        flexShrink={0}
       >
         <Flex
           as="button"
@@ -279,12 +273,7 @@ const SidebarContent = ({
             />
           </Box>
           {!collapsed && (
-            <Text
-              fontSize="2xl"
-              fontFamily="monospace"
-              fontWeight="bold"
-              noOfLines={1}
-            >
+            <Text fontSize="2xl" fontWeight="bold" noOfLines={1}>
               {title}
             </Text>
           )}
@@ -292,7 +281,7 @@ const SidebarContent = ({
         <CloseButton display={{ base: "flex", md: "none" }} onClick={onClose} />
       </Flex>
       {session && !collapsed && (
-        <Flex px={4} mx={4} mb={4} direction="column" gap={1}>
+        <Flex px={4} mx={4} mb={4} direction="column" gap={1} flexShrink={0}>
           <Text fontWeight="bold" fontSize="sm">
             {session.user.name}
           </Text>
@@ -301,30 +290,10 @@ const SidebarContent = ({
               {session.team.emoji} {session.team.name}
             </Text>
           )}
-          {onOpenSurvey ? (
-            <Button
-              size="sm"
-              mt={2}
-              variant="outline"
-              onClick={onOpenSurvey}
-              width="fit-content"
-            >
-              {surveyLabel}
-            </Button>
-          ) : null}
-          <Button
-            size="sm"
-            mt={2}
-            variant="outline"
-            onClick={handleLogout}
-            width="fit-content"
-          >
-            Log out
-          </Button>
         </Flex>
       )}
       {session && collapsed && (
-        <Flex direction="column" align="center" gap={2} mb={3} px={1}>
+        <Flex direction="column" align="center" gap={2} mb={3} px={1} flexShrink={0}>
           {session.team && (
             <Text fontSize="lg" title={session.team.name}>
               {session.team.emoji}
@@ -332,56 +301,90 @@ const SidebarContent = ({
           )}
         </Flex>
       )}
-      <Divider />
-      {LinkItems.filter(
-        (link) => !link.adminOnly || session?.user.isAdmin,
-      ).map((link) => {
-        const paths = link.matchPaths ?? [link.url];
-        const active = paths.some(
-          (p) =>
-            router.pathname === p || router.asPath.split("?")[0] === p,
-        );
-        return (
-          <NavItem
-            key={link.name}
-            icon={link.icon}
-            collapsed={collapsed}
-            label={link.name}
-            bg={active ? colors.green : undefined}
-            onClick={() => {
-              router.push(`${link.url}`);
-            }}
+      <Divider flexShrink={0} />
+      <Box flex={1} overflowY="auto" minH={0} py={1}>
+        {LinkItems.filter(
+          (link) => !link.adminOnly || session?.user.isAdmin,
+        ).map((link) => {
+          const paths = link.matchPaths ?? [link.url];
+          const active = paths.some(
+            (p) =>
+              router.pathname === p || router.asPath.split("?")[0] === p,
+          );
+          return (
+            <NavItem
+              key={link.name}
+              icon={link.icon}
+              collapsed={collapsed}
+              label={link.name}
+              bg={active ? colors.green : undefined}
+              onClick={() => {
+                router.push(`${link.url}`);
+              }}
+            >
+              {link.name}
+            </NavItem>
+          );
+        })}
+        {onToggleCollapse && (
+          <Box
+            display={{ base: "none", md: "block" }}
+            mt={4}
+            mb={2}
+            mx={collapsed ? 1 : 4}
           >
-            {link.name}
-          </NavItem>
-        );
-      })}
-      {onToggleCollapse && (
+            <Tooltip
+              label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              placement="right"
+              hasArrow
+            >
+              <Box w="100%">
+                <IconButton
+                  aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  icon={collapsed ? <LuChevronRight /> : <LuChevronLeft />}
+                  size="sm"
+                  variant="outline"
+                  borderColor="gray.300"
+                  bg="white"
+                  _hover={{ bg: "gray.50" }}
+                  onClick={onToggleCollapse}
+                  w="100%"
+                />
+              </Box>
+            </Tooltip>
+          </Box>
+        )}
+      </Box>
+      {session && (
         <Box
-          display={{ base: "none", md: "block" }}
-          mt={4}
-          mb={4}
-          mx={collapsed ? 1 : 4}
+          flexShrink={0}
+          px={collapsed ? 1 : 4}
+          py={4}
+          borderTopWidth="1px"
+          borderTopColor={useColorModeValue("gray.200", "gray.700")}
         >
-          <Tooltip
-            label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            placement="right"
-            hasArrow
-          >
-            <Box w="100%">
+          {collapsed ? (
+            <Tooltip label="Log out" placement="right" hasArrow>
               <IconButton
-                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                icon={collapsed ? <FiChevronRight /> : <FiChevronLeft />}
+                aria-label="Log out"
+                icon={<LuLogOut />}
                 size="sm"
                 variant="outline"
-                borderColor="gray.300"
-                bg="white"
-                _hover={{ bg: "gray.50" }}
-                onClick={onToggleCollapse}
+                onClick={handleLogout}
                 w="100%"
               />
-            </Box>
-          </Tooltip>
+            </Tooltip>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<LuLogOut />}
+              onClick={handleLogout}
+              width="100%"
+            >
+              Log out
+            </Button>
+          )}
         </Box>
       )}
     </Box>
@@ -455,10 +458,12 @@ const NavItem = ({
 
 interface MobileProps extends FlexProps {
   onOpen: () => void;
+  rightSlot?: ReactNode;
 }
 const MobileNav = ({
   onOpen,
   title,
+  rightSlot,
   ...rest
 }: MobileProps) => {
   return (
@@ -472,24 +477,26 @@ const MobileNav = ({
       borderBottomWidth="1px"
       borderBottomColor={useColorModeValue("gray.200", "gray.700")}
       justifyContent="flex-start"
+      gap={2}
       {...rest}
     >
       <IconButton
         variant="outline"
         onClick={onOpen}
         aria-label="open menu"
-        icon={<FiMenu />}
+        icon={<LuMenu />}
       />
 
       <Text
         fontSize="2xl"
         ml="8"
-        fontFamily="monospace"
         fontWeight="bold"
         flex={1}
+        noOfLines={1}
       >
         {title}
       </Text>
+      {rightSlot}
     </Flex>
   );
 };
