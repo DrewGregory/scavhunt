@@ -69,6 +69,7 @@ model Team {
   submissions  Submission[]
   locations    Location[]
   deposits     NeighborhoodDeposit[]
+  challengeFavorites ChallengeFavorite[]
 
   @@index([deletedAt])
 }
@@ -92,6 +93,7 @@ model Challenge {
   deletedAt  DateTime?
 
   submissions Submission[]
+  teamFavorites ChallengeFavorite[]
 
   @@index([deletedAt])
   @@index([enabled])
@@ -142,6 +144,22 @@ model Favorite {
 
   @@unique([submissionId, userId])
   @@index([userId])
+}
+
+/// Shared team pin/favorite for a challenge (any teammate can toggle).
+model ChallengeFavorite {
+  id             String   @id @default(cuid())
+  challengeId    String
+  teamId         String
+  createdByUserId String?
+  createdAt      DateTime @default(now())
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, teamId])
+  @@index([teamId])
+  @@index([challengeId])
 }
 
 model Location {

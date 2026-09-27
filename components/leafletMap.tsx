@@ -6,7 +6,7 @@ import {
   Marker,
   Popup,
 } from "react-leaflet";
-import { LatLngExpression, PathOptions, divIcon, icon, type Path } from "leaflet";
+import { LatLngExpression, PathOptions, divIcon, type Path } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Link from "next/link";
 import { LatestTeamLocation } from "../lib/types";
@@ -21,7 +21,8 @@ import {
   VStack,
   useToast,
 } from "@chakra-ui/react";
-import { FiLayers } from "react-icons/fi";
+import { FiHeart, FiLayers } from "react-icons/fi";
+import { AiFillHeart } from "react-icons/ai";
 import { getPosition, type GeoFix } from "./useSession";
 import {
   centroidOf,
@@ -30,11 +31,11 @@ import {
   type GeoGeometry,
 } from "../lib/geo";
 import { DEFAULT_PLAYER_BASEMAP } from "../lib/mapBasemaps";
+import { BasemapTileLayer } from "./HuntMapShared";
 import {
-  BasemapSelect,
-  BasemapTileLayer,
-  usePersistedBasemap,
-} from "./HuntMapShared";
+  challengePinKind,
+  makeChallengePinIcon,
+} from "../lib/challengePins";
 
 type ChallengeWithSubmissions = {
   id: string;
@@ -43,11 +44,13 @@ type ChallengeWithSubmissions = {
   lat: number | null;
   lng: number | null;
   numWinners: number;
+  pts?: number;
+  favorited?: boolean;
   submissions: Array<{
+    id?: string;
     teamId: string;
     accepted: boolean;
     rejected?: boolean;
-    [key: string]: unknown;
   }>;
 };
 
@@ -100,11 +103,15 @@ export default function LeafletMap({
   initialBank?: Bank | null;
 }) {
   const toast = useToast();
+  const [liveChallenges, setLiveChallenges] = useState(challenges);
+  const [liveLocations, setLiveLocations] = useState(locations);
   const [showChallenges, setShowChallenges] = useState(true);
   const [showPlayers, setShowPlayers] = useState(true);
   const [showNeighborhoods, setShowNeighborhoods] = useState(true);
-  const [hideCompleted, setHideCompleted] = useState(false);
-  const [hideFullChallenges, setHideFullChallenges] = useState(false);
+  const [hideCompleted, setHideCompleted] = useState(true);
+  const [hideFullChallenges, setHideFullChallenges] = useState(true);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [favBusyId, setFavBusyId] = useState<string | null>(null);
   /** Admin-only local toggle (does not change HuntSettings). */
   const [previewTerritory, setPreviewTerritory] = useState(
     () => territoryEnabled || isAdmin,
@@ -119,10 +126,6 @@ export default function LeafletMap({
   const [myFix, setMyFix] = useState<GeoFix | null>(null);
   const [locating, setLocating] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
-  const [basemap, setBasemap] = usePersistedBasemap(
-    "scavhunt.mapBasemap.player",
-    DEFAULT_PLAYER_BASEMAP,
-  );
   const myFixRef = useRef<GeoFix | null>(null);
   /** Only one neighborhood highlight at a time (fast mouse moves skip mouseout). */
   const highlightedLayerRef = useRef<{
@@ -131,7 +134,41 @@ export default function LeafletMap({
   } | null>(null);
 
   useEffect(() => {
+    setLiveChallenges(challenges);
+  }, [challenges]);
+  useEffect(() => {
+    setLiveLocations(locations);
+  }, [locations]);
+
+  useEffect(() => {
     window.dispatchEvent(new Event("resize"));
+  }, []);
+
+  // Poll map state so teammate favorites, challenge capacity, and territory stay live.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/map-live");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(data.challenges)) setLiveChallenges(data.challenges);
+        if (Array.isArray(data.locations)) setLiveLocations(data.locations);
+        if (Array.isArray(data.neighborhoods)) {
+          setNeighborhoods(data.neighborhoods);
+        }
+        if (data.bank) setBank(data.bank);
+      } catch {
+        /* ignore poll errors */
+      }
+    };
+    const id = window.setInterval(() => void tick(), 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   const applyFix = useCallback((fix: GeoFix) => {
@@ -251,26 +288,66 @@ export default function LeafletMap({
 
   const completedFiltered =
     hideCompleted && team
-      ? challenges.filter(
+      ? liveChallenges.filter(
           (c) =>
             !c.submissions.some((s) => s.teamId === team.id && s.accepted),
         )
-      : challenges;
+      : liveChallenges;
 
-  const filteredChallenges = hideFullChallenges
+  const capacityFiltered = hideFullChallenges
     ? completedFiltered.filter(
         (c) => c.submissions.filter((s) => s.accepted).length < c.numWinners,
       )
     : completedFiltered;
 
-  const BlackMarker = icon({
-    iconUrl: `data:image/svg+xml;utf8,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path fill="black" d="M215.7 499.2C267 435 384 279.4 384 192C384 86 298 0 192 0S0 86 0 192c0 87.4 117 243 168.3 307.2c12.3 15.3 35.1 15.3 47.4 0zM192 128a64 64 0 1 1 0 128 64 64 0 1 1 0-128z"/></svg>`,
-    )}`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 40],
-    popupAnchor: [0, -40],
-  });
+  const filteredChallenges = onlyFavorites
+    ? capacityFiltered.filter((c) => c.favorited)
+    : capacityFiltered;
+
+  const toggleFavorite = async (challengeId: string) => {
+    if (!team) {
+      toast({ title: "Join a team to favorite challenges", status: "warning" });
+      return;
+    }
+    setFavBusyId(challengeId);
+    const prev = liveChallenges.find((c) => c.id === challengeId)?.favorited;
+    setLiveChallenges((list) =>
+      list.map((c) =>
+        c.id === challengeId ? { ...c, favorited: !c.favorited } : c,
+      ),
+    );
+    try {
+      const res = await fetch("/api/toggle-challenge-favorite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLiveChallenges((list) =>
+          list.map((c) =>
+            c.id === challengeId ? { ...c, favorited: Boolean(prev) } : c,
+          ),
+        );
+        toast({ title: data.error || "Favorite failed", status: "error" });
+        return;
+      }
+      setLiveChallenges((list) =>
+        list.map((c) =>
+          c.id === challengeId ? { ...c, favorited: Boolean(data.favorited) } : c,
+        ),
+      );
+    } catch {
+      setLiveChallenges((list) =>
+        list.map((c) =>
+          c.id === challengeId ? { ...c, favorited: Boolean(prev) } : c,
+        ),
+      );
+      toast({ title: "Favorite failed", status: "error" });
+    } finally {
+      setFavBusyId(null);
+    }
+  };
 
   const standingsKey = useMemo(
     () =>
@@ -288,26 +365,27 @@ export default function LeafletMap({
       const isHere = currentNeighborhood?.id === n.id;
       if (n.contested) {
         return {
-          color: isHere ? "#2B6CB0" : "#4A5568",
-          weight: isHere ? 3.5 : 1.5,
+          color: isHere ? "#4A5568" : "#A0AEC0",
+          weight: isHere ? 3 : 1.25,
           dashArray: "6 4",
-          fillColor: isHere ? "#90CDF4" : "#A0AEC0",
-          fillOpacity: isHere ? 0.55 : 0.35,
+          fillColor: "#CBD5E0",
+          fillOpacity: isHere ? 0.4 : 0.18,
         };
       }
       if (n.claimedBy) {
+        const c = n.claimedBy.teamColor || "#3182CE";
         return {
-          color: isHere ? "#2B6CB0" : n.claimedBy.teamColor,
-          weight: isHere ? 3.5 : 1.5,
-          fillColor: isHere ? "#90CDF4" : n.claimedBy.teamColor,
-          fillOpacity: isHere ? 0.55 : 0.4,
+          color: c,
+          weight: isHere ? 3.5 : 1.25,
+          fillColor: c,
+          fillOpacity: isHere ? 0.42 : 0.2,
         };
       }
       return {
-        color: isHere ? "#2B6CB0" : "#718096",
-        weight: isHere ? 3.5 : 1,
-        fillColor: isHere ? "#90CDF4" : "#E2E8F0",
-        fillOpacity: isHere ? 0.55 : 0.25,
+        color: isHere ? "#2B6CB0" : "#A0AEC0",
+        weight: isHere ? 3 : 1,
+        fillColor: isHere ? "#90CDF4" : "#EDF2F7",
+        fillOpacity: isHere ? 0.4 : 0.12,
       };
     },
     [currentNeighborhood?.id],
@@ -456,27 +534,32 @@ export default function LeafletMap({
                   />
                 </HStack>
               )}
-              <HStack justifyContent="space-between">
-                <Text fontSize="sm" fontWeight="medium">
-                  Basemap
-                </Text>
-                <BasemapSelect value={basemap} onChange={setBasemap} size="sm" />
-              </HStack>
               {team && (
                 <>
                   <Box borderTop="1px solid" borderColor="gray.200" pt={3}>
                     <HStack justifyContent="space-between">
                       <Text fontSize="xs" fontWeight="medium" color="gray.600">
-                        Hide finished
+                        Only favorites
                       </Text>
                       <Switch
                         size="sm"
-                        isChecked={hideCompleted}
-                        onChange={(e) => setHideCompleted(e.target.checked)}
-                        colorScheme="blue"
+                        isChecked={onlyFavorites}
+                        onChange={(e) => setOnlyFavorites(e.target.checked)}
+                        colorScheme="pink"
                       />
                     </HStack>
                   </Box>
+                  <HStack justifyContent="space-between">
+                    <Text fontSize="xs" fontWeight="medium" color="gray.600">
+                      Hide finished
+                    </Text>
+                    <Switch
+                      size="sm"
+                      isChecked={hideCompleted}
+                      onChange={(e) => setHideCompleted(e.target.checked)}
+                      colorScheme="blue"
+                    />
+                  </HStack>
                   <HStack justifyContent="space-between">
                     <Text fontSize="xs" fontWeight="medium" color="gray.600">
                       Hide at capacity
@@ -587,7 +670,7 @@ export default function LeafletMap({
         zoom={13}
         style={{ height: "100%", width: "100%" }}
       >
-        <BasemapTileLayer basemap={basemap} />
+        <BasemapTileLayer basemap={DEFAULT_PLAYER_BASEMAP} />
         {territoryOn &&
           showNeighborhoods &&
           neighborhoods.map((n) => {
@@ -653,11 +736,12 @@ export default function LeafletMap({
                       if (prev && prev.layer !== target) {
                         prev.layer.setStyle(prev.style);
                       }
+                      const hoverColor = n.claimedBy?.teamColor || "#3182CE";
                       target.setStyle({
-                        fillColor: "#68D391",
-                        fillOpacity: 0.55,
-                        color: "#276749",
-                        weight: 3,
+                        fillColor: hoverColor,
+                        fillOpacity: 0.5,
+                        color: hoverColor,
+                        weight: 3.5,
                         dashArray: undefined,
                       });
                       if (typeof target.bringToFront === "function") {
@@ -712,21 +796,62 @@ export default function LeafletMap({
             );
           })}
         {showChallenges &&
-          filteredChallenges.map((c) => (
-            <Marker
-              icon={BlackMarker}
-              key={c.id}
-              position={[c.lat ?? SF_CENTER[0], c.lng ?? SF_CENTER[1]]}
-            >
-              <Popup>
-                <Link href={`/challenges?challenge=${c.id}`}>
-                  {c.emoji ? `${c.emoji} ${c.title}` : c.title}
-                </Link>
-              </Popup>
-            </Marker>
-          ))}
+          filteredChallenges.map((c) => {
+            const accepted = c.submissions.filter((s) => s.accepted).length;
+            const finishedByTeam = Boolean(
+              team &&
+                c.submissions.some((s) => s.teamId === team.id && s.accepted),
+            );
+            const kind = challengePinKind({
+              numWinners: c.numWinners,
+              acceptedCount: accepted,
+              finishedByTeam,
+            });
+            const spotsLeft = Math.max(0, c.numWinners - accepted);
+            return (
+              <Marker
+                icon={makeChallengePinIcon({
+                  kind,
+                  favorited: Boolean(c.favorited),
+                })}
+                key={`${c.id}:${kind}:${c.favorited ? 1 : 0}:${accepted}`}
+                position={[c.lat ?? SF_CENTER[0], c.lng ?? SF_CENTER[1]]}
+              >
+                <Popup>
+                  <VStack align="stretch" spacing={2} minW="160px">
+                    <Link href={`/challenges?challenge=${c.id}`}>
+                      <Text fontWeight="semibold">
+                        {c.emoji ? `${c.emoji} ${c.title}` : c.title}
+                      </Text>
+                    </Link>
+                    <Text fontSize="xs" color="gray.600">
+                      {accepted}/{c.numWinners} filled
+                      {spotsLeft > 0 ? ` · ${spotsLeft} left` : " · full"}
+                      {c.pts != null ? ` · ${c.pts} pts` : ""}
+                    </Text>
+                    {team && (
+                      <Button
+                        size="xs"
+                        leftIcon={
+                          c.favorited ? <AiFillHeart /> : <FiHeart />
+                        }
+                        colorScheme={c.favorited ? "pink" : "gray"}
+                        variant={c.favorited ? "solid" : "outline"}
+                        isLoading={favBusyId === c.id}
+                        onClick={() => void toggleFavorite(c.id)}
+                      >
+                        {c.favorited
+                          ? "Unfavorite for team"
+                          : "Favorite for team"}
+                      </Button>
+                    )}
+                  </VStack>
+                </Popup>
+              </Marker>
+            );
+          })}
         {showPlayers &&
-          locations.map((l) => (
+          liveLocations.map((l) => (
             <Marker
               icon={divIcon({
                 html: `${l.emoji}`,

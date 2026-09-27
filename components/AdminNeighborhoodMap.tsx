@@ -34,10 +34,9 @@ import {
 import { arcIndicesForObject, type ZoneObject } from "../lib/topology";
 import { bboxOf, centroidOf, type GeoGeometry, type Position } from "../lib/geo";
 import {
-  BasemapSelect,
   BasemapTileLayer,
-  usePersistedBasemap,
 } from "./HuntMapShared";
+import { DEFAULT_PLAYER_BASEMAP } from "../lib/mapBasemaps";
 
 export type AdminMapNeighborhood = {
   id: string;
@@ -686,9 +685,6 @@ export default function AdminNeighborhoodMap({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [missing, setMissing] = useState(false);
-  const [basemap, setBasemap] = usePersistedBasemap(
-    "scavhunt.mapBasemap.adminNeighborhoods",
-  );
   const [showLabels, setShowLabels] = useState(true);
   const [showDeposits, setShowDeposits] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -1069,12 +1065,6 @@ export default function AdminNeighborhoodMap({
                       colorScheme="blue"
                     />
                   </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="medium">
-                      Basemap
-                    </Text>
-                    <BasemapSelect value={basemap} onChange={setBasemap} />
-                  </HStack>
                 </VStack>
               </Box>
             )}
@@ -1086,7 +1076,7 @@ export default function AdminNeighborhoodMap({
           zoom={12}
           style={{ height: "100%", width: "100%" }}
         >
-          <BasemapTileLayer basemap={basemap} />
+          <BasemapTileLayer basemap={DEFAULT_PLAYER_BASEMAP} />
           <EscapeHandler
             onEscape={() => {
               if (splitCut != null) {

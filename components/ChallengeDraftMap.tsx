@@ -21,13 +21,12 @@ import { SF_CENTER } from "../lib/geo";
 import { challengeHeading } from "../lib/challengeDisplay";
 import type { DraftChallenge } from "./ChallengeDraftCard";
 import {
-  BasemapSelect,
   BasemapTileLayer,
   InvalidateMapSize,
   PlaceSearchControl,
   QuietNeighborhoodLayers,
-  usePersistedBasemap,
 } from "./HuntMapShared";
+import { DEFAULT_PLAYER_BASEMAP } from "../lib/mapBasemaps";
 
 export type DraftMapNeighborhood = {
   id: string;
@@ -186,9 +185,6 @@ export default function ChallengeDraftMap({
   const [hideDisabled, setHideDisabled] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [pinDragging, setPinDragging] = useState(false);
-  const [basemap, setBasemap] = usePersistedBasemap(
-    "scavhunt.mapBasemap.draft",
-  );
 
   /** All challenges (incl. no location → stack at SF center). */
   const mapChallenges = useMemo(() => {
@@ -283,12 +279,6 @@ export default function ChallengeDraftMap({
                       colorScheme="blue"
                     />
                   </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="medium">
-                      Basemap
-                    </Text>
-                    <BasemapSelect value={basemap} onChange={setBasemap} />
-                  </HStack>
                 </VStack>
               </Box>
             )}
@@ -328,7 +318,7 @@ export default function ChallengeDraftMap({
           style={{ height: "100%", width: "100%", minHeight: 280 }}
           scrollWheelZoom
         >
-          <BasemapTileLayer basemap={basemap} />
+          <BasemapTileLayer basemap={DEFAULT_PLAYER_BASEMAP} />
           <PlaceSearchControl />
           <MapEvents
             selectedId={selectedId}
@@ -346,7 +336,6 @@ export default function ChallengeDraftMap({
               showNeighborhoods,
               hideDisabled,
               height,
-              basemap,
               layersOpen,
               selectedId,
             ]}

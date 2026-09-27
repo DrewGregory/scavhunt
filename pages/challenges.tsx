@@ -5,32 +5,26 @@ import {
   Flex,
   Heading,
   HStack,
+  IconButton,
   Input,
   Select,
   Switch,
   Text,
   VStack,
+  useToast,
 } from "@chakra-ui/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDownIcon } from "@chakra-ui/icons";
+import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
 import { useRouter, useSearchParams } from "next/navigation";
 import NavContainer from "../components/NavContainer";
 import { useSession } from "../components/useSession";
-import { prisma } from "../lib/prisma";
 import { requireUserSSP } from "../lib/auth";
 import { requireHuntStartedSSP } from "../lib/time";
 import {
-  serializeChallenge,
-  serializeSubmission,
-} from "../lib/serialize";
-import type {
-  SerializedChallenge,
-  SerializedSubmission,
-} from "../lib/types";
-
-type ChallengeWithSubmissions = SerializedChallenge & {
-  submissions: SerializedSubmission[];
-};
+  listEnabledChallengesWithSubs,
+  type ChallengeWithSubsAndFav,
+} from "../lib/challengeFavorites";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const auth = await requireUserSSP(context);
@@ -39,20 +33,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
   if (huntRedirect) return { redirect: huntRedirect };
 
-  const challengesRaw = await prisma.challenge.findMany({
-    where: { deletedAt: null, enabled: true },
-    include: {
-      submissions: {
-        where: { rejected: false, deletedAt: null },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  const challenges: ChallengeWithSubmissions[] = challengesRaw.map((c) => ({
-    ...serializeChallenge(c),
-    submissions: c.submissions.map(serializeSubmission),
-  }));
+  const challenges = await listEnabledChallengesWithSubs(auth.user.teamId);
 
   return { props: { challenges } };
 };
@@ -60,32 +41,115 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 type SortOption = "default" | "points-high" | "points-low";
 
 export default function Page({
-  challenges,
+  challenges: initialChallenges,
 }: {
-  challenges: Array<ChallengeWithSubmissions>;
+  challenges: Array<ChallengeWithSubsAndFav>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeSearchParam = searchParams.get("challenge");
+  const toast = useToast();
+  const [challenges, setChallenges] = useState(initialChallenges);
   const [selectedChallenge, setSelectedChallenge] = useState<string | null>(
     challengeSearchParam,
   );
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [hideCompleted, setHideCompleted] = useState<boolean>(false);
-  const [hideFullChallenges, setHideFullChallenges] = useState<boolean>(false);
+  const [hideCompleted, setHideCompleted] = useState<boolean>(true);
+  const [hideFullChallenges, setHideFullChallenges] = useState<boolean>(true);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [favBusyId, setFavBusyId] = useState<string | null>(null);
 
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setChallenges(initialChallenges);
+  }, [initialChallenges]);
 
   useEffect(() => {
     const current = ref.current;
     if (current != null) {
       current.scrollIntoView();
     }
-  }, [ref.current, challengeSearchParam]);
+  }, [challengeSearchParam]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/challenges");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.challenges)) {
+          setChallenges(data.challenges);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    const id = window.setInterval(() => void tick(), 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const session = useSession();
   const team = session?.team;
+
+  const toggleFavorite = useCallback(
+    async (challengeId: string) => {
+      if (!team) {
+        toast({
+          title: "Join a team to favorite challenges",
+          status: "warning",
+        });
+        return;
+      }
+      setFavBusyId(challengeId);
+      const prev = challenges.find((c) => c.id === challengeId)?.favorited;
+      setChallenges((list) =>
+        list.map((c) =>
+          c.id === challengeId ? { ...c, favorited: !c.favorited } : c,
+        ),
+      );
+      try {
+        const res = await fetch("/api/toggle-challenge-favorite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ challengeId }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setChallenges((list) =>
+            list.map((c) =>
+              c.id === challengeId ? { ...c, favorited: Boolean(prev) } : c,
+            ),
+          );
+          toast({ title: data.error || "Favorite failed", status: "error" });
+          return;
+        }
+        setChallenges((list) =>
+          list.map((c) =>
+            c.id === challengeId
+              ? { ...c, favorited: Boolean(data.favorited) }
+              : c,
+          ),
+        );
+      } catch {
+        setChallenges((list) =>
+          list.map((c) =>
+            c.id === challengeId ? { ...c, favorited: Boolean(prev) } : c,
+          ),
+        );
+        toast({ title: "Favorite failed", status: "error" });
+      } finally {
+        setFavBusyId(null);
+      }
+    },
+    [challenges, team, toast],
+  );
 
   const searchFilteredChallenges =
     searchQuery.trim() === ""
@@ -110,10 +174,14 @@ export default function Page({
       )
     : completedFilteredChallenges;
 
+  const favoritesFiltered = onlyFavorites
+    ? fullFilteredChallenges.filter((c) => c.favorited)
+    : fullFilteredChallenges;
+
   const sortedChallenges =
     sortOption === "default"
-      ? fullFilteredChallenges
-      : [...fullFilteredChallenges].sort((a, b) => {
+      ? favoritesFiltered
+      : [...favoritesFiltered].sort((a, b) => {
           switch (sortOption) {
             case "points-high":
               return b.pts - a.pts;
@@ -160,6 +228,23 @@ export default function Page({
               justifyContent="space-between"
             >
               <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                Only show team favorites
+              </Text>
+              <Switch
+                isChecked={onlyFavorites}
+                onChange={(e) => setOnlyFavorites(e.target.checked)}
+                colorScheme="pink"
+              />
+            </HStack>
+            <HStack
+              width="100%"
+              bg="white"
+              p={3}
+              borderRadius="md"
+              boxShadow="sm"
+              justifyContent="space-between"
+            >
+              <Text fontSize="sm" fontWeight="medium" color="gray.700">
                 Hide challenges you&apos;ve finished
               </Text>
               <Switch
@@ -197,6 +282,8 @@ export default function Page({
             _hover={{ boxShadow: "md" }}
             transition="all 0.2s"
             borderRadius="lg"
+            borderWidth={c.favorited ? "2px" : undefined}
+            borderColor={c.favorited ? "pink.300" : undefined}
           >
             <Flex direction="column">
               <Flex
@@ -215,7 +302,27 @@ export default function Page({
                 <Heading size="md" flex={1} color="gray.800">
                   {c.emoji ? `${c.emoji} ${c.title}` : c.title}
                 </Heading>
-                <Flex alignItems="center" gap={2}>
+                <Flex alignItems="center" gap={1}>
+                  {team && (
+                    <IconButton
+                      aria-label={
+                        c.favorited
+                          ? "Unfavorite for team"
+                          : "Favorite for team"
+                      }
+                      icon={
+                        c.favorited ? <AiFillHeart /> : <AiOutlineHeart />
+                      }
+                      size="sm"
+                      variant="ghost"
+                      color={c.favorited ? "pink.500" : "gray.400"}
+                      isLoading={favBusyId === c.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void toggleFavorite(c.id);
+                      }}
+                    />
+                  )}
                   <Text fontWeight="semibold" color="gray.700" fontSize="md">
                     {c.pts} pts
                   </Text>
@@ -276,17 +383,34 @@ export default function Page({
                     }}
                   />
                   {team != null && (
-                    <Button
-                      colorScheme="blue"
-                      size="md"
-                      onClick={(e) => {
-                        router.push(`/submit/${c.id}`);
-                        e.stopPropagation();
-                      }}
-                      width="fit-content"
-                    >
-                      Submit Challenge
-                    </Button>
+                    <HStack>
+                      <Button
+                        colorScheme="blue"
+                        size="md"
+                        onClick={(e) => {
+                          router.push(`/submit/${c.id}`);
+                          e.stopPropagation();
+                        }}
+                        width="fit-content"
+                      >
+                        Submit Challenge
+                      </Button>
+                      <Button
+                        size="md"
+                        variant="outline"
+                        colorScheme="pink"
+                        leftIcon={
+                          c.favorited ? <AiFillHeart /> : <AiOutlineHeart />
+                        }
+                        isLoading={favBusyId === c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void toggleFavorite(c.id);
+                        }}
+                      >
+                        {c.favorited ? "Unfavorite" : "Favorite for team"}
+                      </Button>
+                    </HStack>
                   )}
                 </VStack>
               )}

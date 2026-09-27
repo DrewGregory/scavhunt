@@ -18,13 +18,12 @@ import {
 } from "@chakra-ui/react";
 import { SF_CENTER } from "../lib/geo";
 import {
-  BasemapSelect,
   BasemapTileLayer,
   InvalidateMapSize,
   PlaceSearchControl,
   QuietNeighborhoodLayers,
-  usePersistedBasemap,
 } from "./HuntMapShared";
+import { DEFAULT_PLAYER_BASEMAP } from "../lib/mapBasemaps";
 
 export type LocationMapChallenge = {
   id: string;
@@ -116,9 +115,6 @@ export default function AdminLocationMap({
   const [showNeighborhoods, setShowNeighborhoods] = useState(
     defaultShowNeighborhoods,
   );
-  const [basemap, setBasemap] = usePersistedBasemap(
-    "scavhunt.mapBasemap.adminLocation",
-  );
 
   const valid =
     lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
@@ -173,12 +169,6 @@ export default function AdminLocationMap({
               colorScheme="blue"
             />
           </HStack>
-          <HStack spacing={2}>
-            <Text fontSize="xs" fontWeight="medium">
-              Basemap
-            </Text>
-            <BasemapSelect value={basemap} onChange={setBasemap} />
-          </HStack>
         </HStack>
         <HStack spacing={2}>
           <Text fontSize="xs" color="gray.500" fontFamily="mono">
@@ -200,12 +190,12 @@ export default function AdminLocationMap({
         style={{ height, width: "100%" }}
         scrollWheelZoom
       >
-        <BasemapTileLayer basemap={basemap} />
+        <BasemapTileLayer basemap={DEFAULT_PLAYER_BASEMAP} />
         <PlaceSearchControl />
         <ClickHandler onPick={onChange} />
         <Recententer lat={lat} lng={lng} />
         <InvalidateMapSize
-          deps={[height, showChallenges, showNeighborhoods, basemap]}
+          deps={[height, showChallenges, showNeighborhoods]}
         />
 
         {showNeighborhoods && (

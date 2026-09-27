@@ -2,32 +2,26 @@ import dynamic from "next/dynamic";
 import { GetServerSidePropsContext } from "next";
 import { Flex } from "@chakra-ui/react";
 import NavContainer from "../components/NavContainer";
-import { prisma } from "../lib/prisma";
 import { requireUserSSP } from "../lib/auth";
 import { requireHuntStartedSSP } from "../lib/time";
-import {
-  serializeChallenge,
-  serializeSubmission,
-  serializeTeam,
-} from "../lib/serialize";
+import { serializeTeam } from "../lib/serialize";
 import type {
   LatestTeamLocation,
-  SerializedChallenge,
-  SerializedSubmission,
   SerializedTeam,
 } from "../lib/types";
 import { isTerritoryEnabled } from "../lib/territoryGate";
 import { getStandings } from "../lib/territory";
 import { getTeamScore } from "../lib/scoring";
+import {
+  listEnabledChallengesWithSubs,
+  type ChallengeWithSubsAndFav,
+} from "../lib/challengeFavorites";
+import { prisma } from "../lib/prisma";
 import type { TerritoryNeighborhood } from "../components/leafletMap";
 
 const LeafletMap = dynamic(() => import("../components/leafletMap"), {
   ssr: false,
 });
-
-type ChallengeWithSubmissions = SerializedChallenge & {
-  submissions: SerializedSubmission[];
-};
 
 type Bank = {
   earned: number;
@@ -45,20 +39,7 @@ export const getServerSideProps = async (
   const huntRedirect = await requireHuntStartedSSP(auth.user.isAdmin);
   if (huntRedirect) return { redirect: huntRedirect };
 
-  const challengesRaw = await prisma.challenge.findMany({
-    where: { deletedAt: null, enabled: true },
-    include: {
-      submissions: {
-        where: { rejected: false, deletedAt: null },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  const challenges: ChallengeWithSubmissions[] = challengesRaw.map((c) => ({
-    ...serializeChallenge(c),
-    submissions: c.submissions.map(serializeSubmission),
-  }));
+  const challenges = await listEnabledChallengesWithSubs(auth.user.teamId);
 
   const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
   let locations: LatestTeamLocation[] = [];
@@ -79,9 +60,9 @@ export const getServerSideProps = async (
         emoji: t.emoji,
         name: t.name,
         latestLocation: {
-          lat: t.locations[0].lat,
-          lng: t.locations[0].lng,
-          id: t.locations[0].id,
+          lat: t.locations[0]!.lat,
+          lng: t.locations[0]!.lng,
+          id: t.locations[0]!.id,
         },
       }));
   }
@@ -137,7 +118,7 @@ export default function Page({
   bank,
 }: {
   locations: Array<LatestTeamLocation>;
-  challenges: Array<ChallengeWithSubmissions>;
+  challenges: Array<ChallengeWithSubsAndFav>;
   team: SerializedTeam | null;
   territoryEnabled: boolean;
   isAdmin: boolean;

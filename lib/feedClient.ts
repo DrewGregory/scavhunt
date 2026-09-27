@@ -67,8 +67,9 @@ export function useFeed(filters: FeedFilters, opts: UseFeedOptions = {}) {
   const swr = useSWRInfinite<FeedPage>(getKey, fetchFeedPage, {
     fallbackData: fallback ? [fallback] : undefined,
     revalidateOnMount: !fallback,
-    revalidateFirstPage: false,
-    revalidateOnFocus: false,
+    revalidateFirstPage: true,
+    revalidateOnFocus: true,
+    refreshInterval: 4000,
     persistSize: false,
   });
 
