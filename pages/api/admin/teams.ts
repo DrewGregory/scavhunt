@@ -65,6 +65,7 @@ export default async function handler(
           deposited,
           score: earned + bonus - deposited,
           users: t.users,
+          deletedAt: t.deletedAt?.toISOString() ?? null,
         };
       }),
     });
@@ -98,6 +99,85 @@ export default async function handler(
     });
 
     return res.status(200).json({ team: serializeTeam(updated) });
+  }
+
+  if (req.method === "DELETE") {
+    try {
+      assertSameOrigin(req);
+    } catch {
+      return jsonError(res, "Invalid origin", 403);
+    }
+
+    const body = (parseJsonBody(req.body) ?? {}) as { id?: string };
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return res.status(400).json({ error: "Team ID is required" });
+
+    const existing = await prisma.team.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "Team not found" });
+    if (existing.deletedAt) {
+      return res.status(200).json({
+        ok: true,
+        alreadyDeleted: true,
+        team: {
+          ...serializeTeam(existing),
+          deletedAt: existing.deletedAt.toISOString(),
+        },
+      });
+    }
+
+    const memberCount = await prisma.user.count({
+      where: { teamId: id, deletedAt: null },
+    });
+    if (memberCount > 0) {
+      return res.status(400).json({
+        error:
+          "Cannot delete a team that still has members. Move members to another team first.",
+      });
+    }
+
+    const team = await prisma.team.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    return res.status(200).json({
+      ok: true,
+      team: {
+        ...serializeTeam(team),
+        deletedAt: team.deletedAt?.toISOString() ?? null,
+      },
+    });
+  }
+
+  if (req.method === "POST") {
+    // Restore (`deletedAt = null`) an archived team.
+    try {
+      assertSameOrigin(req);
+    } catch {
+      return jsonError(res, "Invalid origin", 403);
+    }
+
+    const body = (parseJsonBody(req.body) ?? {}) as { id?: string };
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return res.status(400).json({ error: "Team ID is required" });
+
+    const existing = await prisma.team.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "Team not found" });
+    if (!existing.deletedAt) {
+      return res.status(200).json({
+        ok: true,
+        alreadyActive: true,
+        team: { ...serializeTeam(existing), deletedAt: null },
+      });
+    }
+
+    const team = await prisma.team.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+    return res.status(200).json({
+      ok: true,
+      team: { ...serializeTeam(team), deletedAt: null },
+    });
   }
 
   return res.status(405).json({ error: "Method not allowed" });

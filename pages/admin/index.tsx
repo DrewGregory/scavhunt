@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Box,
   Button,
+  Checkbox,
   Flex,
   FormControl,
   FormLabel,
@@ -19,6 +20,7 @@ import {
   ModalOverlay,
   Select,
   Switch,
+  Tag,
   Text,
   useDisclosure,
   VStack,
@@ -75,6 +77,7 @@ type AdminTeam = SerializedTeam & {
   earned?: number;
   deposited?: number;
   score?: number;
+  deletedAt?: string | null;
   users?: Array<{
     id: string;
     name: string;
@@ -150,6 +153,8 @@ export default function AdminPage({
 
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamEmoji, setNewTeamEmoji] = useState("");
+  const [showArchivedTeams, setShowArchivedTeams] = useState(false);
+  const [teamBusyId, setTeamBusyId] = useState<string | null>(null);
   const [pointDrafts, setPointDrafts] = useState<Record<string, string>>({});
   const [pointsBusyId, setPointsBusyId] = useState<string | null>(null);
 
@@ -177,8 +182,10 @@ export default function AdminPage({
     setUsers(data.users);
   };
 
-  const loadTeams = async () => {
-    const res = await fetch("/api/admin/teams");
+  const loadTeams = async (includeDeleted = false) => {
+    const res = await fetch(
+      `/api/admin/teams${includeDeleted ? "?includeDeleted=1" : ""}`,
+    );
     if (!res.ok) throw new Error("Failed to load teams");
     const data = await res.json();
     setTeams(data.teams);
@@ -271,7 +278,7 @@ export default function AdminPage({
       }
       setNewTeamName("");
       setNewTeamEmoji("");
-      await loadTeams();
+      await loadTeams(showArchivedTeams);
       showNotice("success", "Team created successfully!");
     } catch {
       showNotice("error", "Failed to create team");
@@ -410,6 +417,57 @@ export default function AdminPage({
     }
   };
 
+  const handleDeleteTeam = async (teamId: string, teamName: string) => {
+    if (
+      !confirm(
+        `Delete "${teamName}"? This archives the team. Only teams with no members can be deleted.`,
+      )
+    ) {
+      return;
+    }
+    setTeamBusyId(teamId);
+    try {
+      const res = await fetch("/api/admin/teams", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: teamId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showNotice("error", data.error || "Failed to delete team");
+        return;
+      }
+      await Promise.all([loadTeams(showArchivedTeams), loadUsers()]);
+      showNotice("success", "Team deleted successfully!");
+    } catch {
+      showNotice("error", "Failed to delete team");
+    } finally {
+      setTeamBusyId(null);
+    }
+  };
+
+  const handleRestoreTeam = async (teamId: string) => {
+    setTeamBusyId(teamId);
+    try {
+      const res = await fetch("/api/admin/teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: teamId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showNotice("error", data.error || "Failed to restore team");
+        return;
+      }
+      await Promise.all([loadTeams(showArchivedTeams), loadUsers()]);
+      showNotice("success", "Team restored successfully!");
+    } catch {
+      showNotice("error", "Failed to restore team");
+    } finally {
+      setTeamBusyId(null);
+    }
+  };
+
   const handleUpdateNeighborhood = async (
     id: string,
     patch: { name?: string; emoji?: string | null },
@@ -455,7 +513,7 @@ export default function AdminPage({
         showNotice("error", data.error || "Seed failed");
         return;
       }
-      await Promise.all([loadUsers(), loadTeams()]);
+      await Promise.all([loadUsers(), loadTeams(showArchivedTeams)]);
       showNotice(
         "success",
         `Demo data ready. Teams created ${data.teamsCreated}, updated ${data.teamsUpdated}. Users created ${data.usersCreated}, updated ${data.usersUpdated}.`,
@@ -668,11 +726,13 @@ export default function AdminPage({
             }}
           >
             <option value="">No team</option>
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.emoji} {t.name}
-              </option>
-            ))}
+            {teams
+              .filter((t) => !t.deletedAt)
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.emoji} {t.name}
+                </option>
+              ))}
           </Select>
         ),
       },
@@ -971,9 +1031,44 @@ export default function AdminPage({
             ))
           ),
       },
+      {
+        id: "actions",
+        header: "Actions",
+        disableSort: true,
+        cell: (team) =>
+          team.deletedAt ? (
+            <HStack spacing={2}>
+              <Tag size="sm" colorScheme="gray">
+                Archived
+              </Tag>
+              <Button
+                size="xs"
+                variant="outline"
+                isLoading={teamBusyId === team.id}
+                onClick={() => void handleRestoreTeam(team.id)}
+              >
+                Restore
+              </Button>
+            </HStack>
+          ) : (team.users ?? []).length === 0 ? (
+            <Button
+              size="xs"
+              colorScheme="red"
+              variant="outline"
+              isLoading={teamBusyId === team.id}
+              onClick={() => void handleDeleteTeam(team.id, team.name)}
+            >
+              Delete
+            </Button>
+          ) : (
+            <Text fontSize="xs" color="gray.400">
+              —
+            </Text>
+          ),
+      },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pointDrafts, pointsBusyId],
+    [pointDrafts, pointsBusyId, teamBusyId, showArchivedTeams],
   );
 
   const challengeFilterOptions: AdminFilterOption<Challenge>[] = useMemo(
@@ -1257,9 +1352,20 @@ export default function AdminPage({
         {activeTab === "teams" && (
           <VStack align="stretch" spacing={6}>
             <Box>
-              <Heading size="md" mb={3}>
-                All Teams
-              </Heading>
+              <HStack justify="space-between" mb={3} flexWrap="wrap" gap={2}>
+                <Heading size="md">All Teams</Heading>
+                <Checkbox
+                  size="sm"
+                  isChecked={showArchivedTeams}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setShowArchivedTeams(next);
+                    void loadTeams(next);
+                  }}
+                >
+                  Show archived
+                </Checkbox>
+              </HStack>
               <AdminDataTable
                 tableId="admin-teams"
                 rows={teams}
