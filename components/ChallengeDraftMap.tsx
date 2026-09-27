@@ -91,7 +91,7 @@ function MapEvents({
   return null;
 }
 
-/** Esc clears selection while a challenge is selected. */
+/** Esc closes select+edit (including while focused in an input). */
 function EscapeDeselect({
   selectedId,
   onDeselect,
@@ -103,16 +103,8 @@ function EscapeDeselect({
     if (!selectedId) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.isContentEditable)
-      ) {
-        return;
-      }
       e.preventDefault();
+      (document.activeElement as HTMLElement | null)?.blur?.();
       onDeselect();
     };
     window.addEventListener("keydown", onKey);
@@ -179,7 +171,7 @@ export default function ChallengeDraftMap({
   challenges: DraftChallenge[];
   neighborhoods: DraftMapNeighborhood[];
   selectedId: string | null;
-  /** kept for API compat; selection drives drag, not field-edit mode */
+  /** kept for API compat; selection and field-edit are coupled by the board */
   editingId?: string | null;
   panToken?: number;
   onSelect: (id: string) => void;

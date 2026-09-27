@@ -227,6 +227,23 @@ export default function ChallengeDraftBoard() {
   );
   const widths = panelWidths ?? DEFAULT_PANEL_WIDTHS;
 
+  /** Selection and field-edit are one mode: open both, close both. */
+  const openChallenge = useCallback((id: string, opts?: { scroll?: boolean }) => {
+    setSelectedId(id);
+    setEditingId(id);
+    setPanToken((t) => t + 1);
+    if (opts?.scroll) {
+      document
+        .querySelector(`[data-challenge-id="${id}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, []);
+
+  const closeChallenge = useCallback(() => {
+    setSelectedId(null);
+    setEditingId(null);
+  }, []);
+
   useEffect(() => {
     setPanelWidths(loadPanelWidths());
   }, []);
@@ -555,9 +572,7 @@ export default function ChallengeDraftBoard() {
       );
       focusTitleId.current = created.id;
       setChallenges((list) => [created, ...list]);
-      setSelectedId(created.id);
-      setEditingId(created.id);
-      setPanToken((t) => t + 1);
+      openChallenge(created.id);
     } catch {
       toast({ title: "Create failed", status: "error" });
     }
@@ -733,19 +748,14 @@ export default function ChallengeDraftBoard() {
             selected={selectedId === c.id}
             editing={editingId === c.id}
             onSelect={() => {
-              if (selectedId === c.id) {
-                setSelectedId(null);
+              if (selectedId === c.id || editingId === c.id) {
+                closeChallenge();
                 return;
               }
-              setSelectedId(c.id);
-              setPanToken((t) => t + 1);
+              openChallenge(c.id);
             }}
-            onStartEdit={() => {
-              setSelectedId(c.id);
-              setEditingId(c.id);
-              setPanToken((t) => t + 1);
-            }}
-            onStopEdit={() => setEditingId(null)}
+            onStartEdit={() => openChallenge(c.id)}
+            onStopEdit={closeChallenge}
             onDragStart={onCardDragStart(c.id)}
             onChange={(patch) => {
               const body: Record<string, unknown> = {};
@@ -924,14 +934,8 @@ export default function ChallengeDraftBoard() {
             selectedId={selectedId}
             editingId={editingId}
             panToken={panToken}
-            onSelect={(id) => {
-              setSelectedId(id);
-              setPanToken((t) => t + 1);
-              document
-                .querySelector(`[data-challenge-id="${id}"]`)
-                ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-            }}
-            onDeselect={() => setSelectedId(null)}
+            onSelect={(id) => openChallenge(id, { scroll: true })}
+            onDeselect={closeChallenge}
             onMapClickPlace={(lat, lng) => {
               const id = selectedId;
               if (!id) return;
