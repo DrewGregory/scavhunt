@@ -21,7 +21,6 @@ import {
   GiTreasureMap,
   GiPodium,
   GiNotebook,
-  GiHouse,
   GiRuleBook,
   GiScrollUnfurled,
 } from "react-icons/gi";
@@ -31,6 +30,7 @@ import { useRouter } from "next/router";
 import { useSession } from "./useSession";
 import Image from "next/image";
 import { RegistrationSurveyModal } from "./RegistrationSurveyModal";
+import { AnnouncementModal } from "./AnnouncementModal";
 
 interface LinkItemProps {
   name: string;
@@ -40,7 +40,6 @@ interface LinkItemProps {
 }
 
 const LinkItems: Array<LinkItemProps> = [
-  { name: "Home", icon: GiHouse, url: "/" },
   { name: "Feed", icon: GiScrollUnfurled, url: "/feed" },
   { name: "ScavTok", icon: FaVideo, url: "/scavtok" },
   { name: "Challenges", icon: GiNotebook, url: "/challenges" },
@@ -198,6 +197,7 @@ export default function NavContainer({
           onCompleted={() => setSurveyDoneOverride(true)}
         />
       ) : null}
+      {session?.user ? <AnnouncementModal /> : null}
     </Box>
   );
 }
@@ -247,26 +247,41 @@ const SidebarContent = ({
         justifyContent={collapsed ? "center" : "space-between"}
         gap={2}
       >
-        <Box position="relative" width="32px" height="32px" flexShrink={0}>
-          <Image
-            src="/favicon.ico"
-            alt="Logo"
-            width={32}
-            height={32}
-            style={{ objectFit: "contain" }}
-          />
-        </Box>
-        {!collapsed && (
-          <Text
-            fontSize="2xl"
-            ml="2"
-            fontFamily="monospace"
-            fontWeight="bold"
-            flex={1}
-          >
-            {title}
-          </Text>
-        )}
+        <Flex
+          as="button"
+          type="button"
+          alignItems="center"
+          gap={2}
+          flex={collapsed ? undefined : 1}
+          minW={0}
+          cursor="pointer"
+          onClick={() => {
+            router.push("/");
+            onClose();
+          }}
+          aria-label="Home"
+          _hover={{ opacity: 0.85 }}
+        >
+          <Box position="relative" width="32px" height="32px" flexShrink={0}>
+            <Image
+              src="/favicon.ico"
+              alt=""
+              width={32}
+              height={32}
+              style={{ objectFit: "contain" }}
+            />
+          </Box>
+          {!collapsed && (
+            <Text
+              fontSize="2xl"
+              fontFamily="monospace"
+              fontWeight="bold"
+              noOfLines={1}
+            >
+              {title}
+            </Text>
+          )}
+        </Flex>
         <CloseButton display={{ base: "flex", md: "none" }} onClick={onClose} />
       </Flex>
       {session && !collapsed && (

@@ -34,6 +34,7 @@ model User {
   submissions  Submission[]
   favorites    Favorite[]
   deposits     NeighborhoodDeposit[]
+  announcementDismissals AnnouncementDismissal[]
 
   @@index([teamId])
   @@index([deletedAt])
@@ -269,4 +270,41 @@ model UploadTestRun {
   @@index([userId])
   @@index([createdAt])
   @@index([deletedAt])
+}
+
+/// Admin-authored player announcements (blocking until dismissed).
+model Announcement {
+  id          String    @id @default(cuid())
+  title       String
+  /// Markdown body.
+  body        String
+  /// null = draft (not shown to players). Set when published.
+  publishedAt DateTime?
+  /// Manual pin: blue banner + top of feed announcements list.
+  pinned      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// Soft-delete; null = live.
+  deletedAt   DateTime?
+  createdById String?
+
+  dismissals AnnouncementDismissal[]
+
+  @@index([publishedAt])
+  @@index([deletedAt])
+  @@index([pinned])
+}
+
+model AnnouncementDismissal {
+  id             String   @id @default(cuid())
+  announcementId String
+  userId         String
+  dismissedAt    DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@index([announcementId])
 }

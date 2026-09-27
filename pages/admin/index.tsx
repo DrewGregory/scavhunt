@@ -28,6 +28,7 @@ import { publicUser, requireAdminSSP } from "../../lib/auth";
 import type { SerializedChallenge, SerializedTeam } from "../../lib/types";
 import AdminMapPanel from "../../components/AdminMapPanel";
 import AdminDataTable, { type AdminColumn } from "../../components/AdminDataTable";
+import AdminAnnouncementsPanel from "../../components/AdminAnnouncementsPanel";
 import EmojiInput from "../../components/EmojiInput";
 import dynamic from "next/dynamic";
 
@@ -93,7 +94,7 @@ type AdminNeighborhood = {
   centerLng?: number | null;
 };
 
-type Tab = "users" | "teams" | "challenges" | "map" | "settings";
+type Tab = "users" | "teams" | "challenges" | "map" | "announcements" | "settings";
 
 function toLocalInputValue(iso: string | null | undefined) {
   if (!iso) return "";
@@ -1155,6 +1156,7 @@ export default function AdminPage({
     { id: "teams", label: "Teams" },
     { id: "challenges", label: "Challenges" },
     { id: "map", label: "Map" },
+    { id: "announcements", label: "Announcements" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -1368,6 +1370,10 @@ export default function AdminPage({
           />
         )}
 
+        {activeTab === "announcements" && (
+          <AdminAnnouncementsPanel onNotice={showNotice} />
+        )}
+
         {activeTab === "settings" && (
           <VStack align="stretch" spacing={6} maxW="520px">
             <Box bg="white" p={4} borderRadius="md" boxShadow="sm">
@@ -1406,7 +1412,8 @@ export default function AdminPage({
                 the map, can deposit points into them, and get a territory
                 leaderboard. Leave this off until you&apos;re ready for the
                 mid-hunt switch — admins can still prep boundaries on the Map
-                tab.
+                tab. Use the Announcements tab to notify players when you flip
+                it on.
               </Text>
               <FormControl display="flex" alignItems="center">
                 <FormLabel htmlFor="territory-enabled" mb="0">

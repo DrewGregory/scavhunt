@@ -44,6 +44,10 @@ import {
 } from "../lib/feedTypes";
 import type { SerializedTeam } from "../lib/types";
 import {
+  listPublishedAnnouncements,
+  serializeAnnouncement,
+} from "../lib/announcements";
+import {
   useNearEndTrigger,
   usePreloadQueue,
   useRegisterMedia,
@@ -51,6 +55,10 @@ import {
 } from "../lib/preloadQueue";
 import { usePlaybackTelemetry } from "../lib/playbackTelemetry";
 import { reportWebVitals } from "../lib/webVitals";
+import {
+  FeedWithAnnouncements,
+  type FeedAnnouncement,
+} from "../components/FeedAnnouncements";
 
 export const getServerSideProps = async (
   context: GetServerSidePropsContext,
@@ -67,11 +75,12 @@ export const getServerSideProps = async (
       ? context.query.submission
       : null;
 
-  const [initialPage, pinnedPage] = await Promise.all([
+  const [initialPage, pinnedPage, announcementRows] = await Promise.all([
     getFeedPage({ userId: user.id }),
     submissionParam
       ? getFeedPage({ userId: user.id, ids: [submissionParam], limit: 1 })
       : Promise.resolve(null),
+    listPublishedAnnouncements(),
   ]);
 
   return {
@@ -79,6 +88,16 @@ export const getServerSideProps = async (
       user: publicUser(user),
       initialPage,
       pinnedPage: pinnedPage && pinnedPage.items.length > 0 ? pinnedPage : null,
+      announcements: announcementRows.map((row) => {
+        const s = serializeAnnouncement(row);
+        return {
+          id: s.id,
+          title: s.title,
+          body: s.body,
+          publishedAt: s.publishedAt,
+          pinned: s.pinned,
+        } satisfies FeedAnnouncement;
+      }),
     },
   };
 };
@@ -97,6 +116,7 @@ export default function FeedPage({
   user,
   initialPage,
   pinnedPage,
+  announcements,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -298,6 +318,7 @@ export default function FeedPage({
 
   return (
     <NavContainer title="Feed">
+      <FeedWithAnnouncements announcements={announcements}>
       {noSubmissionsAtAll ? (
         <Heading size="lg" color="gray.500" textAlign="center" mt={8}>
           No Submissions Yet!
@@ -397,6 +418,7 @@ export default function FeedPage({
           )}
         </VStack>
       )}
+      </FeedWithAnnouncements>
     </NavContainer>
   );
 }
