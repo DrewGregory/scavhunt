@@ -11,6 +11,9 @@ import {
   MenuList,
   MenuItem,
   Table,
+  Tag,
+  TagCloseButton,
+  TagLabel,
   Tbody,
   Td,
   Text,
@@ -40,6 +43,13 @@ export type AdminColumn<T> = {
   minW?: string | number;
   maxW?: string | number;
   whiteSpace?: "nowrap" | "normal";
+};
+
+export type AdminFilterOption<T> = {
+  id: string;
+  label: string;
+  /** When this filter is active, keep rows where this returns true. */
+  predicate: (row: T) => boolean;
 };
 
 type SortState = { id: string; dir: "asc" | "desc" } | null;
@@ -108,6 +118,8 @@ export default function AdminDataTable<T>({
   getRowId,
   emptyMessage = "No rows",
   toolbarLeft,
+  filterOptions,
+  defaultActiveFilterIds,
   onRowClick,
   isRowSelected,
   renderExpandedRow,
@@ -120,6 +132,10 @@ export default function AdminDataTable<T>({
   getRowId: (row: T) => string;
   emptyMessage?: string;
   toolbarLeft?: ReactNode;
+  /** Optional boolean filters (menu + chips), like the player challenges list. */
+  filterOptions?: AdminFilterOption<T>[];
+  /** Filter ids active on first render. */
+  defaultActiveFilterIds?: string[];
   onRowClick?: (row: T) => void;
   isRowSelected?: (row: T) => boolean;
   /** When set, shows an expand chevron column and a full-width detail row. */
@@ -138,6 +154,9 @@ export default function AdminDataTable<T>({
   const [visible, setVisible] = useState<Record<string, boolean>>(defaultVisible);
   const [sort, setSort] = useState<SortState>(null);
   const [filter, setFilter] = useState("");
+  const [activeFilterIds, setActiveFilterIds] = useState<string[]>(
+    () => defaultActiveFilterIds ?? [],
+  );
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -160,11 +179,21 @@ export default function AdminDataTable<T>({
   const colSpan =
     visibleColumns.length + (renderExpandedRow ? 1 : 0);
 
+  const activeFilters = useMemo(() => {
+    if (!filterOptions?.length) return [];
+    return filterOptions.filter((o) => activeFilterIds.includes(o.id));
+  }, [filterOptions, activeFilterIds]);
+
   const processed = useMemo(() => {
     const q = filter.trim().toLowerCase();
     let list = rows;
+    if (activeFilters.length > 0) {
+      list = list.filter((row) =>
+        activeFilters.every((f) => f.predicate(row)),
+      );
+    }
     if (q) {
-      list = rows.filter((row) =>
+      list = list.filter((row) =>
         columns.some((col) => {
           if (visible[col.id] === false) return false;
           const raw =
@@ -184,7 +213,7 @@ export default function AdminDataTable<T>({
       }
     }
     return list;
-  }, [rows, columns, filter, sort, visible]);
+  }, [rows, columns, filter, sort, visible, activeFilters]);
 
   const toggleSort = (col: AdminColumn<T>) => {
     if (col.disableSort || !col.getSortValue) return;
@@ -203,6 +232,16 @@ export default function AdminDataTable<T>({
     });
   };
 
+  const toggleFilter = (id: string) => {
+    setActiveFilterIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const clearFilter = (id: string) => {
+    setActiveFilterIds((prev) => prev.filter((x) => x !== id));
+  };
+
   return (
     <VStack align="stretch" spacing={3} width="100%">
       <HStack
@@ -216,7 +255,7 @@ export default function AdminDataTable<T>({
           {toolbarLeft}
           <Input
             size="sm"
-            placeholder="Filter…"
+            placeholder="Search…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             bg="white"
@@ -227,6 +266,34 @@ export default function AdminDataTable<T>({
             {processed.length}
             {processed.length !== rows.length ? ` / ${rows.length}` : ""} rows
           </Text>
+          {filterOptions && filterOptions.length > 0 ? (
+            <Menu closeOnSelect={false}>
+              <MenuButton
+                as={Button}
+                size="sm"
+                variant="outline"
+                rightIcon={<ChevronDownIcon />}
+              >
+                Filter
+                {activeFilters.length > 0
+                  ? ` (${activeFilters.length})`
+                  : ""}
+              </MenuButton>
+              <MenuList maxH="320px" overflowY="auto" zIndex={20} px={2} py={2}>
+                <VStack align="stretch" spacing={2}>
+                  {filterOptions.map((o) => (
+                    <Checkbox
+                      key={o.id}
+                      isChecked={activeFilterIds.includes(o.id)}
+                      onChange={() => toggleFilter(o.id)}
+                    >
+                      {o.label}
+                    </Checkbox>
+                  ))}
+                </VStack>
+              </MenuList>
+            </Menu>
+          ) : null}
           <Menu closeOnSelect={false}>
             <MenuButton
               as={Button}
@@ -259,6 +326,23 @@ export default function AdminDataTable<T>({
           </Menu>
         </HStack>
       </HStack>
+
+      {activeFilters.length > 0 ? (
+        <HStack gap={2} flexWrap="wrap" px={1}>
+          {activeFilters.map((o) => (
+            <Tag
+              key={o.id}
+              size="sm"
+              borderRadius="full"
+              variant="subtle"
+              colorScheme="blue"
+            >
+              <TagLabel>{o.label}</TagLabel>
+              <TagCloseButton onClick={() => clearFilter(o.id)} />
+            </Tag>
+          ))}
+        </HStack>
+      ) : null}
 
       <Box
         bg="white"

@@ -30,7 +30,10 @@ import { DEFAULT_TEAM_COLOR } from "../../lib/teamColors";
 import type { SerializedChallenge, SerializedTeam } from "../../lib/types";
 import { formatPhoneDisplay } from "../../lib/phone";
 import AdminMapPanel from "../../components/AdminMapPanel";
-import AdminDataTable, { type AdminColumn } from "../../components/AdminDataTable";
+import AdminDataTable, {
+  type AdminColumn,
+  type AdminFilterOption,
+} from "../../components/AdminDataTable";
 import AdminAnnouncementsPanel from "../../components/AdminAnnouncementsPanel";
 import EmojiInput from "../../components/EmojiInput";
 import dynamic from "next/dynamic";
@@ -973,6 +976,17 @@ export default function AdminPage({
     [pointDrafts, pointsBusyId],
   );
 
+  const challengeFilterOptions: AdminFilterOption<Challenge>[] = useMemo(
+    () => [
+      {
+        id: "hideDisabled",
+        label: "Hide disabled challenges",
+        predicate: (c) => c.enabled,
+      },
+    ],
+    [],
+  );
+
   const challengeColumns: AdminColumn<Challenge>[] = useMemo(
     () => [
       {
@@ -1315,6 +1329,8 @@ export default function AdminPage({
                 columns={challengeColumns}
                 getRowId={(c) => c.id}
                 emptyMessage="No challenges yet"
+                filterOptions={challengeFilterOptions}
+                defaultActiveFilterIds={["hideDisabled"]}
               />
             </Box>
 

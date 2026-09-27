@@ -96,14 +96,18 @@ export default function NavContainer({
 }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const session = useSession();
-  const [collapsed, setCollapsed] = useState(false);
+  // Start collapsed so a refresh with a hidden sidebar doesn't flash open.
+  // After mount we expand only if the user explicitly saved expanded ("0").
+  const [collapsed, setCollapsed] = useState(true);
+  const [sidebarReady, setSidebarReady] = useState(false);
 
   useEffect(() => {
     try {
-      setCollapsed(window.localStorage.getItem(STORAGE_KEY) === "1");
+      setCollapsed(window.localStorage.getItem(STORAGE_KEY) !== "0");
     } catch {
       /* ignore */
     }
+    setSidebarReady(true);
   }, []);
 
   const toggleCollapsed = () => {
@@ -119,6 +123,9 @@ export default function NavContainer({
   };
 
   const sidebarW = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
+  const sidebarTransition = sidebarReady
+    ? "margin-left 0.2s ease, width 0.2s ease"
+    : "none";
   const locationPromptActive = Boolean(
     session?.user.teamId || session?.team,
   );
@@ -136,6 +143,7 @@ export default function NavContainer({
         collapsed={collapsed}
         onToggleCollapse={toggleCollapsed}
         w={sidebarW}
+        transition={sidebarReady ? "width 0.2s ease" : "none"}
       />
       <Drawer
         isOpen={isOpen}
@@ -189,7 +197,7 @@ export default function NavContainer({
           flexDirection="row"
           backgroundColor={bgColor ? bgColor : "white"}
           gap={3}
-          transition="margin-left 0.2s ease, width 0.2s ease"
+          transition={sidebarTransition}
         >
           <Text flex={1} fontSize="2xl" fontWeight="bold">
             {title}
@@ -208,7 +216,7 @@ export default function NavContainer({
         pb={fullScreen ? 0 : "150px"}
         display={fullScreen ? "flex" : "block"}
         flexDirection={fullScreen ? "column" : undefined}
-        transition="margin-left 0.2s ease, width 0.2s ease"
+        transition={sidebarTransition}
       >
         {children}
       </Box>
