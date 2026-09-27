@@ -58,7 +58,6 @@ import {
 import ScavTokReel from "../components/ScavTokReel";
 import DataList from "../components/dataList/DataList";
 import DataListToolbar from "../components/dataList/DataListToolbar";
-import { FaVideo } from "react-icons/fa";
 
 type ViewMode = "list" | "tok";
 const TOK_PAGE_SIZE = 10;
@@ -687,13 +686,13 @@ export default function FeedPage({
   );
 
   const scavTokNavButton = (
-    <IconButton
-      aria-label="Open ScavTok"
-      icon={<FaVideo />}
+    <Button
       variant="ghost"
       size="md"
       onClick={() => setQuery({ view: "tok", submission: null })}
-    />
+    >
+      ScavTok
+    </Button>
   );
 
   if (view === "tok") {
