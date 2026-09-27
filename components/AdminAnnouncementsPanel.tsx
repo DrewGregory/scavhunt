@@ -3,6 +3,7 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Flex,
   FormControl,
   FormHelperText,
@@ -69,6 +70,7 @@ type AnnouncementRow = {
   body: string;
   publishedAt: string | null;
   pinned: boolean;
+  forceShow: boolean;
   createdAt: string;
   status: "draft" | "published" | "archived";
   metrics: Metrics;
@@ -76,6 +78,9 @@ type AnnouncementRow = {
 
 const PIN_TOOLTIP =
   "Pins a blue banner at the top of the feed. Only one announcement can be pinned — pinning this one unpins any other. Players can browse all announcements from the Announcements page in the sidebar.";
+
+const FORCE_SHOW_TOOLTIP =
+  "Shows a blocking popup when players open the app until they tap Got it. Leave off so the announcement only appears on the Announcements page (and as a feed banner if pinned).";
 
 export default function AdminAnnouncementsPanel({
   onNotice,
@@ -88,6 +93,7 @@ export default function AdminAnnouncementsPanel({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [forceShowOnCreate, setForceShowOnCreate] = useState(true);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -118,6 +124,7 @@ export default function AdminAnnouncementsPanel({
   const resetCreateForm = () => {
     setTitle("");
     setBody("");
+    setForceShowOnCreate(true);
   };
 
   const openCreate = () => {
@@ -148,6 +155,7 @@ export default function AdminAnnouncementsPanel({
           title: title.trim(),
           body: body.trim(),
           publish,
+          forceShow: publish ? forceShowOnCreate : false,
         }),
       });
       const data = await res.json();
@@ -287,6 +295,12 @@ export default function AdminAnnouncementsPanel({
                   Bold, lists, links, and headings.
                 </FormHelperText>
               </FormControl>
+              <Checkbox
+                isChecked={forceShowOnCreate}
+                onChange={(e) => setForceShowOnCreate(e.target.checked)}
+              >
+                Notify on open (blocking popup until Got it)
+              </Checkbox>
             </VStack>
           </ModalBody>
           <ModalFooter flexShrink={0} gap={2} flexWrap="wrap">
@@ -381,6 +395,9 @@ export default function AdminAnnouncementsPanel({
                     {row.pinned && (
                       <Badge colorScheme="blue">pinned</Badge>
                     )}
+                    {row.forceShow && (
+                      <Badge colorScheme="purple">notify on open</Badge>
+                    )}
                   </HStack>
                   <Text fontSize="xs" color="gray.500">
                     {row.publishedAt
@@ -430,6 +447,32 @@ export default function AdminAnnouncementsPanel({
                             }
                           >
                             {row.pinned ? "Unpin" : "Pin"}
+                          </Button>
+                        </Box>
+                      </Tooltip>
+                      <Tooltip
+                        label={FORCE_SHOW_TOOLTIP}
+                        hasArrow
+                        placement="top"
+                        openDelay={300}
+                      >
+                        <Box as="span" display="inline-block">
+                          <Button
+                            size="xs"
+                            colorScheme={row.forceShow ? "purple" : "gray"}
+                            variant={row.forceShow ? "solid" : "outline"}
+                            isLoading={busyId === row.id}
+                            onClick={() =>
+                              void patch(
+                                row.id,
+                                { forceShow: !row.forceShow },
+                                row.forceShow
+                                  ? "No longer notifies on open"
+                                  : "Will notify players on open",
+                              )
+                            }
+                          >
+                            {row.forceShow ? "Notifying" : "Notify on open"}
                           </Button>
                         </Box>
                       </Tooltip>

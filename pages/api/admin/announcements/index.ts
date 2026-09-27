@@ -13,6 +13,8 @@ const createSchema = z.object({
   body: z.string().trim().min(1).max(20_000),
   /** If true, publish immediately. */
   publish: z.boolean().optional(),
+  /** Blocking popup on open. Only applied when publishing. */
+  forceShow: z.boolean().optional(),
 });
 
 export default async function handler(
@@ -56,6 +58,7 @@ export default async function handler(
         body: parsed.data.body,
         createdById: admin.id,
         publishedAt: parsed.data.publish ? new Date() : null,
+        forceShow: Boolean(parsed.data.publish && parsed.data.forceShow),
       },
     });
 

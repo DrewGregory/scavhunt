@@ -15,6 +15,8 @@ const patchSchema = z.object({
   publish: z.boolean().optional(),
   /** Manual pin for feed banner / sidebar priority. Only applies while published. */
   pinned: z.boolean().optional(),
+  /** Blocking popup when players open the app. Only applies while published. */
+  forceShow: z.boolean().optional(),
 });
 
 export default async function handler(
@@ -64,6 +66,7 @@ export default async function handler(
       body?: string;
       publishedAt?: Date | null;
       pinned?: boolean;
+      forceShow?: boolean;
     } = {};
     if (parsed.data.title !== undefined) data.title = parsed.data.title;
     if (parsed.data.body !== undefined) data.body = parsed.data.body;
@@ -72,6 +75,7 @@ export default async function handler(
     } else if (parsed.data.publish === false) {
       data.publishedAt = null;
       data.pinned = false;
+      data.forceShow = false;
     }
     if (parsed.data.pinned !== undefined && parsed.data.publish !== false) {
       const willBePublished =
@@ -83,6 +87,17 @@ export default async function handler(
           .json({ error: "Publish before pinning an announcement" });
       }
       data.pinned = parsed.data.pinned;
+    }
+    if (parsed.data.forceShow !== undefined && parsed.data.publish !== false) {
+      const willBePublished =
+        parsed.data.publish === true ||
+        (parsed.data.publish === undefined && existing.publishedAt != null);
+      if (!willBePublished && parsed.data.forceShow) {
+        return res.status(400).json({
+          error: "Publish before enabling notify-on-open",
+        });
+      }
+      data.forceShow = parsed.data.forceShow;
     }
 
     // Only one announcement may be pinned at a time.
@@ -126,7 +141,12 @@ export default async function handler(
 
     await prisma.announcement.update({
       where: { id },
-      data: { deletedAt: new Date(), publishedAt: null, pinned: false },
+      data: {
+        deletedAt: new Date(),
+        publishedAt: null,
+        pinned: false,
+        forceShow: false,
+      },
     });
     return res.status(200).json({ ok: true });
   }

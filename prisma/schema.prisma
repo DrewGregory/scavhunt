@@ -300,10 +300,13 @@ model Announcement {
   publishedAt DateTime?
   /// Manual pin: blue banner + top of feed announcements list.
   pinned      Boolean   @default(false)
+  /// Blocking “Got it” popup when players open the app (until dismissed).
+  forceShow   Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   /// Soft-delete; null = live.
   deletedAt   DateTime?
+
   createdById String?
 
   dismissals AnnouncementDismissal[]
@@ -311,6 +314,7 @@ model Announcement {
   @@index([publishedAt])
   @@index([deletedAt])
   @@index([pinned])
+  @@index([forceShow])
 }
 
 model AnnouncementDismissal {

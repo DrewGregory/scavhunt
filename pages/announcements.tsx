@@ -94,10 +94,6 @@ export default function AnnouncementsPage({
 
   return (
     <NavContainer title="Announcements">
-      <Text fontSize="sm" color="gray.600" mb={4}>
-        Messages from hunt organizers. Tap one to read it again.
-      </Text>
-
       <DataList
         rows={announcements}
         columns={columns}

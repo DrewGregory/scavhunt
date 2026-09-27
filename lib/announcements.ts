@@ -35,6 +35,7 @@ export function serializeAnnouncement(row: {
   body: string;
   publishedAt: Date | null;
   pinned: boolean;
+  forceShow: boolean;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -46,6 +47,7 @@ export function serializeAnnouncement(row: {
     body: row.body,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     pinned: row.pinned,
+    forceShow: row.forceShow,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     deletedAt: row.deletedAt?.toISOString() ?? null,
@@ -81,7 +83,7 @@ export async function getPinnedAnnouncement() {
   });
 }
 
-/** Pending published announcements for a user, oldest first. */
+/** Pending force-show announcements for a user, oldest first. */
 export async function listPendingAnnouncementsForUser(userId: string) {
   const dismissed = await prisma.announcementDismissal.findMany({
     where: { userId },
@@ -93,6 +95,7 @@ export async function listPendingAnnouncementsForUser(userId: string) {
     where: {
       deletedAt: null,
       publishedAt: { not: null },
+      forceShow: true,
       ...(dismissedIds.length > 0 ? { id: { notIn: dismissedIds } } : {}),
     },
     orderBy: { publishedAt: "asc" },
