@@ -98,6 +98,23 @@ dokku config:set <app> SESSION_SECRET=... ADMIN_EMAILS=... APP_ORIGIN=https://yo
 git push dokku main
 ```
 
+### CI deploy secrets (GitHub Actions)
+
+The `Deploy to Dokku` workflow (`.github/workflows/deploy.yml`) needs three
+repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `DOKKU_GIT_REMOTE_URL` | SSH git remote, e.g. `dokku@your.host:appname` |
+| `DOKKU_SSH_PRIVATE_KEY` | Private key with push access to Dokku |
+| `DOKKU_SSH_HOST_KEY` | Pinned host key line(s) from `ssh-keyscan` |
+
+Generate the host key secret from a trusted network and paste the output:
+
+```bash
+ssh-keyscan -t rsa,ecdsa,ed25519 your.host
+```
+
 ## Media storage & CDN
 
 Media lives in DigitalOcean Spaces. New uploads store **CDN** URLs

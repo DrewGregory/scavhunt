@@ -18,9 +18,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate Dokku SSH host key secret
+        env:
+          DOKKU_SSH_HOST_KEY: ${{ secrets.DOKKU_SSH_HOST_KEY }}
+        run: |
+          if [ -z "$DOKKU_SSH_HOST_KEY" ]; then
+            echo "::error::DOKKU_SSH_HOST_KEY is not set. Refusing to deploy without SSH host key verification."
+            exit 1
+          fi
+          echo "Pinned $(printf '%s\n' "$DOKKU_SSH_HOST_KEY" | grep -c .) SSH host key entry(ies)."
+
       - name: Deploy to Dokku
         uses: dokku/github-action@v1
         with:
           git_remote_url: ${{ secrets.DOKKU_GIT_REMOTE_URL }}
+          ssh_host_key: ${{ secrets.DOKKU_SSH_HOST_KEY }}
           ssh_private_key: ${{ secrets.DOKKU_SSH_PRIVATE_KEY }}
           branch: main
