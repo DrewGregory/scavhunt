@@ -1,6 +1,4 @@
 import React from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTv, faSearch } from "@fortawesome/free-solid-svg-icons";
 
 /**
  * ScavTok top tabs.
@@ -9,7 +7,6 @@ import { faTv, faSearch } from "@fortawesome/free-solid-svg-icons";
 const TopNavbar = ({ tab = "following", onTabChange, forYouDisabled = false }) => {
   return (
     <div className="top-navbar">
-      <FontAwesomeIcon icon={faTv} className="icon" />
       <h2>
         <button
           type="button"
@@ -30,7 +27,6 @@ const TopNavbar = ({ tab = "following", onTabChange, forYouDisabled = false }) =
           For You
         </button>
       </h2>
-      <FontAwesomeIcon icon={faSearch} className="icon" />
     </div>
   );
 };

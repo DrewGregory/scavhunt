@@ -687,7 +687,7 @@ export default function FeedPage({
 
   const scavTokNavButton = (
     <Button
-      variant="ghost"
+      variant="outline"
       size="md"
       onClick={() => setQuery({ view: "tok", submission: null })}
     >
