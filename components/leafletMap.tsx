@@ -563,6 +563,18 @@ export default function LeafletMap({
     };
   }, []);
 
+  /** Hover + selected outline (desktop hover / mobile selection). */
+  const highlightStyle = useMemo(
+    (): PathOptions => ({
+      fillColor: "#CBD5E0",
+      fillOpacity: 0.5,
+      color: "#2D3748",
+      weight: 3.5,
+      dashArray: undefined,
+    }),
+    [],
+  );
+
   const handleDeposit = async () => {
     if (!team || !territoryOn) return;
     if (locationPermission !== "granted") {
@@ -908,14 +920,11 @@ export default function LeafletMap({
                 style={() => {
                   const base = styleFor(n);
                   if (!isSelected) return base;
-                  return {
-                    ...base,
-                    weight: Math.max(base.weight ?? 2, 3.5),
-                    fillOpacity: Math.min((base.fillOpacity ?? 0.35) + 0.15, 0.6),
-                  };
+                  return { ...base, ...highlightStyle };
                 }}
                 onEachFeature={(_feat, layer) => {
                   const baseStyle = styleFor(n);
+                  const selectedStyle = { ...baseStyle, ...highlightStyle };
                   if (isSelected) {
                     if (typeof (layer as Path).bringToFront === "function") {
                       (layer as Path).bringToFront();
@@ -933,44 +942,19 @@ export default function LeafletMap({
                       if (prev && prev.layer !== target) {
                         prev.layer.setStyle(prev.style);
                       }
-                      target.setStyle({
-                        fillColor: "#E2E8F0",
-                        fillOpacity: 0.45,
-                        color: "#A0AEC0",
-                        weight: 2.5,
-                        dashArray: undefined,
-                      });
+                      target.setStyle(highlightStyle);
                       if (typeof target.bringToFront === "function") {
                         target.bringToFront();
                       }
                       highlightedLayerRef.current = {
                         layer: target,
-                        style: isSelected
-                          ? {
-                              ...baseStyle,
-                              weight: Math.max(baseStyle.weight ?? 2, 3.5),
-                              fillOpacity: Math.min(
-                                (baseStyle.fillOpacity ?? 0.35) + 0.15,
-                                0.6,
-                              ),
-                            }
-                          : baseStyle,
+                        style: isSelected ? selectedStyle : baseStyle,
                       };
                     },
                     mouseout: (e) => {
                       if (!hoverCapableRef.current) return;
                       const target = e.target as Path;
-                      const restore = isSelected
-                        ? {
-                            ...baseStyle,
-                            weight: Math.max(baseStyle.weight ?? 2, 3.5),
-                            fillOpacity: Math.min(
-                              (baseStyle.fillOpacity ?? 0.35) + 0.15,
-                              0.6,
-                            ),
-                          }
-                        : baseStyle;
-                      target.setStyle(restore);
+                      target.setStyle(isSelected ? selectedStyle : baseStyle);
                       if (highlightedLayerRef.current?.layer === target) {
                         highlightedLayerRef.current = null;
                       }
