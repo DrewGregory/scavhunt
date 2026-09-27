@@ -82,9 +82,12 @@ export default function DataListToolbar({
       zIndex={5}
       isolation="isolate"
       bg="white"
-      mx={{ base: -4, md: 0 }}
-      px={{ base: 4, md: 0 }}
-      pt={1}
+      // Bleed into NavContainer's p={4} so scrolled rows can't peek
+      // between the page title and the search bar.
+      mx={{ base: -4, md: -4 }}
+      mt={-4}
+      px={{ base: 4, md: 4 }}
+      pt={5}
       pb={3}
       mb={2}
       borderBottomWidth={scrolled ? "1px" : "0"}
@@ -93,11 +96,15 @@ export default function DataListToolbar({
       sx={{ transform: "translateZ(0)" }}
     >
       {/* Opaque underlay — sticky bg alone can fail to cover scrolling rows
-          in the gaps between search / sort / filter chips. */}
+          in the gaps between search / sort / filter chips. Extends past the
+          bottom margin so rows don't flash in the gap under the toolbar. */}
       <Box
         aria-hidden
         position="absolute"
-        inset={0}
+        top={0}
+        left={0}
+        right={0}
+        bottom={-2}
         bg="white"
         pointerEvents="none"
       />
