@@ -55,7 +55,7 @@ export async function getUserFromReq(
     where: { id: session.userId },
     include: { team: true },
   });
-  // Soft-deleted only — inactive browsers may still hold a session (home lock).
+  // Soft-deleted only — inactive users may still hold a session (home lock).
   if (!user || user.deletedAt) return null;
 
   void prisma.user

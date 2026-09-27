@@ -120,6 +120,27 @@ type SortOption =
   | "spots-left"
   | "a-z";
 type ViewMode = "list" | "map";
+
+const CHALLENGES_VIEW_KEY = "scavhunt.challengesView";
+
+function readStoredChallengesView(): ViewMode {
+  if (typeof window === "undefined") return "map";
+  try {
+    const stored = window.localStorage.getItem(CHALLENGES_VIEW_KEY);
+    if (stored === "list" || stored === "map") return stored;
+  } catch {
+    /* ignore */
+  }
+  return "map";
+}
+
+function persistChallengesView(view: ViewMode) {
+  try {
+    window.localStorage.setItem(CHALLENGES_VIEW_KEY, view);
+  } catch {
+    /* ignore */
+  }
+}
 type FilterId = "onlyFavorites" | "hideCompleted" | "hideFull";
 
 const SORT_OPTIONS = [
@@ -181,8 +202,34 @@ export default function ChallengesPage({
   const toast = useToast();
 
   const viewParam = router.query.view;
-  const view: ViewMode =
-    viewParam === "map" || viewParam === "list" ? viewParam : "map";
+  const explicitView: ViewMode | null =
+    viewParam === "map" || viewParam === "list" ? viewParam : null;
+  const view: ViewMode = explicitView ?? "map";
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (explicitView) {
+      persistChallengesView(explicitView);
+      return;
+    }
+    const prefer = readStoredChallengesView();
+    const query: Record<string, string> = { view: prefer };
+    if (typeof router.query.challenge === "string") {
+      query.challenge = router.query.challenge;
+    }
+    if (typeof router.query.neighborhood === "string") {
+      query.neighborhood = router.query.neighborhood;
+    }
+    void router.replace({ pathname: "/challenges", query }, undefined, {
+      shallow: true,
+    });
+  }, [
+    router.isReady,
+    explicitView,
+    router.query.challenge,
+    router.query.neighborhood,
+    router.replace,
+  ]);
   const challengeParam =
     typeof router.query.challenge === "string"
       ? router.query.challenge
@@ -282,6 +329,7 @@ export default function ChallengesPage({
         nextChallenge = null;
       }
 
+      persistChallengesView(nextView);
       const query: Record<string, string> = { view: nextView };
       if (nextChallenge) query.challenge = nextChallenge;
       if (nextNeighborhood) query.neighborhood = nextNeighborhood;

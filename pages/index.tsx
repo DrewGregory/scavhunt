@@ -33,6 +33,10 @@ export const getServerSideProps = async (
     process.env.SCAVENGER_HUNT_NAME || "Scavenger Hunt";
   const huntStarted = Date.now() >= startTime.getTime();
 
+  if (user && huntStarted && canAccessHuntApp(user)) {
+    return { redirect: { destination: "/feed", permanent: false } };
+  }
+
   return {
     props: {
       user: user ? publicUser(user) : null,
@@ -79,7 +83,6 @@ export default function HomePage({
       required={false}
       onCompleted={() => {
         setSurveyDone(true);
-        // Intent may flip isActive (browsers need approval) — refresh props.
         void router.replace(router.asPath);
       }}
     />
