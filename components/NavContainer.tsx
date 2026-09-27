@@ -52,17 +52,17 @@ const LinkItems: Array<LinkItemProps> = [
     matchPaths: ["/feed", "/scavtok"],
   },
   {
-    name: "Announcements",
-    icon: LuMegaphone,
-    url: "/announcements",
-  },
-  {
     name: "Challenges",
     icon: LuListChecks,
     url: "/challenges",
     matchPaths: ["/challenges", "/map"],
   },
   { name: "Leaderboard", icon: LuTrophy, url: "/teams" },
+  {
+    name: "Announcements",
+    icon: LuMegaphone,
+    url: "/announcements",
+  },
   { name: "My Team", icon: LuUsers, url: "/my-team" },
   { name: "How to Play", icon: LuBookOpen, url: "/how-to-play" },
   { name: "Admin", icon: LuShieldCheck, url: "/admin", adminOnly: true },

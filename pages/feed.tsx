@@ -708,7 +708,8 @@ export default function FeedPage({
       >
         <ScavTokReel
           initialPage={tokInitialPage}
-          teamId={teamIdFromQuery ?? undefined}
+          userTeamId={user.teamId}
+          defaultTab={teamIdFromQuery ? "foryou" : "following"}
           onBackToList={() => {
             if (teamIdFromQuery) {
               void router.push("/my-team");

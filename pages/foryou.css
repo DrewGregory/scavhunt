@@ -48,14 +48,41 @@
     color: #fff;
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
     padding: 0 40px;
+    display: flex;
+    align-items: center;
+    gap: 0;
   }
 
-  .top-navbar h2 span {
-    font-weight: 700;
+  .top-navbar h2 .tab-sep {
+    color: #fff;
+    font-weight: 500;
+    padding: 0 4px;
+  }
+
+  .top-navbar h2 .tab {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: #fff;
+    font-weight: 500;
+    cursor: pointer;
     position: relative;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
   }
 
-  .top-navbar h2 span::after {
+  .top-navbar h2 .tab:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .top-navbar h2 .tab.active {
+    font-weight: 700;
+  }
+
+  .top-navbar h2 .tab.active::after {
     content: "";
     position: absolute;
     left: 0;

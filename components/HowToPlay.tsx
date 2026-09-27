@@ -117,6 +117,32 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                         </Text>
                     </Box>
 
+                    {/* Territory Section */}
+                    <Box
+                        bg="whiteAlpha.800"
+                        backdropFilter="blur(16px)"
+                        borderRadius="2xl"
+                        px={{ base: 6, md: 10 }}
+                        py={{ base: 6, md: 8 }}
+                        boxShadow="2xl"
+                        width="100%"
+                    >
+                        <Heading as="h2" size="xl" mb={4} fontWeight="600">
+                            Territory
+                        </Heading>
+                        <Text fontSize={{ base: "md", md: "lg" }} lineHeight="tall">
+                            • Later in the hunt, neighborhoods on the map go live for territory control!
+                            <br /><br />
+                            • Spend points you&apos;ve earned to deposit into the neighborhood you&apos;re standing in
+                            <br /><br />
+                            • The team with the most deposited points claims that neighborhood
+                            <br /><br />
+                            • Neighborhoods held decide the winner — points earned are just the tiebreaker
+                            <br /><br />
+                            • Check the map and the neighborhood leaderboard to see who&apos;s winning turf!
+                        </Text>
+                    </Box>
+
                     {/* Other Notes Section */}
                     <Box
                         bg="whiteAlpha.800"
@@ -138,8 +164,6 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                             (We recommend getting a MUNI day pass)
                             <br /><br />
                             • You can see every team's latest location on the map! The site will ask for location permissions.
-                            <br /><br />
-                            • Check out the new features that our intern built: ScavAI and Chat! Have fun with them (and obviously, be respectful!)
                         </Text>
                     </Box>
 
@@ -203,7 +227,7 @@ export default ({ scavengerHuntName }: { scavengerHuntName: string }) => {
                     <Text fontSize="sm" color="gray.700" textAlign="center">
                         This website is not SOC2 compliant.
                         <br />
-                        For inquiries, please reach out to any housemate or Sevy.
+                        For inquiries, please reach out to any housemate.
                         <br/>
                         Photo credits: Aivant Goyal
                     </Text>

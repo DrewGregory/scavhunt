@@ -13,6 +13,9 @@ import {
   sessionCookieOptions,
 } from "./session";
 import { requireHuntStartedApi, requireHuntStartedSSP } from "./time";
+import { canAccessHuntApp } from "./huntAccess";
+
+export { canAccessHuntApp } from "./huntAccess";
 
 export type UserWithTeam = User & { team: Team | null };
 
@@ -63,14 +66,6 @@ export async function getUserFromReq(
     .catch(() => undefined);
 
   return user;
-}
-
-/** Admins and active users may enter feed/challenges/etc. Inactive = pending browse approval. */
-export function canAccessHuntApp(user: {
-  isAdmin: boolean;
-  isActive: boolean;
-}): boolean {
-  return user.isAdmin || user.isActive;
 }
 
 /**

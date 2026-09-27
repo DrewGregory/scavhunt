@@ -26,6 +26,7 @@ import {
 import NavContainer from "../../components/NavContainer";
 import { publicUser, requireAdminSSP } from "../../lib/auth";
 import type { SerializedChallenge, SerializedTeam } from "../../lib/types";
+import { formatPhoneDisplay } from "../../lib/phone";
 import AdminMapPanel from "../../components/AdminMapPanel";
 import AdminDataTable, { type AdminColumn } from "../../components/AdminDataTable";
 import AdminAnnouncementsPanel from "../../components/AdminAnnouncementsPanel";
@@ -966,14 +967,16 @@ export default function AdminPage({
         header: "Members",
         getSortValue: (t) => (t.users ?? []).length,
         getFilterValue: (t) =>
-          (t.users ?? []).map((m) => `${m.name} ${m.email}`).join(" "),
+          (t.users ?? [])
+            .map((m) => `${m.name} ${m.phoneE164}`)
+            .join(" "),
         cell: (team) =>
           (team.users ?? []).length === 0 ? (
             <Text color="gray.500">No members</Text>
           ) : (
             (team.users ?? []).map((m) => (
               <Text key={m.id} fontSize="sm">
-                {m.name} ({m.email})
+                {m.name} ({formatPhoneDisplay(m.phoneE164)})
               </Text>
             ))
           ),

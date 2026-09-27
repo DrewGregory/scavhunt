@@ -14,31 +14,51 @@ const PAGE_SIZE = 10;
 const LOAD_MORE_FROM_END = 3;
 const UNMUTE_KEY = "scavtok.unmuted";
 
+export type ScavTokTab = "following" | "foryou";
+
 export default function ScavTokReel({
   initialPage,
   onBackToList,
-  teamId,
+  userTeamId,
+  defaultTab = "following",
 }: {
   initialPage: FeedPage;
   onBackToList: () => void;
-  /** When set, only show this team's video submissions. */
-  teamId?: string;
+  /** Current user's team — required for For You. */
+  userTeamId?: string | null;
+  /** My Team opens For You; Feed opens Following. */
+  defaultTab?: ScavTokTab;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
+  const [tab, setTab] = useState<ScavTokTab>(() =>
+    defaultTab === "foryou" && userTeamId ? "foryou" : "following",
+  );
+
+  const filterTeamId = tab === "foryou" ? userTeamId ?? undefined : undefined;
 
   const filters: FeedFilters = useMemo(
-    () => ({ videoOnly: true, ...(teamId ? { teamId } : {}) }),
-    [teamId],
+    () => ({
+      videoOnly: true,
+      ...(filterTeamId ? { teamId: filterTeamId } : {}),
+    }),
+    [filterTeamId],
   );
+
+  // Reuse SSR page only when it matches the active tab's filter.
+  const fallback =
+    (tab === "foryou" && defaultTab === "foryou") ||
+    (tab === "following" && defaultTab === "following")
+      ? initialPage
+      : undefined;
 
   const queue = usePreloadQueue("reel", {
     rootRef: containerRef,
     onCurrentChange: setCurrentId,
   });
-  const feed = useFeed(filters, { limit: PAGE_SIZE, fallback: initialPage });
+  const feed = useFeed(filters, { limit: PAGE_SIZE, fallback });
   const { updateItems } = feed;
 
   useEffect(() => {
@@ -117,11 +137,17 @@ export default function ScavTokReel({
       />
       <div className="app">
         <div className="container" ref={containerRef}>
-          <TopNavbar />
+          <TopNavbar
+            tab={tab}
+            onTabChange={setTab}
+            forYouDisabled={!userTeamId}
+          />
           {feed.items.length === 0 && !feed.isLoading && (
             <Flex h="100%" align="center" justify="center" px={6}>
               <Text color="whiteAlpha.800" textAlign="center">
-                No videos yet.
+                {tab === "foryou"
+                  ? "No videos from your team yet."
+                  : "No videos yet."}
               </Text>
             </Flex>
           )}
