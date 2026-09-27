@@ -637,37 +637,60 @@ export default function FeedPage({
         meta: { isTrailing: true },
         cell: ({ row }) => {
           const item = row.original;
+          const pts = isFeedDeposit(item)
+            ? item.points
+            : (challenges[item.challengeId]?.pts ?? "—");
+
           if (isFeedDeposit(item)) {
             return (
-              <Flex h="100%" align="flex-start" justify="flex-end">
-                <Text fontWeight="semibold" color="gray.700" lineHeight="1.2">
-                  {item.points}
-                </Text>
-              </Flex>
-            );
-          }
-          const s = item;
-          const challenge = challenges[s.challengeId];
-          const canManage = isAdmin || user.teamId === s.teamId;
-          return (
-            <Flex
-              h="100%"
-              minH="56px"
-              direction="column"
-              align="flex-end"
-              justify="space-between"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <HStack spacing={0} align="flex-start">
+              <Flex h="100%" minH="48px" align="flex-start" gap={0}>
                 <Text
                   fontWeight="semibold"
                   color="gray.700"
                   lineHeight="1.2"
                   pt="6px"
-                  pr={canManage ? 0 : 1}
+                  w="36px"
+                  textAlign="right"
+                  flexShrink={0}
+                  fontVariantNumeric="tabular-nums"
                 >
-                  {challenge?.pts ?? "—"}
+                  {pts}
                 </Text>
+                {/* Reserve same rail as submission rows so points stay aligned. */}
+                <Box w="28px" flexShrink={0} />
+              </Flex>
+            );
+          }
+
+          const s = item;
+          const canManage = isAdmin || user.teamId === s.teamId;
+          return (
+            <Flex
+              h="100%"
+              minH="56px"
+              align="stretch"
+              gap={0}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Text
+                fontWeight="semibold"
+                color="gray.700"
+                lineHeight="1.2"
+                pt="6px"
+                w="36px"
+                textAlign="right"
+                flexShrink={0}
+                fontVariantNumeric="tabular-nums"
+              >
+                {pts}
+              </Text>
+              <Flex
+                w="28px"
+                flexShrink={0}
+                direction="column"
+                align="center"
+                justify="space-between"
+              >
                 {canManage ? (
                   <Menu>
                     <MenuButton
@@ -724,31 +747,33 @@ export default function FeedPage({
                       )}
                     </MenuList>
                   </Menu>
-                ) : null}
-              </HStack>
-              <HStack spacing={0}>
-                {isAdmin && sortId === "favorites" ? (
-                  <Text fontSize="xs" color="gray.500" minW="14px">
-                    {s.favoriteCount}
-                  </Text>
-                ) : null}
-                <IconButton
-                  aria-label="Toggle favorite"
-                  icon={
-                    s.favorited ? (
-                      <LuHeart fill="currentColor" />
-                    ) : (
-                      <LuHeart />
-                    )
-                  }
-                  onClick={() => toggleFavorite(s.id)}
-                  variant="ghost"
-                  color={s.favorited ? "red.500" : "gray.400"}
-                  size="sm"
-                  minW={7}
-                  h={7}
-                />
-              </HStack>
+                ) : (
+                  <Box h={7} />
+                )}
+                <HStack spacing={0}>
+                  {isAdmin && sortId === "favorites" ? (
+                    <Text fontSize="xs" color="gray.500">
+                      {s.favoriteCount}
+                    </Text>
+                  ) : null}
+                  <IconButton
+                    aria-label="Toggle favorite"
+                    icon={
+                      s.favorited ? (
+                        <LuHeart fill="currentColor" />
+                      ) : (
+                        <LuHeart />
+                      )
+                    }
+                    onClick={() => toggleFavorite(s.id)}
+                    variant="ghost"
+                    color={s.favorited ? "red.500" : "gray.400"}
+                    size="sm"
+                    minW={7}
+                    h={7}
+                  />
+                </HStack>
+              </Flex>
             </Flex>
           );
         },

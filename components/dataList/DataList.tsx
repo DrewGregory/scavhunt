@@ -101,6 +101,7 @@ export default function DataList<T>({
                           ? "40px"
                           : undefined
                     }
+                    minW={meta?.isTrailing ? "72px" : undefined}
                   >
                     {header.isPlaceholder
                       ? null
@@ -161,7 +162,9 @@ export default function DataList<T>({
                               ? "40px"
                               : undefined
                         }
+                        minW={meta?.isTrailing ? "72px" : undefined}
                         h={meta?.isTrailing ? "1px" : undefined}
+                        px={meta?.isTrailing ? 1 : 3}
                         onClick={
                           meta?.isAction || meta?.isTrailing
                             ? (e) => e.stopPropagation()
