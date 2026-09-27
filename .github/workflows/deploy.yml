@@ -29,7 +29,7 @@ jobs:
           echo "Pinned $(printf '%s\n' "$DOKKU_SSH_HOST_KEY" | grep -c .) SSH host key entry(ies)."
 
       - name: Deploy to Dokku
-        uses: dokku/github-action@036bf9c07f1b40707a16201bc7a349074c3ec554 # v1.6.1
+        uses: dokku/github-action@cc7dec1d2b9fed249a14ae462bc953bba436f78c # v1.10.0
         with:
           git_remote_url: ${{ secrets.DOKKU_GIT_REMOTE_URL }}
           ssh_host_key: ${{ secrets.DOKKU_SSH_HOST_KEY }}
