@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { differenceInMinutes } from "date-fns";
+import { differenceInSeconds } from "date-fns";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
 import { getUserFromReq, publicUser } from "../../lib/auth";
@@ -39,7 +39,7 @@ export default async function handler(
       });
       if (
         latestLocation == null ||
-        differenceInMinutes(new Date(), latestLocation.createdAt) >= 15
+        differenceInSeconds(new Date(), latestLocation.createdAt) >= 60
       ) {
         await prisma.location.create({
           data: {
