@@ -30,6 +30,10 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { MarkdownBody } from "./MarkdownBody";
+import {
+  AnnouncementGotItButton,
+  AnnouncementPlayerShell,
+} from "./AnnouncementPlayerShell";
 
 type Viewer = {
   userId: string;
@@ -81,6 +85,7 @@ export default function AdminAnnouncementsPanel({
   const [rows, setRows] = useState<AnnouncementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const createModal = useDisclosure();
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [creating, setCreating] = useState(false);
@@ -117,7 +122,16 @@ export default function AdminAnnouncementsPanel({
 
   const openCreate = () => {
     resetCreateForm();
+    setPreviewOpen(false);
     createModal.onOpen();
+  };
+
+  const openPreview = () => {
+    if (!title.trim() || !body.trim()) {
+      onNotice("error", "Title and body are required");
+      return;
+    }
+    setPreviewOpen(true);
   };
 
   const create = async (publish: boolean) => {
@@ -142,6 +156,7 @@ export default function AdminAnnouncementsPanel({
         return;
       }
       resetCreateForm();
+      setPreviewOpen(false);
       createModal.onClose();
       await load();
       onNotice(
@@ -229,16 +244,23 @@ export default function AdminAnnouncementsPanel({
       </HStack>
 
       <Modal
-        isOpen={createModal.isOpen}
+        isOpen={createModal.isOpen && !previewOpen}
         onClose={createModal.onClose}
-        size="4xl"
+        size="xl"
         scrollBehavior="inside"
+        isCentered
       >
         <ModalOverlay />
-        <ModalContent mx={4}>
-          <ModalHeader>New announcement</ModalHeader>
+        <ModalContent
+          mx={4}
+          maxH="90dvh"
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+        >
+          <ModalHeader flexShrink={0}>New announcement</ModalHeader>
           <ModalCloseButton />
-          <ModalBody>
+          <ModalBody flex="1" minH={0} overflowY="auto">
             <VStack align="stretch" spacing={4}>
               <FormControl>
                 <FormLabel>Title</FormLabel>
@@ -249,64 +271,26 @@ export default function AdminAnnouncementsPanel({
                   maxLength={200}
                 />
               </FormControl>
-              <Flex
-                direction={{ base: "column", md: "row" }}
-                gap={4}
-                align="stretch"
-              >
-                <FormControl flex={1}>
-                  <FormLabel>Body (markdown)</FormLabel>
-                  <Textarea
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    placeholder={
-                      "**Territory is live**\n\n- Deposit points on the map\n- Most points wins the neighborhood"
-                    }
-                    rows={12}
-                    maxLength={20_000}
-                    fontFamily="mono"
-                    fontSize="sm"
-                  />
-                  <FormHelperText>
-                    Bold, lists, links, and headings.
-                  </FormHelperText>
-                </FormControl>
-                <Box
-                  flex={1}
-                  borderWidth="1px"
-                  borderColor="gray.200"
-                  borderRadius="md"
-                  p={4}
-                  bg="gray.50"
-                  minH="200px"
-                >
-                  <Text
-                    fontSize="xs"
-                    fontWeight="bold"
-                    color="gray.500"
-                    textTransform="uppercase"
-                    letterSpacing="wide"
-                    mb={3}
-                  >
-                    Preview
-                  </Text>
-                  {title.trim() && (
-                    <Heading size="sm" mb={3}>
-                      {title.trim()}
-                    </Heading>
-                  )}
-                  {body.trim() ? (
-                    <MarkdownBody fontSize="sm">{body}</MarkdownBody>
-                  ) : (
-                    <Text fontSize="sm" color="gray.400">
-                      Markdown preview appears here
-                    </Text>
-                  )}
-                </Box>
-              </Flex>
+              <FormControl>
+                <FormLabel>Body (markdown)</FormLabel>
+                <Textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder={
+                    "**Territory is live**\n\n- Deposit points on the map\n- Most points wins the neighborhood"
+                  }
+                  rows={12}
+                  maxLength={20_000}
+                  fontFamily="mono"
+                  fontSize="sm"
+                />
+                <FormHelperText>
+                  Bold, lists, links, and headings.
+                </FormHelperText>
+              </FormControl>
             </VStack>
           </ModalBody>
-          <ModalFooter gap={2}>
+          <ModalFooter flexShrink={0} gap={2} flexWrap="wrap">
             <Button variant="ghost" onClick={createModal.onClose}>
               Cancel
             </Button>
@@ -318,16 +302,41 @@ export default function AdminAnnouncementsPanel({
             >
               Save draft
             </Button>
-            <Button
-              colorScheme="blue"
-              onClick={() => void create(true)}
-              isLoading={creating}
-            >
-              Publish now
+            <Button colorScheme="blue" onClick={openPreview}>
+              Preview and send
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      <AnnouncementPlayerShell
+        isOpen={createModal.isOpen && previewOpen}
+        title={title.trim() || "Untitled"}
+        body={body.trim() || "_No body_"}
+        eyebrow="Preview · as players will see it"
+        closeOnOverlayClick={false}
+        closeOnEsc={false}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="lg"
+              flex={{ base: "1 1 100%", sm: 1 }}
+              onClick={() => setPreviewOpen(false)}
+              isDisabled={creating}
+            >
+              Go back to editing
+            </Button>
+            <AnnouncementGotItButton
+              flex={{ base: "1 1 100%", sm: 1 }}
+              onClick={() => void create(true)}
+              isLoading={creating}
+            >
+              Confirm
+            </AnnouncementGotItButton>
+          </>
+        }
+      />
 
       <VStack align="stretch" spacing={4}>
         {rows.length === 0 && (

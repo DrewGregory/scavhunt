@@ -45,9 +45,11 @@ export function AnnouncementDetailModal({
         mx={{ base: 0, sm: 4 }}
         my={{ base: 0, sm: 4 }}
         maxH={{ base: "100dvh", sm: "90dvh" }}
+        h={{ base: "100dvh", sm: "auto" }}
         borderRadius={{ base: 0, sm: "md" }}
         display="flex"
         flexDirection="column"
+        overflow="hidden"
       >
         <ModalHeader pb={2} pr={12} flexShrink={0}>
           <VStack align="stretch" spacing={1}>
@@ -72,7 +74,13 @@ export function AnnouncementDetailModal({
           </VStack>
         </ModalHeader>
         <ModalCloseButton />
-        <ModalBody flex="1" minH={0} overflowY="auto" pb={2}>
+        <ModalBody
+          flex="1"
+          minH={0}
+          overflowY="auto"
+          overscrollBehavior="contain"
+          pb={2}
+        >
           {announcement && <MarkdownBody>{announcement.body}</MarkdownBody>}
         </ModalBody>
         <ModalFooter
