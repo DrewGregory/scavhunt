@@ -1163,12 +1163,18 @@ export default function AdminPage({
       <VStack align="stretch" spacing={6} width="100%">
         <HStack justify="space-between" flexWrap="wrap" gap={2}>
           <Heading size="lg">Admin</Heading>
-          <HStack>
+          <HStack flexWrap="wrap" gap={2}>
             <Button as={Link} href="/admin/challenges" size="sm" colorScheme="purple" variant="outline">
               Draft challenges
             </Button>
             <Button as={Link} href="/admin/assign" size="sm" colorScheme="purple">
               Assign teams
+            </Button>
+            <Button as={Link} href="/admin/upload-testing" size="sm" variant="outline">
+              Upload testing
+            </Button>
+            <Button as={Link} href="/admin/telemetry" size="sm" variant="outline">
+              Telemetry
             </Button>
           </HStack>
         </HStack>

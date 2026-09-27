@@ -12,8 +12,8 @@ function preset(id: string, label: string, overrides: DeepPartial<UploadConfig>)
 }
 
 export const PRESETS: Preset[] = [
-  preset("480p", "480p · 1.2 Mbps", { video: { maxLongEdge: 854, bitrate: 1_200_000 } }),
-  { id: "720p", label: "720p · 2.5 Mbps (production default)", config: PRODUCTION_UPLOAD_CONFIG },
+  { id: "480p", label: "480p · 1.2 Mbps (production default)", config: PRODUCTION_UPLOAD_CONFIG },
+  preset("720p", "720p · 2.5 Mbps", { video: { maxLongEdge: 1280, bitrate: 2_500_000 } }),
   preset("1080p", "1080p · 5 Mbps", { video: { maxLongEdge: 1920, bitrate: 5_000_000 } }),
   preset("none", "No compression", { video: { enabled: false }, image: { enabled: false } }),
 ];

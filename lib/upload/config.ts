@@ -86,9 +86,9 @@ export const PRODUCTION_UPLOAD_CONFIG: UploadConfig = {
   video: {
     enabled: true,
     minSizeMB: 8,
-    maxLongEdge: 1280,
+    maxLongEdge: 854,
     codec: "avc",
-    bitrate: 2_500_000,
+    bitrate: 1_200_000,
     maxFrameRate: 30,
     keyFrameIntervalSec: 2,
     mp4Layout: "in-memory",
@@ -211,7 +211,12 @@ export function mergeUploadConfig(
 
   let bitrate = bv.bitrate;
   if (typeof v.bitrate === "number") {
-    bitrate = num(v.bitrate, 2_500_000, 100_000, 50_000_000);
+    bitrate = num(
+      v.bitrate,
+      typeof bv.bitrate === "number" ? bv.bitrate : 1_200_000,
+      100_000,
+      50_000_000,
+    );
   } else if (typeof v.bitrate === "string") {
     bitrate = oneOf(v.bitrate, QUALITY_PRESETS, "medium");
   }

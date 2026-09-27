@@ -25,7 +25,7 @@ import {
   GiRuleBook,
   GiScrollUnfurled,
 } from "react-icons/gi";
-import { FaVideo, FaFlask, FaChartLine } from "react-icons/fa";
+import { FaVideo } from "react-icons/fa";
 import { IconType } from "react-icons";
 import { useRouter } from "next/router";
 import { useSession } from "./useSession";
@@ -48,18 +48,6 @@ const LinkItems: Array<LinkItemProps> = [
   { name: "Map", icon: GiTreasureMap, url: "/map" },
   { name: "How to Play", icon: GiRuleBook, url: "/how-to-play" },
   { name: "Admin", icon: GiNotebook, url: "/admin", adminOnly: true },
-  {
-    name: "Upload testing",
-    icon: FaFlask,
-    url: "/admin/upload-testing",
-    adminOnly: true,
-  },
-  {
-    name: "Telemetry",
-    icon: FaChartLine,
-    url: "/admin/telemetry",
-    adminOnly: true,
-  },
 ];
 
 const SIDEBAR_EXPANDED = "20vw";
@@ -339,28 +327,32 @@ const SidebarContent = ({
         </NavItem>
       ))}
       {onToggleCollapse && (
-        <Flex
-          display={{ base: "none", md: "flex" }}
-          justify="center"
+        <Box
+          display={{ base: "none", md: "block" }}
           mt={4}
           mb={4}
+          mx={collapsed ? 1 : 4}
         >
           <Tooltip
             label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             placement="right"
+            hasArrow
           >
-            <IconButton
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              icon={collapsed ? <FiChevronRight /> : <FiChevronLeft />}
-              size="sm"
-              variant="outline"
-              borderColor="gray.300"
-              bg="white"
-              _hover={{ bg: "gray.50" }}
-              onClick={onToggleCollapse}
-            />
+            <Box w="100%">
+              <IconButton
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                icon={collapsed ? <FiChevronRight /> : <FiChevronLeft />}
+                size="sm"
+                variant="outline"
+                borderColor="gray.300"
+                bg="white"
+                _hover={{ bg: "gray.50" }}
+                onClick={onToggleCollapse}
+                w="100%"
+              />
+            </Box>
           </Tooltip>
-        </Flex>
+        </Box>
       )}
     </Box>
   );
