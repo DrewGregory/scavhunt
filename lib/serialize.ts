@@ -17,7 +17,9 @@ type CommentWithUser = SubmissionComment & {
   user: User & { team: Team | null };
 };
 
-export function serializeTeam(team: Team): SerializedTeam {
+export function serializeTeam(
+  team: Pick<Team, "id" | "name" | "emoji" | "color">,
+): SerializedTeam {
   return {
     id: team.id,
     name: team.name,

@@ -652,7 +652,7 @@ export default function FeedPage({
                   w="36px"
                   textAlign="right"
                   flexShrink={0}
-                  fontVariantNumeric="tabular-nums"
+                  sx={{ fontVariantNumeric: "tabular-nums" }}
                 >
                   {pts}
                 </Text>
@@ -680,7 +680,7 @@ export default function FeedPage({
                 w="36px"
                 textAlign="right"
                 flexShrink={0}
-                fontVariantNumeric="tabular-nums"
+                sx={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {pts}
               </Text>

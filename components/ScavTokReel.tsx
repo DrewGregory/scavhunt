@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Flex, IconButton, Text } from "@chakra-ui/react";
 import { LuArrowLeft } from "react-icons/lu";
 import { useFeed } from "../lib/feedClient";
-import type { FeedFilters, FeedPage } from "../lib/feedTypes";
+import {
+  isFeedSubmission,
+  type FeedFilters,
+  type FeedPage,
+} from "../lib/feedTypes";
 import { useNearEndTrigger, usePreloadQueue } from "../lib/preloadQueue";
 import ScavTokVideoCard from "./ScavTokVideoCard";
 import BottomNavbar from "../pages/components/BottomNavbar";
@@ -88,15 +92,15 @@ export default function ScavTokReel({
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
-        void updateItems((i) =>
-          i.id !== submissionId || i.favorited === data.favorited
-            ? i
-            : {
-                ...i,
-                favorited: data.favorited,
-                favoriteCount: i.favoriteCount + (data.favorited ? 1 : -1),
-              },
-        );
+        void updateItems((i) => {
+          if (!isFeedSubmission(i) || i.id !== submissionId) return i;
+          if (i.favorited === data.favorited) return i;
+          return {
+            ...i,
+            favorited: data.favorited,
+            favoriteCount: i.favoriteCount + (data.favorited ? 1 : -1),
+          };
+        });
       } catch (error) {
         console.error("Failed to toggle favorite", error);
       }
@@ -111,7 +115,11 @@ export default function ScavTokReel({
     feed.hasMore && !feed.isLoadingMore && !feed.error,
   );
 
-  const triggerIndex = Math.max(0, feed.items.length - LOAD_MORE_FROM_END);
+  const videoItems = useMemo(
+    () => feed.items.filter(isFeedSubmission),
+    [feed.items],
+  );
+  const triggerIndex = Math.max(0, videoItems.length - LOAD_MORE_FROM_END);
 
   return (
     <Box
@@ -142,7 +150,7 @@ export default function ScavTokReel({
             onTabChange={setTab}
             forYouDisabled={!userTeamId}
           />
-          {feed.items.length === 0 && !feed.isLoading && (
+          {videoItems.length === 0 && !feed.isLoading && (
             <Flex h="100%" align="center" justify="center" px={6}>
               <Text color="whiteAlpha.800" textAlign="center">
                 {tab === "foryou"
@@ -151,7 +159,7 @@ export default function ScavTokReel({
               </Text>
             </Flex>
           )}
-          {feed.items.map((item, index) => {
+          {videoItems.map((item, index) => {
             const team = feed.teams[item.teamId];
             if (!team) return null;
             return (

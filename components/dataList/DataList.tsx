@@ -137,7 +137,7 @@ export default function DataList<T>({
                       <Td
                         key={cell.id}
                         py={3}
-                        px={3}
+                        px={meta?.isTrailing ? 1 : 3}
                         verticalAlign={
                           meta?.isTrailing
                             ? "top"
@@ -164,7 +164,6 @@ export default function DataList<T>({
                         }
                         minW={meta?.isTrailing ? "72px" : undefined}
                         h={meta?.isTrailing ? "1px" : undefined}
-                        px={meta?.isTrailing ? 1 : 3}
                         onClick={
                           meta?.isAction || meta?.isTrailing
                             ? (e) => e.stopPropagation()

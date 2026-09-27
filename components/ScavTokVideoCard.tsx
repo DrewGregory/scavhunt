@@ -7,13 +7,13 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { Text } from "@chakra-ui/react";
 import FooterLeft from "../pages/components/FooterLeft";
-import type { FeedItem } from "../lib/feedTypes";
+import type { FeedSubmissionItem } from "../lib/feedTypes";
 import type { SerializedTeam } from "../lib/types";
 import { useRegisterMedia, type PreloadQueue } from "../lib/preloadQueue";
 import { usePlaybackTelemetry } from "../lib/playbackTelemetry";
 
 type Props = {
-  item: FeedItem;
+  item: FeedSubmissionItem;
   team: SerializedTeam;
   index: number;
   queue: PreloadQueue;
