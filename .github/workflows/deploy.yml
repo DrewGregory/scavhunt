@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -29,7 +29,7 @@ jobs:
           echo "Pinned $(printf '%s\n' "$DOKKU_SSH_HOST_KEY" | grep -c .) SSH host key entry(ies)."
 
       - name: Deploy to Dokku
-        uses: dokku/github-action@v1
+        uses: dokku/github-action@036bf9c07f1b40707a16201bc7a349074c3ec554 # v1.6.1
         with:
           git_remote_url: ${{ secrets.DOKKU_GIT_REMOTE_URL }}
           ssh_host_key: ${{ secrets.DOKKU_SSH_HOST_KEY }}
