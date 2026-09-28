@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../../lib/prisma";
 import { getUserFromReq, publicUser } from "../../lib/auth";
 import { parseJsonBody } from "../../lib/serialize";
+import { isLocationTrackingEnabled } from "../../lib/locationTracking";
 
 const RequestBody = z.object({
   location: z
@@ -27,12 +28,7 @@ export default async function handler(
   const parsedReq = RequestBody.safeParse(parseJsonBody(req.body) ?? {});
   if (parsedReq.success && user.teamId) {
     const { location } = parsedReq.data;
-    const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
-    if (
-      location != null &&
-      disableTracking !== "true" &&
-      disableTracking !== "1"
-    ) {
+    if (location != null && (await isLocationTrackingEnabled())) {
       const latestLocation = await prisma.location.findFirst({
         where: { teamId: user.teamId },
         orderBy: { createdAt: "desc" },

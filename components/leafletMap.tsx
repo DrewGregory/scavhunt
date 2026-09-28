@@ -18,6 +18,12 @@ import {
   Badge,
   Box,
   Button,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
   HStack,
   IconButton,
   Input,
@@ -31,13 +37,7 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import { format, parseISO } from "date-fns";
-import {
-  LuHistory,
-  LuLayers,
-  LuPause,
-  LuPlay,
-  LuX,
-} from "react-icons/lu";
+import { LuHistory, LuLayers, LuPause, LuPlay } from "react-icons/lu";
 import { getPosition, type GeoFix } from "./useSession";
 import { useLocationPermissionUI } from "./LocationPermissionPrompt";
 import {
@@ -59,8 +59,11 @@ import {
 } from "../lib/mapReplay";
 import { neighborhoodEmoji } from "../lib/neighborhoodEmoji";
 
-const REPLAY_PLAY_DURATION_MS = 45_000;
+/** Wall-clock duration to scrub the full hunt window at 1x. */
+const REPLAY_BASE_DURATION_MS = 90_000;
 const REPLAY_TICK_MS = 200;
+const REPLAY_SPEEDS = [1, 2, 3, 5] as const;
+type ReplaySpeed = (typeof REPLAY_SPEEDS)[number];
 
 function formatReplayTime(iso: string): string {
   try {
@@ -239,12 +242,14 @@ function NeighborhoodLabelLayer({
   selectedNeighborhoodId,
   onSelectNeighborhood,
   influenceView = false,
+  alwaysShowLabels = false,
 }: {
   neighborhoods: TerritoryNeighborhood[];
   standingsKey: string;
   selectedNeighborhoodId?: string | null;
   onSelectNeighborhood?: (id: string | null) => void;
   influenceView?: boolean;
+  alwaysShowLabels?: boolean;
 }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
@@ -259,7 +264,11 @@ function NeighborhoodLabelLayer({
     setHoverOk(canHover());
   }, []);
 
-  if (zoom < NEIGHBORHOOD_LABEL_MIN_ZOOM) return null;
+  // Off + zoomed out → no labels. On → labels at any zoom.
+  // Influence → emoji pills; otherwise names.
+  const zoomedIn = zoom >= NEIGHBORHOOD_LABEL_MIN_ZOOM;
+  if (!alwaysShowLabels && !zoomedIn) return null;
+  const useEmoji = influenceView;
 
   return (
     <>
@@ -269,13 +278,14 @@ function NeighborhoodLabelLayer({
         const lat = fromBoundary?.lat ?? n.centerLat;
         const lng = fromBoundary?.lng ?? n.centerLng;
         if (lat == null || lng == null) return null;
+        // Influence view: only claimed / contested — skip unclaimed place emojis.
+        if (influenceView && !n.claimedBy && !n.contested) return null;
+        const placeEmoji = neighborhoodEmoji(n.name, n.emoji);
         const borderColor =
           selectedNeighborhoodId === n.id
             ? "#2B6CB0"
             : (n.claimedBy?.teamColor ?? "#CBD5E0");
-        const placeEmoji = neighborhoodEmoji(n.name, n.emoji);
-        // Influence: white box with emoji only. Default: team emoji + name.
-        const label = influenceView
+        const label = useEmoji
           ? n.claimedBy
             ? n.claimedBy.teamEmoji
             : n.contested
@@ -292,13 +302,13 @@ function NeighborhoodLabelLayer({
           .join(" · ");
         return (
           <Marker
-            key={`label-${n.id}-${standingsKey}-${influenceView ? "inf" : "name"}`}
+            key={`label-${n.id}-${standingsKey}-${useEmoji ? "emoji" : "name"}`}
             position={[lat, lng]}
             icon={divIcon({
               className: "neighborhood-label-icon",
               html: `<div class="neighborhood-label-pill${
                 selectedNeighborhoodId === n.id ? " is-selected" : ""
-              }${influenceView ? " is-emoji" : ""}" style="border-color:${borderColor}">${label}</div>`,
+              }${useEmoji ? " is-emoji" : ""}" style="border-color:${borderColor}">${label}</div>`,
               iconSize: [0, 0],
               iconAnchor: [0, 0],
             })}
@@ -395,6 +405,7 @@ export default function LeafletMap({
   );
   const [showNeighborhoods, setShowNeighborhoods] = useState(true);
   const [influenceView, setInfluenceView] = useState(false);
+  const [alwaysShowLabels, setAlwaysShowLabels] = useState(false);
   const [hideCompleted, setHideCompleted] = useState(true);
   const [hideFullChallenges, setHideFullChallenges] = useState(true);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
@@ -415,6 +426,7 @@ export default function LeafletMap({
   const [replayOpen, setReplayOpen] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1);
   const [replayTimeline, setReplayTimeline] =
     useState<MapReplayTimeline | null>(null);
   const [replayAt, setReplayAt] = useState<string | null>(null);
@@ -497,8 +509,13 @@ export default function LeafletMap({
 
   const openReplay = useCallback(async () => {
     setLayersOpen(false);
+    onSelectChallenge?.(null);
+    onSelectNeighborhood?.(null);
     setReplayOpen(true);
     setReplayPlaying(false);
+    setInfluenceView(true);
+    setAlwaysShowLabels(true);
+    setShowChallenges(false);
     setReplayLoading(true);
     try {
       const res = await fetch("/api/map-replay");
@@ -537,7 +554,13 @@ export default function LeafletMap({
     } finally {
       setReplayLoading(false);
     }
-  }, [applyReplayFrame, toast, neighborhoods]);
+  }, [
+    applyReplayFrame,
+    toast,
+    neighborhoods,
+    onSelectChallenge,
+    onSelectNeighborhood,
+  ]);
 
   const exitReplay = useCallback(async () => {
     setReplayPlaying(false);
@@ -560,13 +583,29 @@ export default function LeafletMap({
     }
   }, []);
 
+  const selectChallenge = useCallback(
+    (id: string | null) => {
+      if (id != null && replayOpenRef.current) void exitReplay();
+      onSelectChallenge?.(id);
+    },
+    [exitReplay, onSelectChallenge],
+  );
+
+  const selectNeighborhood = useCallback(
+    (id: string | null) => {
+      if (id != null && replayOpenRef.current) void exitReplay();
+      onSelectNeighborhood?.(id);
+    },
+    [exitReplay, onSelectNeighborhood],
+  );
+
   // Scrub / play: recompute frame from the loaded timeline.
   useEffect(() => {
     if (!replayOpen || !replayTimeline || !replayAt) return;
     applyReplayFrame(replayTimeline, replayAt);
   }, [replayOpen, replayTimeline, replayAt, applyReplayFrame]);
 
-  // Autoplay scrubber.
+  // Autoplay scrubber (1x ≈ REPLAY_BASE_DURATION_MS across the hunt window).
   useEffect(() => {
     if (!replayPlaying || !replayTimeline) return;
     const startMs = Date.parse(replayTimeline.start);
@@ -576,7 +615,8 @@ export default function LeafletMap({
       setReplayPlaying(false);
       return;
     }
-    const step = span / (REPLAY_PLAY_DURATION_MS / REPLAY_TICK_MS);
+    const durationMs = REPLAY_BASE_DURATION_MS / replaySpeed;
+    const step = span / (durationMs / REPLAY_TICK_MS);
     const id = window.setInterval(() => {
       setReplayAt((prev) => {
         if (!prev) return prev;
@@ -589,7 +629,7 @@ export default function LeafletMap({
       });
     }, REPLAY_TICK_MS);
     return () => window.clearInterval(id);
-  }, [replayPlaying, replayTimeline]);
+  }, [replayPlaying, replayTimeline, replaySpeed]);
 
   const toggleTeamVisible = useCallback((teamId: string) => {
     setHiddenTeamIds((prev) => {
@@ -765,14 +805,14 @@ export default function LeafletMap({
 
   const styleFor = useCallback(
     (n: TerritoryNeighborhood): PathOptions => {
-      // Influence view: stronger team fills. Default: light / no fill so borders stay clear.
+      // Influence view: heaviest fills. Default: medium tint so claims read without drowning the map.
       if (n.contested) {
         return {
           color: "#4A5568",
           weight: 2,
           dashArray: "6 4",
           fillColor: "#CBD5E0",
-          fillOpacity: influenceView ? 0.28 : 0,
+          fillOpacity: influenceView ? 0.28 : 0.14,
         };
       }
       if (n.claimedBy) {
@@ -781,7 +821,7 @@ export default function LeafletMap({
           color: c,
           weight: 2,
           fillColor: c,
-          fillOpacity: influenceView ? 0.48 : 0.12,
+          fillOpacity: influenceView ? 0.48 : 0.28,
         };
       }
       return {
@@ -885,169 +925,138 @@ export default function LeafletMap({
   const replayEndMs = replayTimeline ? Date.parse(replayTimeline.end) : 0;
   const replayAtMs = replayAt ? Date.parse(replayAt) : replayStartMs;
   const replaySpan = Math.max(0, replayEndMs - replayStartMs);
+  const replayReady = Boolean(replayOpen && replayTimeline && replayAt);
+
+  const toggleReplayPlay = () => {
+    if (!replayTimeline || !replayAt) return;
+    if (Date.parse(replayAt) >= replayEndMs - 500) {
+      setReplayAt(replayTimeline.start);
+    }
+    setReplayPlaying((p) => !p);
+  };
+
+  const replayTimeLabel = replayAt ? formatReplayTime(replayAt) : "";
+  const replayScrubber = replayReady ? (
+    <VStack align="stretch" spacing={2}>
+      <Slider
+        aria-label="Replay time"
+        min={0}
+        max={replaySpan || 1}
+        step={Math.max(1000, Math.floor(replaySpan / 500) || 1000)}
+        value={Math.min(replaySpan, Math.max(0, replayAtMs - replayStartMs))}
+        onChange={(v) => {
+          setReplayPlaying(false);
+          setReplayAt(new Date(replayStartMs + v).toISOString());
+        }}
+        focusThumbOnChange={false}
+      >
+        <SliderTrack>
+          <SliderFilledTrack bg="blue.400" />
+        </SliderTrack>
+        <SliderThumb />
+      </Slider>
+      <HStack spacing={2} flexWrap="wrap">
+        <IconButton
+          aria-label={replayPlaying ? "Pause replay" : "Play replay"}
+          icon={replayPlaying ? <LuPause /> : <LuPlay />}
+          size="sm"
+          colorScheme="blue"
+          variant="outline"
+          onClick={toggleReplayPlay}
+        />
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() => {
+            if (!replayTimeline) return;
+            setReplayPlaying(false);
+            setReplayAt(replayTimeline.start);
+          }}
+        >
+          Start
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() => {
+            if (!replayTimeline) return;
+            setReplayPlaying(false);
+            setReplayAt(replayTimeline.end);
+          }}
+        >
+          End
+        </Button>
+        <HStack spacing={1} ml="auto">
+          {REPLAY_SPEEDS.map((speed) => (
+            <Button
+              key={speed}
+              size="xs"
+              variant={replaySpeed === speed ? "solid" : "outline"}
+              colorScheme={replaySpeed === speed ? "blue" : "gray"}
+              onClick={() => setReplaySpeed(speed)}
+              minW="36px"
+            >
+              {speed}x
+            </Button>
+          ))}
+        </HStack>
+      </HStack>
+    </VStack>
+  ) : null;
 
   return (
     <Box position="relative" height="100%" width="100%">
       <Box
         position="absolute"
         top={4}
-        left={4}
+        right={4}
         zIndex={1000}
         display="flex"
         alignItems="flex-start"
         gap={2}
       >
-        <VStack spacing={2} align="stretch">
-          <IconButton
-            aria-label={replayOpen ? "Close replay" : "Open replay"}
-            icon={<LuHistory />}
-            size="md"
-            colorScheme={replayOpen ? "blue" : "blackAlpha"}
-            bg={replayOpen ? "blue.500" : "white"}
-            color={replayOpen ? "white" : "gray.700"}
-            boxShadow="lg"
-            onClick={() => {
-              if (replayOpen) void exitReplay();
-              else void openReplay();
-            }}
-            isLoading={replayLoading}
-          />
-          <Text
-            fontSize="10px"
-            fontWeight="semibold"
-            textAlign="center"
-            color={replayOpen ? "blue.600" : "gray.700"}
-            textShadow="0 0 4px rgba(255,255,255,0.9)"
-            userSelect="none"
-          >
-            Replay
-          </Text>
-        </VStack>
-        {replayOpen && replayTimeline && replayAt ? (
-          <Box
-            bg="white"
-            p={3}
-            borderRadius="md"
-            boxShadow="lg"
-            width="min(320px, calc(100vw - 5rem))"
-          >
-            <VStack align="stretch" spacing={2}>
-              <HStack justify="space-between" align="center">
-                <Text fontSize="sm" fontWeight="semibold">
-                  Replay
-                </Text>
-                <IconButton
-                  aria-label="Exit replay"
-                  icon={<LuX />}
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => void exitReplay()}
-                />
-              </HStack>
-              <Text fontSize="xs" color="gray.600">
-                {formatReplayTime(replayAt)}
-              </Text>
-              <Slider
-                aria-label="Replay time"
-                min={0}
-                max={replaySpan || 1}
-                step={Math.max(1000, Math.floor(replaySpan / 500) || 1000)}
-                value={Math.min(
-                  replaySpan,
-                  Math.max(0, replayAtMs - replayStartMs),
-                )}
-                onChange={(v) => {
-                  setReplayPlaying(false);
-                  setReplayAt(
-                    new Date(replayStartMs + v).toISOString(),
-                  );
-                }}
-                focusThumbOnChange={false}
-              >
-                <SliderTrack>
-                  <SliderFilledTrack bg="blue.400" />
-                </SliderTrack>
-                <SliderThumb />
-              </Slider>
-              <HStack>
-                <IconButton
-                  aria-label={replayPlaying ? "Pause replay" : "Play replay"}
-                  icon={replayPlaying ? <LuPause /> : <LuPlay />}
-                  size="sm"
-                  colorScheme="blue"
-                  variant="outline"
-                  onClick={() => {
-                    if (
-                      replayAt &&
-                      Date.parse(replayAt) >= replayEndMs - 500
-                    ) {
-                      setReplayAt(replayTimeline.start);
-                    }
-                    setReplayPlaying((p) => !p);
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setReplayPlaying(false);
-                    setReplayAt(replayTimeline.start);
-                  }}
-                >
-                  Start
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setReplayPlaying(false);
-                    setReplayAt(replayTimeline.end);
-                  }}
-                >
-                  End
-                </Button>
-                <Button
-                  size="sm"
-                  ml="auto"
-                  variant="solid"
-                  colorScheme="gray"
-                  onClick={() => void exitReplay()}
-                >
-                  Live
-                </Button>
-              </HStack>
-            </VStack>
-          </Box>
-        ) : null}
-      </Box>
-
-      <Box position="absolute" top={4} right={4} zIndex={1000}>
         <IconButton
-          aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
-          icon={<LuLayers />}
+          aria-label={replayOpen ? "Close replay" : "Open replay"}
+          icon={<LuHistory />}
           size="md"
-          colorScheme="blackAlpha"
-          bg="white"
-          color="gray.700"
+          colorScheme={replayOpen ? "blue" : "blackAlpha"}
+          bg={replayOpen ? "blue.500" : "white"}
+          color={replayOpen ? "white" : "gray.700"}
           boxShadow="lg"
-          onClick={() => setLayersOpen((o) => !o)}
+          onClick={() => {
+            if (replayOpen) void exitReplay();
+            else void openReplay();
+          }}
+          isLoading={replayLoading}
         />
-        {layersOpen ? (
-          <Box
-            position="absolute"
-            top="100%"
-            right={0}
-            mt={2}
+
+        <Box position="relative">
+          <IconButton
+            aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
+            icon={<LuLayers />}
+            size="md"
+            colorScheme="blackAlpha"
             bg="white"
-            p={4}
-            borderRadius="md"
+            color="gray.700"
             boxShadow="lg"
-            width="280px"
-            maxW="calc(100vw - 2rem)"
-            maxH="min(70dvh, calc(100dvh - 6rem))"
-            overflowY="auto"
-            overscrollBehavior="contain"
-          >
+            onClick={() => setLayersOpen((o) => !o)}
+          />
+          {layersOpen ? (
+            <Box
+              position="absolute"
+              top="100%"
+              right={0}
+              mt={2}
+              bg="white"
+              p={4}
+              borderRadius="md"
+              boxShadow="lg"
+              width="280px"
+              maxW="calc(100vw - 2rem)"
+              maxH="min(70dvh, calc(100dvh - 6rem))"
+              overflowY="auto"
+              overscrollBehavior="contain"
+            >
             <VStack spacing={3} alignItems="stretch">
               {isAdmin && (
                 <HStack justifyContent="space-between">
@@ -1085,17 +1094,32 @@ export default function LeafletMap({
                     />
                   </HStack>
                   {showNeighborhoods && (
-                    <HStack justifyContent="space-between" mt={2}>
-                      <Text fontSize="xs" fontWeight="medium" color="gray.600">
-                        Influence view
-                      </Text>
-                      <Switch
-                        size="sm"
-                        isChecked={influenceView}
-                        onChange={(e) => setInfluenceView(e.target.checked)}
-                        colorScheme="blue"
-                      />
-                    </HStack>
+                    <VStack spacing={2} alignItems="stretch" mt={2}>
+                      <HStack justifyContent="space-between">
+                        <Text fontSize="xs" fontWeight="medium" color="gray.600">
+                          Influence view
+                        </Text>
+                        <Switch
+                          size="sm"
+                          isChecked={influenceView}
+                          onChange={(e) => setInfluenceView(e.target.checked)}
+                          colorScheme="blue"
+                        />
+                      </HStack>
+                      <HStack justifyContent="space-between">
+                        <Text fontSize="xs" fontWeight="medium" color="gray.600">
+                          Always show neighborhood labels
+                        </Text>
+                        <Switch
+                          size="sm"
+                          isChecked={alwaysShowLabels}
+                          onChange={(e) =>
+                            setAlwaysShowLabels(e.target.checked)
+                          }
+                          colorScheme="blue"
+                        />
+                      </HStack>
+                    </VStack>
                   )}
                 </Box>
               )}
@@ -1210,9 +1234,47 @@ export default function LeafletMap({
                 </Box>
               )}
             </VStack>
-          </Box>
-        ) : null}
+            </Box>
+          ) : null}
+        </Box>
       </Box>
+
+      <Drawer
+        isOpen={replayReady}
+        placement="bottom"
+        onClose={() => void exitReplay()}
+        size="md"
+        blockScrollOnMount={false}
+        autoFocus={false}
+        trapFocus={false}
+        closeOnOverlayClick={false}
+      >
+        <DrawerOverlay bg="transparent" pointerEvents="none" />
+        <DrawerContent
+          pointerEvents="auto"
+          containerProps={{ pointerEvents: "none" }}
+          borderTopRadius="xl"
+          maxH="70dvh"
+          mx="auto"
+          maxW={{ base: "100%", md: "560px" }}
+          boxShadow="0 -8px 30px rgba(0,0,0,0.18)"
+        >
+          <DrawerCloseButton />
+          <DrawerHeader pr={12} pb={2}>
+            <HStack justify="space-between" align="baseline" gap={3}>
+              <Text fontSize="md" fontWeight="semibold">
+                Replay
+              </Text>
+              <Text fontSize="xs" color="gray.600" noOfLines={1}>
+                {replayTimeLabel}
+              </Text>
+            </HStack>
+          </DrawerHeader>
+          <DrawerBody overflowY="auto" pb={6}>
+            {replayScrubber}
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
 
       {territoryOn && team && !replayOpen && (
         <Box
@@ -1376,7 +1438,7 @@ export default function LeafletMap({
                   }
                   layer.on({
                     click: () => {
-                      onSelectNeighborhood?.(n.id);
+                      selectNeighborhood(n.id);
                     },
                     mouseover: (e) => {
                       // Desktop fine-pointer only; ignore touch / coarse pointers.
@@ -1413,8 +1475,9 @@ export default function LeafletMap({
             neighborhoods={neighborhoods}
             standingsKey={standingsKey}
             selectedNeighborhoodId={selectedNeighborhoodId}
-            onSelectNeighborhood={onSelectNeighborhood}
+            onSelectNeighborhood={selectNeighborhood}
             influenceView={influenceView}
+            alwaysShowLabels={alwaysShowLabels}
           />
         )}
         {showChallenges &&
@@ -1443,7 +1506,7 @@ export default function LeafletMap({
                 zIndexOffset={isSelected ? 1000 : 0}
                 eventHandlers={{
                   click: () => {
-                    onSelectChallenge?.(c.id);
+                    selectChallenge(c.id);
                   },
                 }}
               >

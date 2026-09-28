@@ -6,6 +6,7 @@ import { isTerritoryEnabled } from "../../lib/territoryGate";
 import { getStandings } from "../../lib/territory";
 import { getTeamScore } from "../../lib/scoring";
 import { loadMapFilterTeams } from "../../lib/mapPayload";
+import { isLocationTrackingEnabled } from "../../lib/locationTracking";
 import type { LatestTeamLocation } from "../../lib/types";
 
 /**
@@ -26,9 +27,8 @@ export default async function handler(
 
   const challenges = await listEnabledChallengesWithSubs(user.teamId);
 
-  const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
   let locations: LatestTeamLocation[] = [];
-  if (disableTracking !== "true" && disableTracking !== "1") {
+  if (await isLocationTrackingEnabled()) {
     const teamsWithLocations = await prisma.team.findMany({
       where: { deletedAt: null },
       include: {

@@ -39,16 +39,13 @@ export default async function handler(
   }
 
   const hunt = await getHuntSettings();
-  const now = new Date();
-  const end = now.getTime() < hunt.endsAt.getTime() ? now : hunt.endsAt;
+  const start = hunt.startsAt;
+  const end = hunt.endsAt;
 
   const territoryGloballyEnabled = await isTerritoryEnabled();
   const showTerritory = territoryGloballyEnabled || user.isAdmin;
 
-  const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
-  const trackingOff =
-    disableTracking === "true" || disableTracking === "1";
-
+  // Historical location samples stay available for replay until you wipe "Location".
   const [depositRows, locationRows, teams] = await Promise.all([
     showTerritory
       ? prisma.neighborhoodDeposit.findMany({
@@ -70,22 +67,20 @@ export default async function handler(
           },
         })
       : Promise.resolve([]),
-    trackingOff
-      ? Promise.resolve([])
-      : prisma.location.findMany({
-          where: {
-            createdAt: { lte: end },
-            team: { deletedAt: null },
-          },
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            teamId: true,
-            lat: true,
-            lng: true,
-            createdAt: true,
-          },
-        }),
+    prisma.location.findMany({
+      where: {
+        createdAt: { lte: end },
+        team: { deletedAt: null },
+      },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        teamId: true,
+        lat: true,
+        lng: true,
+        createdAt: true,
+      },
+    }),
     prisma.team.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true, emoji: true },
@@ -153,17 +148,6 @@ export default async function handler(
   locations.sort(
     (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
-
-  const eventStarts = [
-    deposits[0] ? Date.parse(deposits[0].createdAt) : null,
-    locations[0] ? Date.parse(locations[0].createdAt) : null,
-  ].filter((n): n is number => n != null);
-  const startMs = Math.min(
-    hunt.startsAt.getTime(),
-    ...(eventStarts.length ? eventStarts : [hunt.startsAt.getTime()]),
-  );
-  let start = new Date(startMs);
-  if (start.getTime() > end.getTime()) start = new Date(end.getTime());
 
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({

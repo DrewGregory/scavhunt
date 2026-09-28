@@ -8,6 +8,7 @@ import { isTerritoryEnabled } from "./territoryGate";
 import { getStandings } from "./territory";
 import { getTeamScore } from "./scoring";
 import { listEnabledChallengesWithSubs } from "./challengeFavorites";
+import { isLocationTrackingEnabled } from "./locationTracking";
 import type { TerritoryNeighborhood } from "../components/leafletMap";
 
 export type MapPageBank = {
@@ -56,9 +57,8 @@ export async function loadPlayerMapPayload(user: {
 }) {
   const challenges = await listEnabledChallengesWithSubs(user.teamId);
 
-  const disableTracking = process.env.NEXT_PUBLIC_DISABLE_LOCATION_TRACKING;
   let locations: LatestTeamLocation[] = [];
-  if (disableTracking !== "true" && disableTracking !== "1") {
+  if (await isLocationTrackingEnabled()) {
     const teamsWithLocations = await prisma.team.findMany({
       where: { deletedAt: null },
       include: {
