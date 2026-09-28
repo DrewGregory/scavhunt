@@ -65,6 +65,8 @@ const REPLAY_BASE_DURATION_MS = 45_000;
 const REPLAY_TICK_MS = 200;
 const REPLAY_SPEEDS = [1, 2, 3, 5] as const;
 type ReplaySpeed = (typeof REPLAY_SPEEDS)[number];
+/** Shared height for map top-right chrome (standings + icon buttons). */
+const MAP_TOP_CHROME_H = "42px";
 
 function formatReplayTime(iso: string): string {
   try {
@@ -1062,7 +1064,7 @@ export default function LeafletMap({
         right={4}
         zIndex={1000}
         display="flex"
-        alignItems="flex-start"
+        alignItems="center"
         gap={2}
       >
         {replayOpen && replayPodium.length > 0 && (
@@ -1070,8 +1072,11 @@ export default function LeafletMap({
             bg="white"
             boxShadow="lg"
             borderRadius="md"
+            h={MAP_TOP_CHROME_H}
             px={3}
-            py={1.5}
+            display="flex"
+            flexDirection="column"
+            justifyContent="center"
             maxW="min(220px, calc(100vw - 8rem))"
           >
             <Text
@@ -1080,19 +1085,19 @@ export default function LeafletMap({
               color="gray.500"
               textTransform="uppercase"
               letterSpacing="0.04em"
-              lineHeight="1.2"
-              mb={0.5}
+              lineHeight="1.1"
+              mb="1px"
             >
               Standings
             </Text>
-            <HStack spacing={2} flexWrap="wrap">
+            <HStack spacing={2}>
               {replayPodium.map((row, i) => (
                 <Text
                   key={row.teamId}
                   fontSize="sm"
                   fontWeight="medium"
                   color="gray.800"
-                  lineHeight="1.2"
+                  lineHeight="1.1"
                   whiteSpace="nowrap"
                 >
                   {i + 1}. {row.emoji}
@@ -1104,7 +1109,9 @@ export default function LeafletMap({
         <IconButton
           aria-label={replayOpen ? "Close replay" : "Open replay"}
           icon={<LuHistory />}
-          size="md"
+          h={MAP_TOP_CHROME_H}
+          w={MAP_TOP_CHROME_H}
+          minW={MAP_TOP_CHROME_H}
           colorScheme={replayOpen ? "blue" : "blackAlpha"}
           bg={replayOpen ? "blue.500" : "white"}
           color={replayOpen ? "white" : "gray.700"}
@@ -1120,7 +1127,9 @@ export default function LeafletMap({
           <IconButton
             aria-label={layersOpen ? "Hide map layers" : "Show map layers"}
             icon={<LuLayers />}
-            size="md"
+            h={MAP_TOP_CHROME_H}
+            w={MAP_TOP_CHROME_H}
+            minW={MAP_TOP_CHROME_H}
             colorScheme="blackAlpha"
             bg="white"
             color="gray.700"
