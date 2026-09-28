@@ -60,7 +60,7 @@ import {
 import { neighborhoodEmoji } from "../lib/neighborhoodEmoji";
 
 /** Wall-clock duration to scrub the full hunt window at 1x. */
-const REPLAY_BASE_DURATION_MS = 90_000;
+const REPLAY_BASE_DURATION_MS = 45_000;
 const REPLAY_TICK_MS = 200;
 const REPLAY_SPEEDS = [1, 2, 3, 5] as const;
 type ReplaySpeed = (typeof REPLAY_SPEEDS)[number];
