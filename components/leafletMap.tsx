@@ -53,6 +53,7 @@ import {
   makeChallengePinIcon,
 } from "../lib/challengePins";
 import {
+  earnedAsOf,
   locationsAsOf,
   standingsAsOf,
   type MapReplayTimeline,
@@ -822,31 +823,24 @@ export default function LeafletMap({
     [neighborhoods],
   );
 
-  /** Top 3 by neighborhoods held at the current replay (or live) frame. */
+  /** Top 3 by neighborhoods held, then challenge pts (same tiebreak as leaderboard). */
   const replayPodium = useMemo(() => {
-    if (!replayOpen) return [];
+    if (!replayOpen || !replayAt) return [];
+    const earnedByTeam = earnedAsOf(
+      replayTimeline?.earned,
+      Date.parse(replayAt),
+    );
     const held = new Map<
       string,
-      { teamId: string; emoji: string; held: number; deposited: number }
+      { teamId: string; emoji: string; held: number; earned: number }
     >();
     for (const n of neighborhoods) {
-      for (const t of n.totals) {
-        const row = held.get(t.teamId) ?? {
-          teamId: t.teamId,
-          emoji: t.teamEmoji,
-          held: 0,
-          deposited: 0,
-        };
-        row.deposited += t.points;
-        row.emoji = t.teamEmoji || row.emoji;
-        held.set(t.teamId, row);
-      }
       if (n.claimedBy) {
         const row = held.get(n.claimedBy.teamId) ?? {
           teamId: n.claimedBy.teamId,
           emoji: n.claimedBy.teamEmoji,
           held: 0,
-          deposited: 0,
+          earned: earnedByTeam.get(n.claimedBy.teamId) ?? 0,
         };
         row.held += 1;
         row.emoji = n.claimedBy.teamEmoji || row.emoji;
@@ -855,9 +849,9 @@ export default function LeafletMap({
     }
     return [...held.values()]
       .filter((r) => r.held > 0)
-      .sort((a, b) => b.held - a.held || b.deposited - a.deposited)
+      .sort((a, b) => b.held - a.held || b.earned - a.earned)
       .slice(0, 3);
-  }, [replayOpen, neighborhoods]);
+  }, [replayOpen, replayAt, replayTimeline, neighborhoods]);
 
   const styleFor = useCallback(
     (n: TerritoryNeighborhood): PathOptions => {

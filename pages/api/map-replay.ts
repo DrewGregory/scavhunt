@@ -46,7 +46,7 @@ export default async function handler(
   const showTerritory = territoryGloballyEnabled || user.isAdmin;
 
   // Historical location samples stay available for replay until you wipe "Location".
-  const [depositRows, locationRows, teams] = await Promise.all([
+  const [depositRows, locationRows, earnedRows, teams] = await Promise.all([
     showTerritory
       ? prisma.neighborhoodDeposit.findMany({
           // Include soft-deleted deposits so voids can be replayed.
@@ -79,6 +79,21 @@ export default async function handler(
         lat: true,
         lng: true,
         createdAt: true,
+      },
+    }),
+    // Tiebreaker points: same rule as the territory leaderboard (accepted challenge pts).
+    prisma.submission.findMany({
+      where: {
+        deletedAt: null,
+        accepted: true,
+        createdAt: { lte: end },
+        team: { deletedAt: null },
+      },
+      orderBy: { createdAt: "asc" },
+      select: {
+        teamId: true,
+        createdAt: true,
+        challenge: { select: { pts: true } },
       },
     }),
     prisma.team.findMany({
@@ -149,12 +164,19 @@ export default async function handler(
     (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
 
+  const earned = earnedRows.map((s) => ({
+    teamId: s.teamId,
+    points: s.challenge.pts,
+    createdAt: s.createdAt.toISOString(),
+  }));
+
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({
     start: start.toISOString(),
     end: end.toISOString(),
     deposits,
     locations,
+    earned,
     teams: teams.map((t) => ({
       id: t.id,
       name: t.name,

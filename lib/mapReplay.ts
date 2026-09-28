@@ -24,13 +24,36 @@ export type MapReplayTeam = {
   emoji: string;
 };
 
+/** Accepted challenge points credited at submission createdAt (leaderboard tiebreaker). */
+export type MapReplayEarnedEvent = {
+  teamId: string;
+  points: number;
+  createdAt: string;
+};
+
 export type MapReplayTimeline = {
   start: string;
   end: string;
   deposits: MapReplayDepositEvent[];
   locations: MapReplayLocationSample[];
+  /** Optional for older payloads; missing means no tiebreaker points. */
+  earned?: MapReplayEarnedEvent[];
   teams: MapReplayTeam[];
 };
+
+/** Cumulative challenge points earned per team at or before `asOfMs`. */
+export function earnedAsOf(
+  events: MapReplayEarnedEvent[] | undefined,
+  asOfMs: number,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!events) return out;
+  for (const e of events) {
+    if (Date.parse(e.createdAt) > asOfMs) continue;
+    out.set(e.teamId, (out.get(e.teamId) ?? 0) + e.points);
+  }
+  return out;
+}
 
 export type ReplayTeamSlice = {
   teamId: string;
