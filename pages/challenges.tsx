@@ -588,7 +588,7 @@ export default function ChallengesPage({
     <IconButton
       aria-label={view === "map" ? "Show challenge list" : "Show map"}
       icon={view === "map" ? <LuList /> : <LuMap />}
-      variant="ghost"
+      variant="outline"
       size="md"
       onClick={() =>
         setQuery({

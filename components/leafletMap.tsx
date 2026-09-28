@@ -1018,7 +1018,8 @@ export default function LeafletMap({
         />
         <Button
           size="xs"
-          variant="ghost"
+          variant="outline"
+          colorScheme="gray"
           onClick={() => {
             if (!replayTimeline) return;
             setReplayPlaying(false);
@@ -1029,7 +1030,8 @@ export default function LeafletMap({
         </Button>
         <Button
           size="xs"
-          variant="ghost"
+          variant="outline"
+          colorScheme="gray"
           onClick={() => {
             if (!replayTimeline) return;
             setReplayPlaying(false);

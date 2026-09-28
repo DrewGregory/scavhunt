@@ -667,7 +667,7 @@ export default function Page(initial: LeaderboardPayload) {
             : "Show neighborhood leaderboard"
         }
         icon={view === "neighborhoods" ? <LuTrophy /> : <LuMap />}
-        variant="ghost"
+        variant="outline"
         size="md"
         onClick={() =>
           setView(view === "neighborhoods" ? "points" : "neighborhoods")
@@ -676,11 +676,11 @@ export default function Page(initial: LeaderboardPayload) {
     ) : null;
 
   const headerRight = (
-    <HStack spacing={0}>
+    <HStack spacing={2}>
       <IconButton
         aria-label="Open map replay"
         icon={<LuHistory />}
-        variant="ghost"
+        variant="outline"
         size="md"
         onClick={() =>
           void router.push({
