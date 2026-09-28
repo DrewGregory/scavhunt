@@ -119,7 +119,53 @@ export default function ScavTokReel({
     () => feed.items.filter(isFeedSubmission),
     [feed.items],
   );
+  const videoItemsRef = useRef(videoItems);
+  videoItemsRef.current = videoItems;
   const triggerIndex = Math.max(0, videoItems.length - LOAD_MORE_FROM_END);
+
+  const scrollToIndex = useCallback(
+    (index: number, behavior: ScrollBehavior = "smooth") => {
+      const root = containerRef.current;
+      if (!root) return;
+      const videos = root.querySelectorAll<HTMLElement>(".video");
+      const el = videos[index];
+      if (!el) return;
+      el.scrollIntoView({ behavior, block: "start" });
+    },
+    [],
+  );
+
+  // Jump to the top whenever the tab changes.
+  useEffect(() => {
+    const root = containerRef.current;
+    if (root) root.scrollTop = 0;
+    setCurrentId(null);
+  }, [tab]);
+
+  // Start (or re-start after a tab switch) on the first video.
+  useEffect(() => {
+    if (videoItems.length === 0) return;
+    const stillHere =
+      currentId != null && videoItems.some((i) => i.id === currentId);
+    if (stillHere) return;
+    queue.setFocus(videoItems[0].id);
+    setCurrentId(videoItems[0].id);
+    const root = containerRef.current;
+    if (root) root.scrollTop = 0;
+  }, [videoItems, currentId, queue]);
+
+  const handleEnded = useCallback(
+    (id: string) => {
+      const items = videoItemsRef.current;
+      if (items.length === 0) return;
+      const idx = items.findIndex((i) => i.id === id);
+      if (idx < 0) return;
+      const next = (idx + 1) % items.length;
+      // Wrap to start instantly; advance to next smoothly.
+      scrollToIndex(next, next === 0 ? "auto" : "smooth");
+    },
+    [scrollToIndex],
+  );
 
   return (
     <Box
@@ -177,6 +223,7 @@ export default function ScavTokReel({
                   onToggleMute={() => setMutedPref(!muted)}
                   onAutoplayBlocked={() => setMuted(true)}
                   onToggleFavorite={toggleFavorite}
+                  onEnded={handleEnded}
                 />
               </div>
             );

@@ -22,6 +22,8 @@ type Props = {
   onToggleMute: () => void;
   onAutoplayBlocked: () => void;
   onToggleFavorite: (id: string) => void;
+  /** Fired when the current video finishes (no loop). */
+  onEnded?: (id: string) => void;
 };
 
 const iconButtonStyle: React.CSSProperties = {
@@ -51,9 +53,12 @@ export default function ScavTokVideoCard({
   onToggleMute,
   onAutoplayBlocked,
   onToggleFavorite,
+  onEnded,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
 
   const { posterReady } = useRegisterMedia(queue, containerRef, videoRef, {
     id: item.id,
@@ -104,6 +109,14 @@ export default function ScavTokVideoCard({
     if (videoRef.current) videoRef.current.muted = muted;
   }, [muted]);
 
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const handleEnded = () => onEndedRef.current?.(item.id);
+    v.addEventListener("ended", handleEnded);
+    return () => v.removeEventListener("ended", handleEnded);
+  }, [item.id]);
+
   const onVideoPress = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -124,7 +137,6 @@ export default function ScavTokVideoCard({
         poster={posterReady && item.posterURL ? item.posterURL : undefined}
         muted={muted}
         playsInline
-        loop
       />
       {isCurrent && (
         <button
