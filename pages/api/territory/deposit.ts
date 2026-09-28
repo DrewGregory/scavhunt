@@ -64,16 +64,21 @@ export default async function handler(
     });
   }
 
-  // Admins may deposit before the hunt starts (and outside the window) for setup/testing.
-  if (!user.isAdmin) {
-    const hunt = await getHuntSettings();
-    const now = Date.now();
-    if (now < hunt.startsAt.getTime() || now > hunt.endsAt.getTime()) {
-      return res.status(400).json({
-        error: "Deposits are only allowed during the hunt window",
-        code: "HUNT_CLOSED",
-      });
-    }
+  // After the hunt ends, deposits are closed for everyone (including admins).
+  // Admins may still deposit before the hunt starts for setup/testing.
+  const hunt = await getHuntSettings();
+  const now = Date.now();
+  if (now > hunt.endsAt.getTime()) {
+    return res.status(400).json({
+      error: "Deposits are closed after the hunt ends",
+      code: "HUNT_CLOSED",
+    });
+  }
+  if (!user.isAdmin && now < hunt.startsAt.getTime()) {
+    return res.status(400).json({
+      error: "Deposits are only allowed during the hunt window",
+      code: "HUNT_CLOSED",
+    });
   }
 
   const candidates = await prisma.neighborhood.findMany({

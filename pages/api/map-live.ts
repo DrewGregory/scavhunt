@@ -7,6 +7,7 @@ import { getStandings } from "../../lib/territory";
 import { getTeamScore } from "../../lib/scoring";
 import { loadMapFilterTeams } from "../../lib/mapPayload";
 import { isLocationTrackingEnabled } from "../../lib/locationTracking";
+import { getHuntSettings } from "../../lib/time";
 import type { LatestTeamLocation } from "../../lib/types";
 
 /**
@@ -49,7 +50,10 @@ export default async function handler(
       }));
   }
 
-  const territoryGloballyEnabled = await isTerritoryEnabled();
+  const [territoryGloballyEnabled, hunt] = await Promise.all([
+    isTerritoryEnabled(),
+    getHuntSettings(),
+  ]);
   const showTerritory = territoryGloballyEnabled || user.isAdmin;
   let bank: unknown = null;
 
@@ -111,5 +115,6 @@ export default async function handler(
     territoryEnabled: territoryGloballyEnabled,
     neighborhoods,
     bank: showTerritory ? bank : null,
+    huntEndsAt: hunt.endsAt.toISOString(),
   });
 }

@@ -9,6 +9,7 @@ import { getStandings } from "./territory";
 import { getTeamScore } from "./scoring";
 import { listEnabledChallengesWithSubs } from "./challengeFavorites";
 import { isLocationTrackingEnabled } from "./locationTracking";
+import { getHuntSettings } from "./time";
 import type { TerritoryNeighborhood } from "../components/leafletMap";
 
 export type MapPageBank = {
@@ -79,9 +80,11 @@ export async function loadPlayerMapPayload(user: {
       }));
   }
 
-  const teams = await loadMapFilterTeams();
-
-  const territoryGloballyEnabled = await isTerritoryEnabled();
+  const [teams, territoryGloballyEnabled, hunt] = await Promise.all([
+    loadMapFilterTeams(),
+    isTerritoryEnabled(),
+    getHuntSettings(),
+  ]);
   const showTerritory = territoryGloballyEnabled || user.isAdmin;
   let bank: MapPageBank | null = null;
 
@@ -142,5 +145,6 @@ export async function loadPlayerMapPayload(user: {
     isAdmin: user.isAdmin,
     neighborhoods,
     bank: showTerritory ? bank : null,
+    huntEndsAt: hunt.endsAt.toISOString(),
   };
 }

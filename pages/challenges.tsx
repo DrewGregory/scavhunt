@@ -198,6 +198,7 @@ export default function ChallengesPage({
   isAdmin,
   neighborhoods,
   bank,
+  huntEndsAt,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
   const toast = useToast();
@@ -670,6 +671,7 @@ export default function ChallengesPage({
             isAdmin={isAdmin}
             initialNeighborhoods={mapNeighborhoods}
             initialBank={bank}
+            huntEndsAt={huntEndsAt}
             selectedChallengeId={challengeParam}
             selectedNeighborhoodId={neighborhoodParam}
             zoomChallengeId={zoomChallengeOnce}

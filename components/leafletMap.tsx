@@ -365,6 +365,7 @@ export default function LeafletMap({
   isAdmin = false,
   initialNeighborhoods = [],
   initialBank = null,
+  huntEndsAt: initialHuntEndsAt = null,
   selectedChallengeId = null,
   selectedNeighborhoodId = null,
   zoomChallengeId = null,
@@ -384,6 +385,8 @@ export default function LeafletMap({
   isAdmin?: boolean;
   initialNeighborhoods?: TerritoryNeighborhood[];
   initialBank?: Bank | null;
+  /** ISO end of hunt window; after this, hide deposit UI for everyone. */
+  huntEndsAt?: string | null;
   selectedChallengeId?: string | null;
   selectedNeighborhoodId?: string | null;
   /** Deep-link ids that should zoom once on first selection. */
@@ -423,6 +426,14 @@ export default function LeafletMap({
   const [neighborhoods, setNeighborhoods] =
     useState<TerritoryNeighborhood[]>(initialNeighborhoods);
   const [bank, setBank] = useState<Bank | null>(initialBank);
+  const [huntEndsAt, setHuntEndsAt] = useState<string | null>(
+    initialHuntEndsAt,
+  );
+  const [depositsClosed, setDepositsClosed] = useState(
+    () =>
+      initialHuntEndsAt != null &&
+      Date.now() > Date.parse(initialHuntEndsAt),
+  );
   const [depositAmount, setDepositAmount] = useState("10");
   const [depositing, setDepositing] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -471,6 +482,22 @@ export default function LeafletMap({
     window.dispatchEvent(new Event("resize"));
   }, []);
 
+  // Hide deposit UI for everyone once the hunt ends (including mid-session).
+  useEffect(() => {
+    if (!huntEndsAt) {
+      setDepositsClosed(false);
+      return;
+    }
+    const endMs = Date.parse(huntEndsAt);
+    if (Number.isNaN(endMs)) return;
+    const update = () => setDepositsClosed(Date.now() > endMs);
+    update();
+    const remaining = endMs - Date.now();
+    if (remaining <= 0) return;
+    const id = window.setTimeout(update, remaining + 25);
+    return () => window.clearTimeout(id);
+  }, [huntEndsAt]);
+
   // Poll map state so teammate favorites, challenge capacity, and territory stay live.
   // Paused while Replay is open so scrubbed history is not overwritten.
   useEffect(() => {
@@ -490,6 +517,9 @@ export default function LeafletMap({
           setNeighborhoods(data.neighborhoods);
         }
         if (data.bank) setBank(data.bank);
+        if (typeof data.huntEndsAt === "string") {
+          setHuntEndsAt(data.huntEndsAt);
+        }
       } catch {
         /* ignore poll errors */
       }
@@ -825,32 +855,31 @@ export default function LeafletMap({
     [neighborhoods],
   );
 
-  /** Top 3 by neighborhoods held, then challenge pts (same tiebreak as leaderboard). */
+  /** Top 3: neighborhoods held, then challenge pts (same order as leaderboard). */
   const replayPodium = useMemo(() => {
-    if (!replayOpen || !replayAt) return [];
-    const earnedByTeam = earnedAsOf(
-      replayTimeline?.earned,
-      Date.parse(replayAt),
-    );
-    const held = new Map<
+    if (!replayOpen || !replayAt || !replayTimeline) return [];
+    const asOfMs = Date.parse(replayAt);
+    const earnedByTeam = earnedAsOf(replayTimeline.earned, asOfMs);
+    const rows = new Map<
       string,
       { teamId: string; emoji: string; held: number; earned: number }
     >();
-    for (const n of neighborhoods) {
-      if (n.claimedBy) {
-        const row = held.get(n.claimedBy.teamId) ?? {
-          teamId: n.claimedBy.teamId,
-          emoji: n.claimedBy.teamEmoji,
-          held: 0,
-          earned: earnedByTeam.get(n.claimedBy.teamId) ?? 0,
-        };
-        row.held += 1;
-        row.emoji = n.claimedBy.teamEmoji || row.emoji;
-        held.set(n.claimedBy.teamId, row);
-      }
+    for (const t of replayTimeline.teams) {
+      rows.set(t.id, {
+        teamId: t.id,
+        emoji: t.emoji,
+        held: 0,
+        earned: earnedByTeam.get(t.id) ?? 0,
+      });
     }
-    return [...held.values()]
-      .filter((r) => r.held > 0)
+    for (const n of neighborhoods) {
+      if (!n.claimedBy) continue;
+      const row = rows.get(n.claimedBy.teamId);
+      if (!row) continue;
+      row.held += 1;
+      row.emoji = n.claimedBy.teamEmoji || row.emoji;
+    }
+    return [...rows.values()]
       .sort((a, b) => b.held - a.held || b.earned - a.earned)
       .slice(0, 3);
   }, [replayOpen, replayAt, replayTimeline, neighborhoods]);
@@ -1373,7 +1402,7 @@ export default function LeafletMap({
         </DrawerContent>
       </Drawer>
 
-      {territoryOn && team && !replayOpen && (
+      {territoryOn && team && !replayOpen && !depositsClosed && (
         <Box
           position="absolute"
           bottom={4}
