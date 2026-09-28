@@ -813,6 +813,43 @@ export default function LeafletMap({
     [neighborhoods],
   );
 
+  /** Top 3 by neighborhoods held at the current replay (or live) frame. */
+  const replayPodium = useMemo(() => {
+    if (!replayOpen) return [];
+    const held = new Map<
+      string,
+      { teamId: string; emoji: string; held: number; deposited: number }
+    >();
+    for (const n of neighborhoods) {
+      for (const t of n.totals) {
+        const row = held.get(t.teamId) ?? {
+          teamId: t.teamId,
+          emoji: t.teamEmoji,
+          held: 0,
+          deposited: 0,
+        };
+        row.deposited += t.points;
+        row.emoji = t.teamEmoji || row.emoji;
+        held.set(t.teamId, row);
+      }
+      if (n.claimedBy) {
+        const row = held.get(n.claimedBy.teamId) ?? {
+          teamId: n.claimedBy.teamId,
+          emoji: n.claimedBy.teamEmoji,
+          held: 0,
+          deposited: 0,
+        };
+        row.held += 1;
+        row.emoji = n.claimedBy.teamEmoji || row.emoji;
+        held.set(n.claimedBy.teamId, row);
+      }
+    }
+    return [...held.values()]
+      .filter((r) => r.held > 0)
+      .sort((a, b) => b.held - a.held || b.deposited - a.deposited)
+      .slice(0, 3);
+  }, [replayOpen, neighborhoods]);
+
   const styleFor = useCallback(
     (n: TerritoryNeighborhood): PathOptions => {
       // Influence view: heaviest fills. Default: medium tint so claims read without drowning the map.
@@ -1025,6 +1062,42 @@ export default function LeafletMap({
         alignItems="flex-start"
         gap={2}
       >
+        {replayOpen && replayPodium.length > 0 && (
+          <Box
+            bg="white"
+            boxShadow="lg"
+            borderRadius="md"
+            px={3}
+            py={1.5}
+            maxW="min(220px, calc(100vw - 8rem))"
+          >
+            <Text
+              fontSize="10px"
+              fontWeight="semibold"
+              color="gray.500"
+              textTransform="uppercase"
+              letterSpacing="0.04em"
+              lineHeight="1.2"
+              mb={0.5}
+            >
+              Standings
+            </Text>
+            <HStack spacing={2} flexWrap="wrap">
+              {replayPodium.map((row, i) => (
+                <Text
+                  key={row.teamId}
+                  fontSize="sm"
+                  fontWeight="medium"
+                  color="gray.800"
+                  lineHeight="1.2"
+                  whiteSpace="nowrap"
+                >
+                  {i + 1}. {row.emoji}
+                </Text>
+              ))}
+            </HStack>
+          </Box>
+        )}
         <IconButton
           aria-label={replayOpen ? "Close replay" : "Open replay"}
           icon={<LuHistory />}

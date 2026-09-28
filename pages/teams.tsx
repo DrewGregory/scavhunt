@@ -100,37 +100,69 @@ function formatChartTime(d: Date): string {
   return format(d, "EEE h:mm a");
 }
 
+function chartPointTimeMs(x: unknown): number {
+  if (x instanceof Date) return x.getTime();
+  if (typeof x === "number" || typeof x === "string") {
+    const t = new Date(x).getTime();
+    return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
+  }
+  return Number.NEGATIVE_INFINITY;
+}
+
+type SlicePoint = {
+  id: string | number;
+  serieId: string | number;
+  serieColor: string;
+  data: {
+    x?: unknown;
+    xFormatted?: string | number;
+    yFormatted?: string | number;
+    y?: unknown;
+  };
+};
+
+/**
+ * Nivo x-slices group by *pixel* x, so nearby event times collapse into one
+ * slice and the same team can appear twice (pre- and post-change). Keep one
+ * row per series at the latest data time in the slice.
+ */
+function dedupeSlicePointsBySeries(
+  points: ReadonlyArray<SlicePoint>,
+): SlicePoint[] {
+  const bySeries = new Map<string, SlicePoint>();
+  for (const p of points) {
+    const key = String(p.serieId);
+    const prev = bySeries.get(key);
+    if (!prev || chartPointTimeMs(p.data.x) >= chartPointTimeMs(prev.data.x)) {
+      bySeries.set(key, p);
+    }
+  }
+  return [...bySeries.values()];
+}
+
 function LeaderboardSliceTooltip({
   slice,
 }: {
   slice: {
-    points: ReadonlyArray<{
-      id: string | number;
-      serieId: string | number;
-      serieColor: string;
-      data: {
-        x?: unknown;
-        xFormatted?: string | number;
-        yFormatted?: string | number;
-        y?: unknown;
-      };
-    }>;
+    points: ReadonlyArray<SlicePoint>;
   };
 }) {
-  const points = [...slice.points].sort((a, b) => {
+  const points = dedupeSlicePointsBySeries(slice.points).sort((a, b) => {
     const ay = typeof a.data.y === "number" ? a.data.y : Number(a.data.y);
     const by = typeof b.data.y === "number" ? b.data.y : Number(b.data.y);
     return (Number.isFinite(by) ? by : 0) - (Number.isFinite(ay) ? ay : 0);
   });
-  const rawX = points[0]?.data.x;
-  const whenDate =
-    rawX instanceof Date
-      ? rawX
-      : typeof rawX === "number" || typeof rawX === "string"
-        ? new Date(rawX)
-        : null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  let whenDate: Date | null = null;
+  for (const p of points) {
+    const ms = chartPointTimeMs(p.data.x);
+    if (ms > latestMs) {
+      latestMs = ms;
+      whenDate = new Date(ms);
+    }
+  }
   const whenLabel =
-    whenDate && !Number.isNaN(whenDate.getTime())
+    whenDate != null && !Number.isNaN(whenDate.getTime())
       ? formatChartTime(whenDate)
       : points[0]?.data.xFormatted != null
         ? String(points[0].data.xFormatted)
@@ -156,7 +188,7 @@ function LeaderboardSliceTooltip({
       )}
       <VStack align="stretch" spacing={0.5}>
         {points.map((p) => (
-          <HStack key={String(p.id)} spacing={2} justify="space-between">
+          <HStack key={String(p.serieId)} spacing={2} justify="space-between">
             <HStack spacing={1.5} minW={0}>
               <Box
                 w="8px"
