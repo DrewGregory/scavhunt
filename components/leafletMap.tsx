@@ -515,16 +515,14 @@ export default function LeafletMap({
     setLayersOpen(false);
     onSelectChallenge?.(null);
     onSelectNeighborhood?.(null);
-    setReplayOpen(true);
     setReplayPlaying(false);
-    setInfluenceView(true);
-    setAlwaysShowLabels(true);
-    setShowChallenges(false);
     setReplayLoading(true);
+    // Pause live poll while loading; don't flip replay UI until start frame is ready.
+    replayOpenRef.current = true;
     try {
       const res = await fetch("/api/map-replay");
       if (!res.ok) {
-        setReplayOpen(false);
+        replayOpenRef.current = false;
         toast({
           title: "Could not load replay",
           status: "error",
@@ -540,16 +538,28 @@ export default function LeafletMap({
         !Array.isArray(data.locations) ||
         !Array.isArray(data.teams)
       ) {
-        setReplayOpen(false);
+        replayOpenRef.current = false;
         return;
       }
       // Capture current geometry once; claim colors update as the scrubber moves.
       replayBaseNeighborhoodsRef.current = neighborhoods;
+      const startFrame = applyTimelineAt(
+        data,
+        data.start,
+        replayBaseNeighborhoodsRef.current,
+      );
+      // Apply hunt-start map state first, then reveal replay chrome/toggles
+      // in the same paint so we never flash the live end state in Influence view.
+      setNeighborhoods(startFrame.neighborhoods);
+      setLiveLocations(startFrame.locations);
       setReplayTimeline(data);
       setReplayAt(data.start);
-      applyReplayFrame(data, data.start);
+      setInfluenceView(true);
+      setAlwaysShowLabels(true);
+      setShowChallenges(false);
+      setReplayOpen(true);
     } catch {
-      setReplayOpen(false);
+      replayOpenRef.current = false;
       toast({
         title: "Could not load replay",
         status: "error",
@@ -559,7 +569,6 @@ export default function LeafletMap({
       setReplayLoading(false);
     }
   }, [
-    applyReplayFrame,
     toast,
     neighborhoods,
     onSelectChallenge,
