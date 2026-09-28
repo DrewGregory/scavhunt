@@ -10,15 +10,39 @@ import {
   type FeedPage,
 } from "../lib/feedTypes";
 import { useNearEndTrigger, usePreloadQueue } from "../lib/preloadQueue";
-import ScavTokVideoCard from "./ScavTokVideoCard";
+import ScavTokVideoCard, {
+  type ScavTokDirection,
+} from "./ScavTokVideoCard";
 import BottomNavbar from "../pages/components/BottomNavbar";
 import TopNavbar from "../pages/components/TopNavbar";
 
 const PAGE_SIZE = 10;
 const LOAD_MORE_FROM_END = 3;
 const UNMUTE_KEY = "scavtok.unmuted";
+const AUTO_ADVANCE_KEY = "scavtok.autoAdvance";
+const DIRECTION_KEY = "scavtok.direction";
 
 export type ScavTokTab = "following" | "foryou";
+
+function readAutoAdvance(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(AUTO_ADVANCE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function readDirection(): ScavTokDirection {
+  if (typeof window === "undefined") return "forward";
+  try {
+    return window.localStorage.getItem(DIRECTION_KEY) === "backward"
+      ? "backward"
+      : "forward";
+  } catch {
+    return "forward";
+  }
+}
 
 export default function ScavTokReel({
   initialPage,
@@ -37,9 +61,15 @@ export default function ScavTokReel({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const [direction, setDirection] = useState<ScavTokDirection>("forward");
   const [tab, setTab] = useState<ScavTokTab>(() =>
     defaultTab === "foryou" && userTeamId ? "foryou" : "following",
   );
+  const autoAdvanceRef = useRef(autoAdvance);
+  autoAdvanceRef.current = autoAdvance;
+  const directionRef = useRef(direction);
+  directionRef.current = direction;
 
   const filterTeamId = tab === "foryou" ? userTeamId ?? undefined : undefined;
 
@@ -71,6 +101,8 @@ export default function ScavTokReel({
     } catch {
       /* ignore */
     }
+    setAutoAdvance(readAutoAdvance());
+    setDirection(readDirection());
   }, []);
 
   const setMutedPref = useCallback((next: boolean) => {
@@ -80,6 +112,31 @@ export default function ScavTokReel({
     } catch {
       /* ignore */
     }
+  }, []);
+
+  const toggleAutoAdvance = useCallback(() => {
+    setAutoAdvance((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(AUTO_ADVANCE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleDirection = useCallback(() => {
+    setDirection((prev) => {
+      const next: ScavTokDirection =
+        prev === "forward" ? "backward" : "forward";
+      try {
+        window.localStorage.setItem(DIRECTION_KEY, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }, []);
 
   const toggleFavorite = useCallback(
@@ -154,15 +211,29 @@ export default function ScavTokReel({
     if (root) root.scrollTop = 0;
   }, [videoItems, currentId, queue]);
 
+  const jumpToStart = useCallback(() => {
+    scrollToIndex(0, "auto");
+  }, [scrollToIndex]);
+
+  const jumpToEnd = useCallback(() => {
+    const last = videoItemsRef.current.length - 1;
+    if (last < 0) return;
+    scrollToIndex(last, "auto");
+  }, [scrollToIndex]);
+
   const handleEnded = useCallback(
     (id: string) => {
+      if (!autoAdvanceRef.current) return;
       const items = videoItemsRef.current;
       if (items.length === 0) return;
       const idx = items.findIndex((i) => i.id === id);
       if (idx < 0) return;
-      const next = (idx + 1) % items.length;
-      // Wrap to start instantly; advance to next smoothly.
-      scrollToIndex(next, next === 0 ? "auto" : "smooth");
+      const delta = directionRef.current === "backward" ? -1 : 1;
+      const next = (idx + delta + items.length) % items.length;
+      const wraps =
+        (delta === 1 && next === 0) ||
+        (delta === -1 && next === items.length - 1 && idx === 0);
+      scrollToIndex(next, wraps ? "auto" : "smooth");
     },
     [scrollToIndex],
   );
@@ -224,6 +295,12 @@ export default function ScavTokReel({
                   onAutoplayBlocked={() => setMuted(true)}
                   onToggleFavorite={toggleFavorite}
                   onEnded={handleEnded}
+                  autoAdvance={autoAdvance}
+                  direction={direction}
+                  onJumpStart={jumpToStart}
+                  onJumpEnd={jumpToEnd}
+                  onToggleAutoAdvance={toggleAutoAdvance}
+                  onToggleDirection={toggleDirection}
                 />
               </div>
             );
