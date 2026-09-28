@@ -7,7 +7,12 @@ import {
   Collapse,
   Flex,
   Heading,
+  HStack,
   IconButton,
+  RangeSlider,
+  RangeSliderFilledTrack,
+  RangeSliderThumb,
+  RangeSliderTrack,
   Table,
   Tbody,
   Td,
@@ -15,13 +20,14 @@ import {
   Th,
   Thead,
   Tr,
+  VStack,
 } from "@chakra-ui/react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { useRouter } from "next/router";
 import { ChevronDownIcon } from "@chakra-ui/icons";
-import { LuMap, LuTrophy } from "react-icons/lu";
+import { LuHistory, LuMap, LuTrophy } from "react-icons/lu";
 import { requireUserSSP, requireHuntAccessSSP } from "../lib/auth";
 import {
   getLeaderboardPayload,
@@ -30,6 +36,148 @@ import {
   type LeaderboardPayload,
   type TeamMember,
 } from "../lib/leaderboard";
+
+/** Minimum zoom window on the leaderboard time slider. */
+const MIN_VIEW_MS = 15 * 60 * 1000;
+
+type ChartPoint = { x: Date; y: number };
+
+type ChartSerie = {
+  id: string;
+  color: string;
+  data: ChartPoint[];
+};
+
+/** Keep carry-forward value at window start so zoomed lines stay continuous. */
+function windowSeries(
+  data: ChartPoint[],
+  viewStart: Date,
+  viewEnd: Date,
+): ChartPoint[] {
+  const startMs = viewStart.getTime();
+  const endMs = viewEnd.getTime();
+  let yAtStart = data[0]?.y ?? 0;
+  const inWindow: ChartPoint[] = [];
+  for (const p of data) {
+    const t = p.x.getTime();
+    if (t <= startMs) yAtStart = p.y;
+    else if (t <= endMs) inWindow.push(p);
+  }
+  return [{ x: viewStart, y: yAtStart }, ...inWindow];
+}
+
+/**
+ * Nivo x-slices only include series that share an exact x. Align every series
+ * onto the union of timestamps (carry-forward) so the tooltip lists all teams.
+ */
+function alignSeriesForSlices(series: ChartSerie[]): ChartSerie[] {
+  const xs = new Set<number>();
+  for (const s of series) {
+    for (const p of s.data) xs.add(p.x.getTime());
+  }
+  const sortedXs = [...xs].sort((a, b) => a - b);
+  if (sortedXs.length === 0) return series;
+
+  return series.map((s) => {
+    const points = [...s.data].sort(
+      (a, b) => a.x.getTime() - b.x.getTime(),
+    );
+    let i = 0;
+    let y = points[0]?.y ?? 0;
+    const data: ChartPoint[] = [];
+    for (const t of sortedXs) {
+      while (i < points.length && points[i]!.x.getTime() <= t) {
+        y = points[i]!.y;
+        i += 1;
+      }
+      data.push({ x: new Date(t), y });
+    }
+    return { ...s, data };
+  });
+}
+
+function formatChartTime(d: Date): string {
+  return format(d, "EEE h:mm a");
+}
+
+function LeaderboardSliceTooltip({
+  slice,
+}: {
+  slice: {
+    points: ReadonlyArray<{
+      id: string | number;
+      serieId: string | number;
+      serieColor: string;
+      data: {
+        x?: unknown;
+        xFormatted?: string | number;
+        yFormatted?: string | number;
+        y?: unknown;
+      };
+    }>;
+  };
+}) {
+  const points = [...slice.points].sort((a, b) => {
+    const ay = typeof a.data.y === "number" ? a.data.y : Number(a.data.y);
+    const by = typeof b.data.y === "number" ? b.data.y : Number(b.data.y);
+    return (Number.isFinite(by) ? by : 0) - (Number.isFinite(ay) ? ay : 0);
+  });
+  const rawX = points[0]?.data.x;
+  const whenDate =
+    rawX instanceof Date
+      ? rawX
+      : typeof rawX === "number" || typeof rawX === "string"
+        ? new Date(rawX)
+        : null;
+  const whenLabel =
+    whenDate && !Number.isNaN(whenDate.getTime())
+      ? formatChartTime(whenDate)
+      : points[0]?.data.xFormatted != null
+        ? String(points[0].data.xFormatted)
+        : null;
+
+  return (
+    <Box
+      bg="white"
+      px={3}
+      py={2}
+      borderRadius="md"
+      boxShadow="lg"
+      border="1px solid"
+      borderColor="gray.200"
+      maxH="min(50vh, 320px)"
+      overflowY="auto"
+      minW="180px"
+    >
+      {whenLabel != null && (
+        <Text fontSize="xs" fontWeight="semibold" color="gray.600" mb={1.5}>
+          {whenLabel}
+        </Text>
+      )}
+      <VStack align="stretch" spacing={0.5}>
+        {points.map((p) => (
+          <HStack key={String(p.id)} spacing={2} justify="space-between">
+            <HStack spacing={1.5} minW={0}>
+              <Box
+                w="8px"
+                h="8px"
+                borderRadius="full"
+                bg={p.serieColor}
+                flexShrink={0}
+              />
+              <Text fontSize="xs" noOfLines={1}>
+                {String(p.serieId)}
+              </Text>
+            </HStack>
+            <Text fontSize="xs" fontWeight="semibold" flexShrink={0}>
+              {String(p.data.yFormatted ?? p.data.y ?? "")}
+            </Text>
+          </HStack>
+        ))}
+      </VStack>
+    </Box>
+  );
+}
 
 const ResponsiveLine = dynamic(
   () => import("@nivo/line").then((m) => m.ResponsiveLine),
@@ -297,6 +445,43 @@ export default function Page(initial: LeaderboardPayload) {
   const startTime = parseISO(startTimeISO);
   const endTime = parseISO(endTimeISO);
 
+  const maxDate =
+    new Date() < startTime
+      ? startTime
+      : new Date() > endTime
+        ? endTime
+        : new Date();
+
+  const huntStartMs = startTime.getTime();
+  const huntEndMs = maxDate.getTime();
+  const huntSpanMs = Math.max(0, huntEndMs - huntStartMs);
+
+  /** Offset range [fromStart, toStart] within the hunt window. */
+  const [viewOffsets, setViewOffsets] = useState<[number, number]>([
+    0,
+    huntSpanMs,
+  ]);
+
+  useEffect(() => {
+    setViewOffsets((prev) => {
+      // Keep full-window default when the hunt span first becomes known / changes size.
+      if (prev[0] === 0 && (prev[1] === 0 || prev[1] >= huntSpanMs)) {
+        return [0, huntSpanMs];
+      }
+      const a = Math.max(0, Math.min(prev[0], huntSpanMs));
+      const b = Math.max(a, Math.min(prev[1], huntSpanMs));
+      return [a, b];
+    });
+  }, [huntSpanMs]);
+
+  const viewStartMs = huntStartMs + Math.min(viewOffsets[0], huntSpanMs);
+  const viewEndMs = huntStartMs + Math.max(
+    Math.min(viewOffsets[1], huntSpanMs),
+    Math.min(viewOffsets[0], huntSpanMs) + Math.min(MIN_VIEW_MS, huntSpanMs),
+  );
+  const viewStart = useMemo(() => new Date(viewStartMs), [viewStartMs]);
+  const viewEnd = useMemo(() => new Date(viewEndMs), [viewEndMs]);
+
   const teamColorById = useMemo(() => {
     const m = new Map<string, string>();
     for (const t of teamsSortedbyPts) {
@@ -308,40 +493,55 @@ export default function Page(initial: LeaderboardPayload) {
     return m;
   }, [teamsSortedbyPts, territoryRows]);
 
-  const pointData = teamsSortedbyPts.map((t) => {
-    const data: Array<{ x: Date; y: number }> = [{ x: startTime, y: 0 }];
-    let totalPts = 0;
-    let index = 0;
-    for (let i = 0; i < t.submissions.length; i++) {
-      if (!t.submissions[i].accepted) continue;
-      totalPts += t.ptsArray[index];
-      data.push({
-        x: new Date(t.submissions[i].createdAt),
-        y: totalPts,
-      });
-      index += 1;
-    }
-    return {
-      id: `${t.emoji} ${t.name}`,
-      color: t.color || "#718096",
-      data,
-    };
-  });
+  const pointData = useMemo(
+    () =>
+      alignSeriesForSlices(
+        teamsSortedbyPts.map((t) => {
+          const data: ChartPoint[] = [{ x: startTime, y: 0 }];
+          let totalPts = 0;
+          let index = 0;
+          for (let i = 0; i < t.submissions.length; i++) {
+            if (!t.submissions[i].accepted) continue;
+            totalPts += t.ptsArray[index];
+            data.push({
+              x: new Date(t.submissions[i].createdAt),
+              y: totalPts,
+            });
+            index += 1;
+          }
+          return {
+            id: `${t.emoji} ${t.name}`,
+            color: t.color || "#718096",
+            data: windowSeries(data, viewStart, viewEnd),
+          };
+        }),
+      ),
+    [teamsSortedbyPts, startTime, viewStart, viewEnd],
+  );
 
   const claimChartData = useMemo(
     () =>
-      claimSeries.map((s) => ({
-        id: s.id,
-        color: teamColorById.get(s.teamId) || "#718096",
-        data: s.data.map((p) => ({ x: new Date(p.x), y: p.y })),
-      })),
-    [claimSeries, teamColorById],
+      alignSeriesForSlices(
+        claimSeries.map((s) => ({
+          id: s.id,
+          color: teamColorById.get(s.teamId) || "#718096",
+          data: windowSeries(
+            s.data.map((p) => ({ x: new Date(p.x), y: p.y })),
+            viewStart,
+            viewEnd,
+          ),
+        })),
+      ),
+    [claimSeries, teamColorById, viewStart, viewEnd],
   );
 
-  const maxEarned = teamsSortedbyPts.reduce(
-    (max, t) => Math.max(max, t.earned),
-    0,
-  );
+  const maxEarned = useMemo(() => {
+    let max = 0;
+    for (const series of pointData) {
+      for (const p of series.data) max = Math.max(max, p.y);
+    }
+    return max;
+  }, [pointData]);
 
   // Historical claim series can peak above the current leaderboard after
   // deposits are corrected/archived. Scale the graph to its full history.
@@ -353,12 +553,52 @@ export default function Page(initial: LeaderboardPayload) {
   const heldYMax = Math.max(3, maxHistoricalHeld + 1);
   const heldTickValues = Array.from({ length: heldYMax + 1 }, (_, i) => i);
 
-  const maxDate =
-    new Date() < startTime
-      ? startTime
-      : new Date() > endTime
-        ? endTime
-        : new Date();
+  const timeRangeSlider =
+    huntSpanMs > 0 ? (
+      <Box px={1} pt={1} pb={2}>
+        <HStack justify="space-between" mb={1}>
+          <Text fontSize="xs" color="gray.600">
+            {formatChartTime(viewStart)}
+          </Text>
+          <Text fontSize="xs" color="gray.500">
+            Zoom time range
+          </Text>
+          <Text fontSize="xs" color="gray.600">
+            {formatChartTime(viewEnd)}
+          </Text>
+        </HStack>
+        <RangeSlider
+          aria-label={["Chart start", "Chart end"]}
+          min={0}
+          max={huntSpanMs}
+          step={Math.max(60_000, Math.floor(huntSpanMs / 500))}
+          value={[
+            Math.min(viewOffsets[0], huntSpanMs),
+            Math.min(viewOffsets[1], huntSpanMs),
+          ]}
+          minStepsBetweenThumbs={Math.max(
+            1,
+            Math.ceil(MIN_VIEW_MS / Math.max(60_000, Math.floor(huntSpanMs / 500))),
+          )}
+          onChange={(next) => {
+            let [a, b] = next as [number, number];
+            if (b - a < MIN_VIEW_MS) {
+              // Keep a minimum window; prefer moving the thumb that changed.
+              if (a !== viewOffsets[0]) a = Math.max(0, b - MIN_VIEW_MS);
+              else b = Math.min(huntSpanMs, a + MIN_VIEW_MS);
+            }
+            setViewOffsets([a, b]);
+          }}
+          focusThumbOnChange={false}
+        >
+          <RangeSliderTrack>
+            <RangeSliderFilledTrack bg="blue.400" />
+          </RangeSliderTrack>
+          <RangeSliderThumb index={0} />
+          <RangeSliderThumb index={1} />
+        </RangeSlider>
+      </Box>
+    ) : null;
 
   const pointsPodium = useMemo(
     () =>
@@ -401,7 +641,25 @@ export default function Page(initial: LeaderboardPayload) {
           setView(view === "neighborhoods" ? "points" : "neighborhoods")
         }
       />
-    ) : undefined;
+    ) : null;
+
+  const headerRight = (
+    <HStack spacing={0}>
+      <IconButton
+        aria-label="Open map replay"
+        icon={<LuHistory />}
+        variant="ghost"
+        size="md"
+        onClick={() =>
+          void router.push({
+            pathname: "/challenges",
+            query: { view: "map", replay: "1" },
+          })
+        }
+      />
+      {viewToggle}
+    </HStack>
+  );
 
   const showPoints = !territoryEnabled || view === "points";
   const showNeighborhoods = territoryEnabled && view === "neighborhoods";
@@ -411,108 +669,36 @@ export default function Page(initial: LeaderboardPayload) {
   };
 
   return (
-    <NavContainer title="Leaderboard" right={viewToggle}>
+    <NavContainer title="Leaderboard" right={headerRight}>
       {showPoints && (
         <Box
-          height={{ base: 280, md: 400 }}
           p={4}
           mb={4}
           bg="white"
           boxShadow="sm"
           borderRadius="lg"
         >
-          <ResponsiveLine
-            data={pointData}
-            margin={{ top: 40, right: 20, bottom: 60, left: 50 }}
-            xScale={{
-              format: "%Y-%m-%d, %H:%M:%S",
-              type: "time",
-              precision: "minute",
-              min: startTime,
-              max: maxDate,
-              useUTC: true,
-            }}
-            xFormat="time:%Y-%m-%d %H:%M:%S"
-            yScale={{
-              type: "linear",
-              min: 0,
-              max: Math.max(50, maxEarned + 10),
-              stacked: false,
-              reverse: false,
-            }}
-            yFormat=" >-.2f"
-            axisTop={null}
-            axisRight={null}
-            axisBottom={{
-              tickSize: 5,
-              tickPadding: 5,
-              tickRotation: 90,
-              format: "%H:%M",
-              legend: "Time",
-              legendOffset: 48,
-              legendPosition: "middle",
-            }}
-            axisLeft={{
-              tickSize: 5,
-              tickPadding: 5,
-              tickRotation: 0,
-              legend: "Points earned",
-              legendOffset: -40,
-              legendPosition: "middle",
-              truncateTickAt: 0,
-            }}
-            pointSize={0}
-            colors={{ datum: "color" }}
-            pointLabel="data.yFormatted"
-            pointLabelYOffset={-12}
-            enableTouchCrosshair={true}
-            enableSlices="x"
-            useMesh={true}
-          />
-        </Box>
-      )}
-
-      {showPoints && territoryEnabled && (
-        <Alert status="info" borderRadius="md" mb={4} variant="subtle" py={2}>
-          <AlertIcon />
-          <Text fontSize="sm">
-            Points are just for fun — neighborhood control decides the winner.
-            Points only break ties.
-          </Text>
-        </Alert>
-      )}
-
-      {showNeighborhoods && (
-        <>
-          <Box
-            height={{ base: 280, md: 400 }}
-            p={4}
-            mb={4}
-            bg="white"
-            boxShadow="sm"
-            borderRadius="lg"
-          >
+          <Box height={{ base: 280, md: 400 }}>
             <ResponsiveLine
-              data={claimChartData}
+              data={pointData}
               margin={{ top: 40, right: 20, bottom: 60, left: 50 }}
               xScale={{
                 format: "%Y-%m-%d, %H:%M:%S",
                 type: "time",
                 precision: "minute",
-                min: startTime,
-                max: maxDate,
+                min: viewStart,
+                max: viewEnd,
                 useUTC: true,
               }}
               xFormat="time:%Y-%m-%d %H:%M:%S"
               yScale={{
                 type: "linear",
                 min: 0,
-                max: heldYMax,
-                nice: false,
+                max: Math.max(50, maxEarned + 10),
                 stacked: false,
                 reverse: false,
               }}
-              yFormat=" >-.0f"
+              yFormat=" >-.2f"
               axisTop={null}
               axisRight={null}
               axisBottom={{
@@ -528,11 +714,10 @@ export default function Page(initial: LeaderboardPayload) {
                 tickSize: 5,
                 tickPadding: 5,
                 tickRotation: 0,
-                legend: "Neighborhoods held",
+                legend: "Points earned",
                 legendOffset: -40,
                 legendPosition: "middle",
                 truncateTickAt: 0,
-                tickValues: heldTickValues,
               }}
               pointSize={0}
               colors={{ datum: "color" }}
@@ -540,8 +725,81 @@ export default function Page(initial: LeaderboardPayload) {
               pointLabelYOffset={-12}
               enableTouchCrosshair={true}
               enableSlices="x"
-              useMesh={true}
+              sliceTooltip={LeaderboardSliceTooltip}
+              useMesh={false}
             />
+          </Box>
+          {timeRangeSlider}
+        </Box>
+      )}
+
+      {showPoints && territoryEnabled && (
+        <Alert status="info" borderRadius="md" mb={4} variant="subtle" py={2}>
+          <AlertIcon />
+          <Text fontSize="sm">
+            Points are just for fun — neighborhood control decides the winner.
+            Points only break ties.
+          </Text>
+        </Alert>
+      )}
+
+      {showNeighborhoods && (
+        <>
+          <Box p={4} mb={4} bg="white" boxShadow="sm" borderRadius="lg">
+            <Box height={{ base: 280, md: 400 }}>
+              <ResponsiveLine
+                data={claimChartData}
+                margin={{ top: 40, right: 20, bottom: 60, left: 50 }}
+                xScale={{
+                  format: "%Y-%m-%d, %H:%M:%S",
+                  type: "time",
+                  precision: "minute",
+                  min: viewStart,
+                  max: viewEnd,
+                  useUTC: true,
+                }}
+                xFormat="time:%Y-%m-%d %H:%M:%S"
+                yScale={{
+                  type: "linear",
+                  min: 0,
+                  max: heldYMax,
+                  nice: false,
+                  stacked: false,
+                  reverse: false,
+                }}
+                yFormat=" >-.0f"
+                axisTop={null}
+                axisRight={null}
+                axisBottom={{
+                  tickSize: 5,
+                  tickPadding: 5,
+                  tickRotation: 90,
+                  format: "%H:%M",
+                  legend: "Time",
+                  legendOffset: 48,
+                  legendPosition: "middle",
+                }}
+                axisLeft={{
+                  tickSize: 5,
+                  tickPadding: 5,
+                  tickRotation: 0,
+                  legend: "Neighborhoods held",
+                  legendOffset: -40,
+                  legendPosition: "middle",
+                  truncateTickAt: 0,
+                  tickValues: heldTickValues,
+                }}
+                pointSize={0}
+                colors={{ datum: "color" }}
+                pointLabel="data.yFormatted"
+                pointLabelYOffset={-12}
+                enableTouchCrosshair={true}
+                enableSlices="x"
+                sliceTooltip={LeaderboardSliceTooltip}
+                useMesh={false}
+              />
+            </Box>
+            {timeRangeSlider}
           </Box>
           <Heading size="md" mb={1} color="gray.800">
             Neighborhoods

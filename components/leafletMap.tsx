@@ -369,6 +369,7 @@ export default function LeafletMap({
   onDeepLinkZoomConsumed,
   onSelectChallenge,
   onSelectNeighborhood,
+  autoOpenReplay = false,
 }: {
   locations: Array<LatestTeamLocation>;
   challenges: Array<ChallengeWithSubmissions>;
@@ -388,6 +389,8 @@ export default function LeafletMap({
   onDeepLinkZoomConsumed?: (kind: "challenge" | "neighborhood") => void;
   onSelectChallenge?: (id: string | null) => void;
   onSelectNeighborhood?: (id: string | null) => void;
+  /** Open map replay once on mount (e.g. leaderboard deep link). */
+  autoOpenReplay?: boolean;
 }) {
   const toast = useToast();
   const {
@@ -435,6 +438,7 @@ export default function LeafletMap({
   const myFixRef = useRef<GeoFix | null>(null);
   const replayOpenRef = useRef(false);
   replayOpenRef.current = replayOpen;
+  const autoOpenReplayDoneRef = useRef(false);
   /** Geometry snapshot from when replay opened (claim fields overwritten each frame). */
   const replayBaseNeighborhoodsRef = useRef<TerritoryNeighborhood[]>([]);
   /** Only one neighborhood highlight at a time (fast mouse moves skip mouseout). */
@@ -561,6 +565,12 @@ export default function LeafletMap({
     onSelectChallenge,
     onSelectNeighborhood,
   ]);
+
+  useEffect(() => {
+    if (!autoOpenReplay || autoOpenReplayDoneRef.current) return;
+    autoOpenReplayDoneRef.current = true;
+    void openReplay();
+  }, [autoOpenReplay, openReplay]);
 
   const exitReplay = useCallback(async () => {
     setReplayPlaying(false);

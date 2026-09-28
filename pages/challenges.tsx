@@ -221,6 +221,13 @@ export default function ChallengesPage({
     if (typeof router.query.neighborhood === "string") {
       query.neighborhood = router.query.neighborhood;
     }
+    if (
+      router.query.replay === "1" ||
+      router.query.replay === "true"
+    ) {
+      query.view = "map";
+      query.replay = "1";
+    }
     void router.replace({ pathname: "/challenges", query }, undefined, {
       shallow: true,
     });
@@ -229,6 +236,7 @@ export default function ChallengesPage({
     explicitView,
     router.query.challenge,
     router.query.neighborhood,
+    router.query.replay,
     router.replace,
   ]);
   const challengeParam =
@@ -239,6 +247,8 @@ export default function ChallengesPage({
     typeof router.query.neighborhood === "string"
       ? router.query.neighborhood
       : null;
+  const autoOpenReplay =
+    router.query.replay === "1" || router.query.replay === "true";
   // Deep-link zoom only on the first map paint for this page load.
   const [zoomChallengeOnce, setZoomChallengeOnce] = useState<string | null>(
     () =>
@@ -664,6 +674,7 @@ export default function ChallengesPage({
             selectedNeighborhoodId={neighborhoodParam}
             zoomChallengeId={zoomChallengeOnce}
             zoomNeighborhoodId={zoomNeighborhoodOnce}
+            autoOpenReplay={autoOpenReplay}
             onDeepLinkZoomConsumed={(kind) => {
               if (kind === "challenge") setZoomChallengeOnce(null);
               if (kind === "neighborhood") setZoomNeighborhoodOnce(null);
