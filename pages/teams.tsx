@@ -297,6 +297,17 @@ export default function Page(initial: LeaderboardPayload) {
   const startTime = parseISO(startTimeISO);
   const endTime = parseISO(endTimeISO);
 
+  const teamColorById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of teamsSortedbyPts) {
+      if (t.color) m.set(t.id, t.color);
+    }
+    for (const r of territoryRows) {
+      if (r.teamColor) m.set(r.teamId, r.teamColor);
+    }
+    return m;
+  }, [teamsSortedbyPts, territoryRows]);
+
   const pointData = teamsSortedbyPts.map((t) => {
     const data: Array<{ x: Date; y: number }> = [{ x: startTime, y: 0 }];
     let totalPts = 0;
@@ -310,16 +321,21 @@ export default function Page(initial: LeaderboardPayload) {
       });
       index += 1;
     }
-    return { id: `${t.emoji} ${t.name}`, data };
+    return {
+      id: `${t.emoji} ${t.name}`,
+      color: t.color || "#718096",
+      data,
+    };
   });
 
   const claimChartData = useMemo(
     () =>
       claimSeries.map((s) => ({
         id: s.id,
+        color: teamColorById.get(s.teamId) || "#718096",
         data: s.data.map((p) => ({ x: new Date(p.x), y: p.y })),
       })),
-    [claimSeries],
+    [claimSeries, teamColorById],
   );
 
   const maxEarned = teamsSortedbyPts.reduce(
@@ -446,7 +462,7 @@ export default function Page(initial: LeaderboardPayload) {
               truncateTickAt: 0,
             }}
             pointSize={0}
-            colors={{ scheme: "set3" }}
+            colors={{ datum: "color" }}
             pointLabel="data.yFormatted"
             pointLabelYOffset={-12}
             enableTouchCrosshair={true}
@@ -519,7 +535,7 @@ export default function Page(initial: LeaderboardPayload) {
                 tickValues: heldTickValues,
               }}
               pointSize={0}
-              colors={{ scheme: "set3" }}
+              colors={{ datum: "color" }}
               pointLabel="data.yFormatted"
               pointLabelYOffset={-12}
               enableTouchCrosshair={true}

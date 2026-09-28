@@ -36,6 +36,7 @@ model User {
   submissionComments SubmissionComment[]
   deposits     NeighborhoodDeposit[]
   announcementDismissals AnnouncementDismissal[]
+  messages     Message[]
 
   @@index([teamId])
   @@index([deletedAt])
@@ -349,4 +350,18 @@ model AnnouncementDismissal {
   @@unique([announcementId, userId])
   @@index([userId])
   @@index([announcementId])
+}
+
+/// Player → admin messages (UI: “Leave feedback” / admin: “User messages”).
+model Message {
+  id        String   @id @default(cuid())
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("messages")
 }

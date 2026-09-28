@@ -25,6 +25,7 @@ import {
   LuLogOut,
   LuMegaphone,
   LuMenu,
+  LuMessageSquare,
   LuNewspaper,
   LuShieldCheck,
   LuTrophy,
@@ -66,6 +67,11 @@ const LinkItems: Array<LinkItemProps> = [
   },
   { name: "My Team", icon: LuUsers, url: "/my-team" },
   { name: "How to Play", icon: LuBookOpen, url: "/how-to-play" },
+  {
+    name: "Leave feedback",
+    icon: LuMessageSquare,
+    url: "/feedback",
+  },
   { name: "Admin", icon: LuShieldCheck, url: "/admin", adminOnly: true },
 ];
 

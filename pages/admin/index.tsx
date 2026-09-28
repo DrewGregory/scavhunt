@@ -37,6 +37,7 @@ import AdminDataTable, {
   type AdminFilterOption,
 } from "../../components/AdminDataTable";
 import AdminAnnouncementsPanel from "../../components/AdminAnnouncementsPanel";
+import AdminMessagesPanel from "../../components/AdminMessagesPanel";
 import EmojiInput from "../../components/EmojiInput";
 import dynamic from "next/dynamic";
 
@@ -103,7 +104,14 @@ type AdminNeighborhood = {
   centerLng?: number | null;
 };
 
-type Tab = "users" | "teams" | "challenges" | "map" | "announcements" | "settings";
+type Tab =
+  | "users"
+  | "teams"
+  | "challenges"
+  | "map"
+  | "announcements"
+  | "messages"
+  | "settings";
 
 function toLocalInputValue(iso: string | null | undefined) {
   if (!iso) return "";
@@ -1263,6 +1271,7 @@ export default function AdminPage({
     { id: "challenges", label: "Challenges" },
     { id: "map", label: "Map" },
     { id: "announcements", label: "Announcements" },
+    { id: "messages", label: "User Feedback" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -1488,6 +1497,10 @@ export default function AdminPage({
 
         {activeTab === "announcements" && (
           <AdminAnnouncementsPanel onNotice={showNotice} />
+        )}
+
+        {activeTab === "messages" && (
+          <AdminMessagesPanel onNotice={showNotice} />
         )}
 
         {activeTab === "settings" && (
