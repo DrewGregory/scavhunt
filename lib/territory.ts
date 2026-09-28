@@ -36,15 +36,21 @@ export type TeamTerritoryRow = {
 /**
  * Aggregate non-voided deposits into per-neighborhood standings.
  * Claim rule: unique strict maximum; ties leave the neighborhood contested/unclaimed.
+ *
+ * When `asOf` is set, only deposits created by that time count, and deposits
+ * voided at or before `asOf` are excluded (voids after `asOf` still count).
  */
 export async function getStandings(opts?: {
   /** If true, only include neighborhoods with onMap=true (player-facing). */
   onMapOnly?: boolean;
   /** If false, omit boundary geometry (lighter payload for leaderboards). */
   includeBoundary?: boolean;
+  /** Point-in-time standings for map replay. */
+  asOf?: Date;
 }): Promise<NeighborhoodStanding[]> {
   const onMapOnly = opts?.onMapOnly ?? true;
   const includeBoundary = opts?.includeBoundary ?? true;
+  const asOf = opts?.asOf;
 
   const neighborhoods = await prisma.neighborhood.findMany({
     where: {
@@ -66,7 +72,12 @@ export async function getStandings(opts?: {
   const deposits = await prisma.neighborhoodDeposit.groupBy({
     by: ["neighborhoodId", "teamId"],
     where: {
-      deletedAt: null,
+      ...(asOf
+        ? {
+            createdAt: { lte: asOf },
+            OR: [{ deletedAt: null }, { deletedAt: { gt: asOf } }],
+          }
+        : { deletedAt: null }),
       ...(onMapOnly ? { neighborhood: { onMap: true, deletedAt: null } } : {}),
     },
     _sum: { points: true },
